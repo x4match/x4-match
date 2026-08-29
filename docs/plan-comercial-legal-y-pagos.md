@@ -16,31 +16,25 @@ Documento interno para lanzamiento B2B (clubes).
 - **Club:** paga por software después del período de prueba.
 - **Pagos jugador → club:** siempre por Mercado Pago del club. x4 match no recibe esa plata.
 
-
-
 ### Planes
 
-
-|                                          | **Pilot (trial)**  | **Club**                                   | **Club Pro** *(fase 2)*  |
+|                                          | **Pilot (trial)**  | **Club**                                   | **Club Pro** _(fase 2)_  |
 | ---------------------------------------- | ------------------ | ------------------------------------------ | ------------------------ |
 | **Duración**                             | 90 días desde alta | Mensual o anual                            | Mensual o anual          |
 | **Precio público**                       | $0                 | **$49.900 + IVA / mes**                    | **$89.900 + IVA / mes**  |
 | **Precio anual**                         | —                  | **$499.000 + IVA / año** (~2 meses gratis) | **$899.000 + IVA / año** |
 | **Canchas incluidas**                    | Hasta 6            | Hasta 6                                    | Ilimitadas               |
 | **Usuarios gerente**                     | 2                  | 3                                          | Ilimitados               |
-| **Publicación de turnos**                | ✅                  | ✅                                          | ✅                        |
-| **Matchmaking / partidos abiertos**      | ✅                  | ✅                                          | ✅                        |
-| **Panel de movimientos (señas, tienda)** | ✅                  | ✅                                          | ✅                        |
-| **Mercado Pago del club**                | ✅                  | ✅                                          | ✅                        |
+| **Publicación de turnos**                | ✅                 | ✅                                         | ✅                       |
+| **Matchmaking / partidos abiertos**      | ✅                 | ✅                                         | ✅                       |
+| **Panel de movimientos (señas, tienda)** | ✅                 | ✅                                         | ✅                       |
+| **Mercado Pago del club**                | ✅                 | ✅                                         | ✅                       |
 | **Torneos**                              | 2 activos          | 5 activos                                  | Ilimitados               |
-| **Tienda del club**                      | ✅                  | ✅                                          | ✅                        |
-| **Ranking y clientes**                   | ✅                  | ✅                                          | ✅                        |
+| **Tienda del club**                      | ✅                 | ✅                                         | ✅                       |
+| **Ranking y clientes**                   | ✅                 | ✅                                         | ✅                       |
 | **Soporte**                              | Email / WhatsApp   | Email / WhatsApp                           | Prioritario              |
 | **Analytics avanzados**                  | Básico             | Básico                                     | Completo + export CSV    |
-| **Circuitos / multi-sede**               | ❌                  | ❌                                          | ✅                        |
-
-
-
+| **Circuitos / multi-sede**               | ❌                 | ❌                                         | ✅                       |
 
 ### Por qué estos precios (Argentina 2026)
 
@@ -55,8 +49,6 @@ Referencia de valor para el club:
 - Trial 90 días + **50% de descuento los primeros 6 meses pagos** si firman antes de [fecha].
 - Precio fundador: **$24.950 + IVA / mes** bloqueado por 12 meses.
 
-
-
 ### Calendario del trial
 
 ```
@@ -69,21 +61,15 @@ Día 90   → Si no hay método de pago: modo solo lectura (ver datos, no public
 Día 97   → Suspensión de panel si no regularizó (datos se conservan 90 días)
 ```
 
-
-
 ### Qué cobrás vos (facturable)
 
-
-| Concepto                           | ¿Lo factura x4 match?                             |
+| Concepto                           | ¿Lo factura x4 match?                           |
 | ---------------------------------- | ----------------------------------------------- |
 | Suscripción mensual/anual del club | **Sí**                                          |
 | Seña de partido                    | **No** (cobro del club)                         |
 | Inscripción torneo                 | **No**                                          |
 | Venta tienda del club              | **No**                                          |
 | Comisión futura por reserva        | **Sí**, pero facturada al club (fase 2, ver §4) |
-
-
-
 
 ### Medios de cobro de la suscripción (x4 match ← Club)
 
@@ -97,11 +83,7 @@ Orden de preferencia:
 
 ---
 
-
-
 ## 2. Checklist legal
-
-
 
 ### 2.1 Antes de tener el primer club
 
@@ -114,10 +96,7 @@ Orden de preferencia:
 - [ ] Dominio y email corporativo (`hola@x4match.com`, `legal@x4match.com`).
 - [ ] Registrar marca en INPI (opcional en MVP, recomendado antes de escalar).
 
-
-
 ### 2.2 Documentos a publicar (app + web)
-
 
 | Documento                            | Audiencia         | Dónde vive                   |
 | ------------------------------------ | ----------------- | ---------------------------- |
@@ -126,9 +105,6 @@ Orden de preferencia:
 | Términos y Condiciones — Club (SaaS) | Gerentes / dueños | Firma onboarding club        |
 | Acuerdo de Período de Prueba         | Clubes nuevos     | Firma digital o PDF          |
 | Política de cookies / analytics      | Web               | Solo si hay web con tracking |
-
-
-
 
 ### 2.3 Cláusulas mínimas — Jugador (T&C)
 
@@ -143,8 +119,6 @@ Incluir explícitamente:
 7. x4 match puede **suspender cuentas** por fraude o abuso.
 8. Ley aplicable y jurisdicción (ej. tribunales de CABA).
 9. Los pagos en la app se procesan por **Mercado Pago del club**; x4 match no es intermediario de fondos del jugador.
-
-
 
 ### 2.4 Cláusulas mínimas — Club (SaaS)
 
@@ -161,8 +135,6 @@ Incluir explícitamente:
 11. **Confidencialidad** de métricas del club.
 12. **No exclusividad** salvo acuerdo aparte.
 
-
-
 ### 2.5 Política de Privacidad — puntos clave
 
 - **Responsable del tratamiento:** [Razón social x4 match], CUIT, domicilio.
@@ -177,8 +149,6 @@ Incluir explícitamente:
 - **Menores:** política clara si aplica.
 - **Transferencia internacional:** si el servidor está fuera de AR (ej. Vercel US), declararlo.
 
-
-
 ### 2.6 Checklist por cada club que entra
 
 - [ ] Acuerdo de trial firmado (PDF o firma electrónica).
@@ -188,8 +158,6 @@ Incluir explícitamente:
 - [ ] MP conectado o marcado "cobro manual en recepción" (modo degradado).
 - [ ] Fecha de fin de trial en CRM / base de datos.
 - [ ] Método de pago de suscripción cargado antes del día 85.
-
-
 
 ### 2.7 Plantilla breve — Acuerdo de Período de Prueba
 
@@ -230,15 +198,11 @@ Por x4 match                       Por el Club
 Fecha: ___/___/2026              Fecha: ___/___/2026
 ```
 
-*(Adaptar con abogado antes de usar.)*
+_(Adaptar con abogado antes de usar.)_
 
 ---
 
-
-
 ## 3. Flujo técnico — Club conecta Mercado Pago
-
-
 
 ### 3.1 Objetivo
 
@@ -271,8 +235,6 @@ Que **toda plata de jugadores** vaya al **collector = club**, y x4 match solo:
 └─────────────┘                  └──────────────────┘               └─────────────┘
 ```
 
-
-
 ### 3.3 Onboarding OAuth del club
 
 **Flujo recomendado (Mercado Pago OAuth / Marketplace):**
@@ -282,14 +244,15 @@ Que **toda plata de jugadores** vaya al **collector = club**, y x4 match solo:
 3. Redirect a `auth.mercadopago.com` con `client_id` de la aplicación x4 match.
 4. El club autoriza; MP devuelve `authorization_code`.
 5. Backend x4 match intercambia code por:
-  - `access_token` (del vendedor/club)
-  - `refresh_token`
-  - `user_id` (collector_id en MP)
+
+- `access_token` (del vendedor/club)
+- `refresh_token`
+- `user_id` (collector_id en MP)
+
 6. Guardás en DB **cifrados** (ver §3.5).
 7. UI muestra: **"Mercado Pago conectado · CUIT/Cuenta ·•••1234"**.
 
 **Estados en UI:**
-
 
 | Estado          | Significado                    | Acción gerente            |
 | --------------- | ------------------------------ | ------------------------- |
@@ -297,9 +260,6 @@ Que **toda plata de jugadores** vaya al **collector = club**, y x4 match solo:
 | `connected`     | Token válido                   | Desconectar / Reautorizar |
 | `expired`       | Refresh falló                  | Reconectar                |
 | `manual_only`   | Club elige cobrar en recepción | Conectar MP cuando quiera |
-
-
-
 
 ### 3.4 Creación de checkout (seña, tienda, torneo)
 
@@ -334,7 +294,7 @@ async function createClubCheckout(clubId, amount, metadata) {
     id: metadata.internalPaymentId,
     clubId,
     amount,
-    status: 'PENDING',
+    status: "PENDING",
     mpPreferenceId: preference.id,
     checkoutUrl: preference.init_point,
     collectorMpUserId: club.mpUserId,
@@ -352,15 +312,12 @@ async function createClubCheckout(clubId, amount, metadata) {
 4. Disparar efectos: confirmar seña de partido, inscripción torneo, venta tienda.
 5. Idempotencia: si el webhook llega 2 veces, no duplicar.
 
-
-
 ### 3.5 Qué guardás en base de datos (y qué NO)
 
 **Tabla** `club_payment_config` **(sugerida):**
 
-
-| Campo                             | Guardar   | Notas                                            |
-| --------------------------------- | --------- | ------------------------------------------------ |
+| Campo                             | Guardar    | Notas                                            |
+| --------------------------------- | ---------- | ------------------------------------------------ |
 | `club_id`                         | ✅         | FK                                               |
 | `mp_user_id`                      | ✅         | Collector ID público                             |
 | `mp_access_token`                 | ✅ cifrado | AES-256 o vault (KMS)                            |
@@ -368,28 +325,23 @@ async function createClubCheckout(clubId, amount, metadata) {
 | `token_expires_at`                | ✅         | Job diario de refresh                            |
 | `connected_at`                    | ✅         | Auditoría                                        |
 | `status`                          | ✅         | enum                                             |
-| `mp_client_secret`                | ❌         | Solo env del servidor x4 match                     |
+| `mp_client_secret`                | ❌         | Solo env del servidor x4 match                   |
 | `Datos de tarjeta del jugador`    | ❌         | Nunca — MP los tiene                             |
 | `Saldo / movimientos MP del club` | ❌         | Consultar API si hace falta, no persistir masivo |
 
-
 **Tabla** `payments` **(movimientos orquestados):**
 
-
-| Campo                | Guardar                             |
-| -------------------- | ----------------------------------- |
-| `id`                 | UUID interno                        |
-| `club_id`            | ✅                                   |
-| `kind`               | deposit | shop | tournament         |
-| `reference_id`       | match_id, sale_id, registration_id  |
-| `amount`, `currency` | ✅                                   |
-| `status`             | PENDING | APPROVED | ...            |
-| `mp_payment_id`      | ✅ cuando confirma webhook           |
-| `checkout_url`       | ✅ hasta expirar                     |
+| Campo                | Guardar                                |
+| -------------------- | -------------------------------------- | -------- | ---------- |
+| `id`                 | UUID interno                           |
+| `club_id`            | ✅                                     |
+| `kind`               | deposit                                | shop     | tournament |
+| `reference_id`       | match_id, sale_id, registration_id     |
+| `amount`, `currency` | ✅                                     |
+| `status`             | PENDING                                | APPROVED | ...        |
+| `mp_payment_id`      | ✅ cuando confirma webhook             |
+| `checkout_url`       | ✅ hasta expirar                       |
 | `payer_user_id`      | ✅ jugador x4 match (no datos tarjeta) |
-
-
-
 
 ### 3.6 Modo degradado — Cobro manual en recepción
 
@@ -417,22 +369,16 @@ Ya existe parcialmente en la app (`markDepositPaid`, `confirmShopPurchase` en pa
 - Rotación de `refresh_token` automática.
 - Desconexión MP: borrar tokens, mantener histórico de pagos anonimizado según retención legal.
 
-
-
 ### 3.8 Pantallas a agregar en producto (backlog)
 
-
-| Pantalla                                                  | Prioridad |
-| --------------------------------------------------------- | --------- |
-| Club → Configuración → Pagos (conectar MP)                | 🔴 P0     |
-| Banner "Conectá MP para cobrar señas online" en gerente   | 🔴 P0     |
+| Pantalla                                                    | Prioridad |
+| ----------------------------------------------------------- | --------- |
+| Club → Configuración → Pagos (conectar MP)                  | 🔴 P0     |
+| Banner "Conectá MP para cobrar señas online" en gerente     | 🔴 P0     |
 | Estado trial + días restantes + CTA método de pago x4 match | 🔴 P0     |
-| Admin interno: fecha fin trial por club                   | 🟠 P1     |
-| Job refresh tokens MP                                     | 🔴 P0     |
-| Webhook handler producción                                | 🔴 P0     |
-
-
-
+| Admin interno: fecha fin trial por club                     | 🟠 P1     |
+| Job refresh tokens MP                                       | 🔴 P0     |
+| Webhook handler producción                                  | 🔴 P0     |
 
 ### 3.9 Variables de entorno
 
@@ -462,15 +408,15 @@ X4MATCH_BILLING_MP_ACCESS_TOKEN=
 
 ### 3.10 Implementación en código (ago 2026)
 
-| Pieza | Ubicación |
-|-------|-----------|
-| Migración `club_payment_config` | `050_club_payment_config.sql` |
-| Migración `club_billing` (trial) | `051_club_billing_trial.sql` |
-| OAuth MP por club | `club-payment-config.service.ts` |
-| Trial + checklist | `club-trial.service.ts` |
-| Backoffice API | `platform-admin/*` → `/platform/*` |
-| Backoffice web | `apps/web-admin` → puerto 3002 |
-| Banner trial móvil | `gerente.tsx` |
+| Pieza                            | Ubicación                          |
+| -------------------------------- | ---------------------------------- |
+| Migración `club_payment_config`  | `050_club_payment_config.sql`      |
+| Migración `club_billing` (trial) | `051_club_billing_trial.sql`       |
+| OAuth MP por club                | `club-payment-config.service.ts`   |
+| Trial + checklist                | `club-trial.service.ts`            |
+| Backoffice API                   | `platform-admin/*` → `/platform/*` |
+| Backoffice web                   | `apps/web-admin` → puerto 3002     |
+| Banner trial móvil               | `gerente.tsx`                      |
 
 ---
 
@@ -478,22 +424,22 @@ X4MATCH_BILLING_MP_ACCESS_TOKEN=
 
 ### Checklist (6 ítems)
 
-| Ítem | Tipo | Requerido |
-|------|------|-----------|
-| Acuerdo de trial firmado | Manual | Sí |
-| Perfil del club completo | Auto | Sí |
-| Mercado Pago conectado | Auto | No |
-| Primer turno publicado | Auto | Sí |
-| Método de pago x4 match | Manual | No |
-| Aprobación interna (ops) | Manual | Sí |
+| Ítem                     | Tipo   | Requerido |
+| ------------------------ | ------ | --------- |
+| Acuerdo de trial firmado | Manual | Sí        |
+| Perfil del club completo | Auto   | Sí        |
+| Mercado Pago conectado   | Auto   | No        |
+| Primer turno publicado   | Auto   | Sí        |
+| Método de pago x4 match  | Manual | No        |
+| Aprobación interna (ops) | Manual | Sí        |
 
 Los ítems **auto** se sincronizan al consultar el estado del trial.
 
 ### Modos de trial
 
-| Modo | Comportamiento |
-|------|----------------|
-| **TIME** | 90 días (configurable) desde `trial_started_at`. Vence en `trial_ends_at`. |
+| Modo       | Comportamiento                                                                   |
+| ---------- | -------------------------------------------------------------------------------- |
+| **TIME**   | 90 días (configurable) desde `trial_started_at`. Vence en `trial_ends_at`.       |
 | **MANUAL** | Sin fecha de fin automática. Ops suspende o activa plan pago cuando corresponda. |
 
 ### Flujo ops (backoffice)
@@ -539,10 +485,7 @@ Cuando tengas liquidez, podés cobrar **fee variable facturado al club**:
 
 ---
 
-
-
 ## 5. Métricas a seguir desde el día 1
-
 
 | Métrica                                         | Meta pilot (90 días)                 |
 | ----------------------------------------------- | ------------------------------------ |
@@ -553,10 +496,7 @@ Cuando tengas liquidez, podés cobrar **fee variable facturado al club**:
 | Churn mes 1 post-trial                          | < 20%                                |
 | MRR al mes 4                                    | $500.000 + IVA (10 clubes × $49.900) |
 
-
 ---
-
-
 
 ## 6. Próximos pasos inmediatos
 
@@ -568,4 +508,4 @@ Cuando tengas liquidez, podés cobrar **fee variable facturado al club**:
 
 ---
 
-*Documento generado para x4 match. Actualizar al definir razón social y CUIT.*
+_Documento generado para x4 match. Actualizar al definir razón social y CUIT._
