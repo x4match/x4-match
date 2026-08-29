@@ -1,0 +1,34 @@
+# Blueprint Render — API x4 match (plan Free)
+# Docs: https://render.com/docs/free
+services:
+  - type: web
+    name: x4-match-api
+    runtime: node
+    region: oregon
+    plan: free
+    repo: https://github.com/x4match/x4-match
+    branch: main
+    rootDir: .
+    # Free: migraciones en build (preDeployCommand solo en planes pagos)
+    buildCommand: pnpm install --frozen-lockfile && pnpm build:api && pnpm --filter api db:migrate:ci
+    startCommand: pnpm --filter api start:prod
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 7d
+      - key: API_PUBLIC_URL
+        sync: false
+      - key: PAYMENTS_MOCK
+        value: 'true'
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false

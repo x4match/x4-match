@@ -19,7 +19,10 @@
     "dev:web-admin": "pnpm --filter web-admin dev",
     "build:web-admin": "pnpm --filter web-admin build",
     "dev:web": "pnpm --filter web dev",
-    "build:web": "pnpm --filter web build"
+    "build:web": "pnpm --filter web build",
+    "render:build": "pnpm install --frozen-lockfile && pnpm build:api && pnpm --filter api db:migrate:ci",
+    "render:migrate": "pnpm --filter api db:migrate:ci",
+    "render:start": "pnpm --filter api start:prod"
   },
   "devDependencies": {
     "typescript": "^5.3.3"
