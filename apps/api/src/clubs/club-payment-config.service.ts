@@ -17,6 +17,7 @@ export type ClubPaymentStatusResponse = {
   connectedAt: string | null;
   canCheckoutOnline: boolean;
   oauthConfigured: boolean;
+  mockConnectAvailable: boolean;
   usesPlatformFallback: boolean;
 };
 
@@ -127,6 +128,7 @@ export class ClubPaymentConfigService {
       canCheckoutOnline:
         status === 'CONNECTED' || (usesPlatformFallback && process.env.PAYMENTS_MOCK !== 'true'),
       oauthConfigured,
+      mockConnectAvailable: process.env.PAYMENTS_MOCK === 'true',
       usesPlatformFallback,
     };
   }

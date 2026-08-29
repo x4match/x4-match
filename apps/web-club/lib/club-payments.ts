@@ -11,6 +11,7 @@ export type ClubPaymentConfigStatus = {
   connectedAt: string | null;
   canCheckoutOnline: boolean;
   oauthConfigured: boolean;
+  mockConnectAvailable: boolean;
   usesPlatformFallback: boolean;
 };
 

@@ -3,7 +3,7 @@
 import { useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'next/navigation';
-import { CheckCircle2, CreditCard, Wallet } from 'lucide-react';
+import { CreditCard, Wallet } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import {
@@ -15,7 +15,7 @@ import { useClub } from '@/contexts/ClubContext';
 import { PageHeader } from '@/components/layout/AppSidebar';
 import { DashboardSkeleton, EmptyState } from '@/components/club/DashboardCards';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 
 function statusBadgeClass(tone: ReturnType<typeof clubPaymentStatusTone>) {
@@ -56,9 +56,9 @@ export default function PagosPage() {
     const message = searchParams.get('message');
     if (status === 'connected') {
       void invalidate();
-      toast.success('Mercado Pago conectado correctamente.');
+      toast.success('Cuenta vinculada correctamente.');
     } else if (status === 'error') {
-      toast.error(message ? decodeURIComponent(message) : 'No se pudo conectar Mercado Pago.');
+      toast.error(message ? decodeURIComponent(message) : 'No se pudo vincular la cuenta.');
     }
   }, [searchParams]);
 
@@ -74,7 +74,18 @@ export default function PagosPage() {
       window.location.href = data.authUrl;
     },
     onError: (err: { response?: { data?: { message?: string } } }) => {
-      toast.error(err.response?.data?.message || 'No se pudo iniciar la conexión.');
+      toast.error(err.response?.data?.message || 'No se pudo iniciar la vinculación.');
+    },
+  });
+
+  const mockConnectMutation = useMutation({
+    mutationFn: async () => api.post(`/clubs/${activeClubId}/payments/mock-connect`),
+    onSuccess: async () => {
+      await invalidate();
+      toast.success('Cuenta vinculada en modo demo.');
+    },
+    onError: (err: { response?: { data?: { message?: string } } }) => {
+      toast.error(err.response?.data?.message || 'No se pudo vincular la cuenta.');
     },
   });
 
@@ -82,10 +93,10 @@ export default function PagosPage() {
     mutationFn: async () => api.delete(`/clubs/${activeClubId}/payments/disconnect`),
     onSuccess: async () => {
       await invalidate();
-      toast.success('Mercado Pago desconectado.');
+      toast.success('Cuenta desvinculada.');
     },
     onError: (err: { response?: { data?: { message?: string } } }) => {
-      toast.error(err.response?.data?.message || 'No se pudo desconectar.');
+      toast.error(err.response?.data?.message || 'No se pudo desvincular.');
     },
   });
 
@@ -126,23 +137,22 @@ export default function PagosPage() {
   const paymentStatus = statusQuery.data;
   const status = paymentStatus.status;
   const tone = clubPaymentStatusTone(status);
+  const canConnectOAuth = paymentStatus.oauthConfigured && status !== 'CONNECTED';
+  const canMockConnect = paymentStatus.mockConnectAvailable && status !== 'CONNECTED';
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Pagos"
-        subtitle={`Mercado Pago · ${activeClub?.name || 'Club'}`}
-      />
+      <PageHeader title="Pagos" subtitle={activeClub?.name || 'Club'} />
 
-      <Card className="border-primary/20 bg-gradient-to-br from-primary/10 to-transparent">
+      <Card>
         <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center">
           <div className="flex size-12 items-center justify-center rounded-2xl bg-primary/15">
             <Wallet className="size-6 text-primary" />
           </div>
           <div className="flex-1">
-            <p className="text-lg font-bold">Mercado Pago del club</p>
+            <p className="text-lg font-bold">Mercado Pago</p>
             <p className="text-sm text-muted-foreground">
-              La plata de jugadores va directo a tu cuenta. x4 match no la recibe.
+              Estado: {clubPaymentStatusLabel(status)}
             </p>
           </div>
           <span className={cn('rounded-full px-3 py-1 text-xs font-bold', statusBadgeClass(tone))}>
@@ -153,53 +163,64 @@ export default function PagosPage() {
 
       {paymentStatus.mpUserId ? (
         <p className="text-sm text-muted-foreground">
-          Cuenta MP ·•••{paymentStatus.mpUserId.slice(-4)}
+          Cuenta ·•••{paymentStatus.mpUserId.slice(-4)}
           {paymentStatus.connectedAt
-            ? ` · conectada ${new Date(paymentStatus.connectedAt).toLocaleDateString('es-AR')}`
+            ? ` · vinculada ${new Date(paymentStatus.connectedAt).toLocaleDateString('es-AR')}`
             : ''}
         </p>
       ) : null}
 
-      {status !== 'CONNECTED' ? (
+      {!paymentStatus.oauthConfigured && !paymentStatus.mockConnectAvailable && status !== 'CONNECTED' ? (
         <Card>
           <CardContent className="p-4 text-sm text-muted-foreground">
-            Conectá Mercado Pago para cobrar señas online. Sin conexión, los jugadores pueden pagar
-            en recepción y vos registrás el cobro en Facturación.
-          </CardContent>
-        </Card>
-      ) : null}
-
-      {paymentStatus.usesPlatformFallback ? (
-        <Card>
-          <CardContent className="p-4 text-sm text-muted-foreground">
-            Modo transición: los cobros usan la cuenta de plataforma hasta que conectes la tuya.
+            La vinculación con Mercado Pago se habilitará desde x4 match. Si necesitás activarla
+            antes, contactá a soporte.
           </CardContent>
         </Card>
       ) : null}
 
       <div className="flex flex-wrap gap-2">
-        {status !== 'CONNECTED' && paymentStatus.oauthConfigured ? (
+        {canConnectOAuth ? (
           <Button
             className="rounded-xl"
             onClick={() => connectMutation.mutate()}
             disabled={connectMutation.isPending}
           >
             <CreditCard className="size-4" />
-            Conectar Mercado Pago
+            Vincular Mercado Pago
           </Button>
         ) : null}
-        {status === 'CONNECTED' ? (
+        {canMockConnect ? (
+          <Button
+            className="rounded-xl"
+            onClick={() => mockConnectMutation.mutate()}
+            disabled={mockConnectMutation.isPending}
+          >
+            <CreditCard className="size-4" />
+            Vincular cuenta (demo)
+          </Button>
+        ) : null}
+        {status === 'CONNECTED' || status === 'EXPIRED' ? (
           <Button
             variant="outline"
             className="rounded-xl"
             onClick={() => {
-              if (window.confirm('Los jugadores no podrán pagar online hasta que vuelvas a conectar.')) {
+              if (window.confirm('¿Desvincular la cuenta de Mercado Pago?')) {
                 disconnectMutation.mutate();
               }
             }}
             disabled={disconnectMutation.isPending}
           >
-            Desconectar
+            Desvincular
+          </Button>
+        ) : null}
+        {status === 'EXPIRED' && paymentStatus.oauthConfigured ? (
+          <Button
+            className="rounded-xl"
+            onClick={() => connectMutation.mutate()}
+            disabled={connectMutation.isPending}
+          >
+            Reconectar
           </Button>
         ) : null}
         <Button
@@ -208,7 +229,7 @@ export default function PagosPage() {
           onClick={() => modeMutation.mutate('manual')}
           disabled={modeMutation.isPending}
         >
-          Modo manual
+          Cobro en recepción
         </Button>
         <Button
           variant="secondary"
@@ -216,27 +237,9 @@ export default function PagosPage() {
           onClick={() => modeMutation.mutate('online')}
           disabled={modeMutation.isPending || status !== 'CONNECTED'}
         >
-          Modo online
+          Cobro online
         </Button>
       </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">¿Cómo funciona?</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3 text-sm text-muted-foreground">
-          {[
-            'El jugador paga la seña con Mercado Pago del club.',
-            'x4 match solo registra el estado (cobrado / pendiente).',
-            'La suscripción de x4 match se cobra aparte, nunca mezclada.',
-          ].map((line) => (
-            <div key={line} className="flex items-start gap-2">
-              <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-primary" />
-              <span>{line}</span>
-            </div>
-          ))}
-        </CardContent>
-      </Card>
     </div>
   );
 }
