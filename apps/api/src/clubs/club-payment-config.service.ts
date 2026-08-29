@@ -57,6 +57,18 @@ export class ClubPaymentConfigService {
     return (process.env.MOBILE_APP_SCHEME || 'playtomic').replace(/:\/\/?$/, '');
   }
 
+  private webClubBase(): string {
+    return (process.env.WEB_CLUB_URL || '').replace(/\/$/, '');
+  }
+
+  private oauthReturnBase(returnTo?: string): string {
+    if (returnTo === 'web') {
+      const web = this.webClubBase();
+      if (web) return `${web}/pagos`;
+    }
+    return `${this.mobileDeepLinkBase()}://club-payments`;
+  }
+
   private oauthRedirectUri(): string {
     if (process.env.MP_REDIRECT_URI?.trim()) {
       return process.env.MP_REDIRECT_URI.trim();
@@ -74,7 +86,7 @@ export class ClubPaymentConfigService {
     return `${body}.${sig}`;
   }
 
-  private verifyOAuthState(state: string): { clubId: string; userId: string } {
+  private verifyOAuthState(state: string): { clubId: string; userId: string; returnTo?: string } {
     const [body, sig] = state.split('.');
     if (!body || !sig) {
       throw new BadRequestException('Estado OAuth inválido');
@@ -93,11 +105,12 @@ export class ClubPaymentConfigService {
       clubId?: string;
       userId?: string;
       exp?: number;
+      returnTo?: string;
     };
     if (!parsed.clubId || !parsed.userId || !parsed.exp || parsed.exp < Date.now()) {
       throw new BadRequestException('Estado OAuth expirado o inválido');
     }
-    return { clubId: parsed.clubId, userId: parsed.userId };
+    return { clubId: parsed.clubId, userId: parsed.userId, returnTo: parsed.returnTo };
   }
 
   private mapStatus(row: PaymentConfigRow | null): ClubPaymentStatusResponse {
@@ -136,7 +149,11 @@ export class ClubPaymentConfigService {
     return result.rows[0] ?? null;
   }
 
-  async startOAuth(clubId: string, userId: string): Promise<{ authUrl: string; state: string }> {
+  async startOAuth(
+    clubId: string,
+    userId: string,
+    returnTo?: 'web' | 'mobile',
+  ): Promise<{ authUrl: string; state: string }> {
     if (!this.isOAuthConfigured()) {
       throw new BadRequestException(
         'Mercado Pago OAuth no está configurado. Contactá a soporte de x4 match.',
@@ -146,6 +163,7 @@ export class ClubPaymentConfigService {
     const state = this.signOAuthState({
       clubId,
       userId,
+      returnTo: returnTo ?? 'mobile',
       exp: Date.now() + 10 * 60 * 1000,
     });
 
@@ -168,7 +186,15 @@ export class ClubPaymentConfigService {
     state: string | undefined,
     error?: string,
   ): Promise<string> {
-    const base = `${this.mobileDeepLinkBase()}://club-payments`;
+    let returnTo: string | undefined;
+    try {
+      if (state) {
+        returnTo = this.verifyOAuthState(state).returnTo;
+      }
+    } catch {
+      returnTo = undefined;
+    }
+    const base = this.oauthReturnBase(returnTo);
 
     if (error) {
       return `${base}?status=error&message=${encodeURIComponent(error)}`;
@@ -178,10 +204,11 @@ export class ClubPaymentConfigService {
     }
 
     try {
-      const { clubId } = this.verifyOAuthState(state);
+      const { clubId, returnTo: verifiedReturnTo } = this.verifyOAuthState(state);
       const tokens = await this.exchangeAuthorizationCode(code);
       await this.saveTokens(clubId, tokens);
-      return `${base}?clubId=${encodeURIComponent(clubId)}&status=connected`;
+      const redirectBase = this.oauthReturnBase(verifiedReturnTo);
+      return `${redirectBase}?clubId=${encodeURIComponent(clubId)}&status=connected`;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'No se pudo conectar Mercado Pago';
       this.logger.warn(`OAuth MP falló: ${message}`);

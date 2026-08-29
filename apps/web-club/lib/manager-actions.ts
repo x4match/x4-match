@@ -5,6 +5,7 @@ export function briefingActionHref(
 ): string | null {
   if (!action) return null;
   if (action.type === 'billing') return '/facturacion';
+  if (action.type === 'payments') return '/pagos';
   if (action.type === 'clients') return '/clientes';
   if (action.type === 'alerts') return '/alertas';
   if (action.type === 'shop') {

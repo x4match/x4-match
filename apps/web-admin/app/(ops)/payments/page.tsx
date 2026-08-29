@@ -48,7 +48,7 @@ export default function PaymentsPage() {
       {isLoading ? (
         <p>Cargando pagos…</p>
       ) : (
-        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+        <div className="card card-table">
           <table className="table">
             <thead>
               <tr>

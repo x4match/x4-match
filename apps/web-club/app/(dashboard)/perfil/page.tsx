@@ -14,7 +14,9 @@ import {
   type MineClub,
 } from '@/lib/types';
 import { useClub } from '@/contexts/ClubContext';
+import { type ClubTrialStatus } from '@/lib/club-trial';
 import { PageHeader } from '@/components/layout/AppSidebar';
+import { TrialChecklistCard } from '@/components/club/TrialStatusBanner';
 import { DashboardSkeleton } from '@/components/club/DashboardCards';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -48,6 +50,15 @@ export default function PerfilPage() {
     queryFn: async () => {
       const res = await api.get(`/clubs/${activeClubId}/revenue`, { params: { days: 30 } });
       return res.data as { summary?: { totalCollected?: number; totalPending?: number } };
+    },
+    enabled: !!activeClubId,
+  });
+
+  const trialQuery = useQuery({
+    queryKey: ['club-trial-status', activeClubId],
+    queryFn: async () => {
+      const res = await api.get<ClubTrialStatus>(`/clubs/${activeClubId}/trial`);
+      return res.data;
     },
     enabled: !!activeClubId,
   });
@@ -329,6 +340,8 @@ export default function PerfilPage() {
         </Card>
 
         <div className="space-y-4">
+          <TrialChecklistCard trial={trialQuery.data} />
+
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Imágenes</CardTitle>
@@ -375,7 +388,7 @@ export default function PerfilPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Plan</CardTitle>
+              <CardTitle className="text-base">Plan operativo</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               <Select value={plan} onValueChange={setPlan}>

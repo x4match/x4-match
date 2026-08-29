@@ -84,7 +84,7 @@ export default function UsersPage() {
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 16 }}>
+      <div className="ops-page-header">
         <h1 style={{ margin: 0 }}>Usuarios</h1>
         <button className="btn btn-primary" type="button" onClick={() => setModalOpen(true)}>
           Crear operador
@@ -158,7 +158,7 @@ export default function UsersPage() {
         </form>
       </Modal>
 
-      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+      <div className="card card-table">
         {isLoading ? (
           <p style={{ padding: 16, margin: 0 }}>Cargando usuarios…</p>
         ) : (

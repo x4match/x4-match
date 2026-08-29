@@ -47,7 +47,7 @@ export default function TournamentsPage() {
       {isLoading ? (
         <p>Cargando torneos…</p>
       ) : (
-        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+        <div className="card card-table">
           <table className="table">
             <thead>
               <tr>

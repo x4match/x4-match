@@ -109,9 +109,13 @@ export class ClubsController {
 
   @Post(':id/payments/oauth/start')
   @UseGuards(JwtAuthGuard)
-  async startPaymentOAuth(@Param('id') id: string, @CurrentUser() user: { sub: string }) {
+  async startPaymentOAuth(
+    @Param('id') id: string,
+    @CurrentUser() user: { sub: string },
+    @Body() body?: { returnTo?: 'web' | 'mobile' },
+  ) {
     await this.clubsService.requireClubAdmin(id, user.sub);
-    return this.clubPaymentConfigService.startOAuth(id, user.sub);
+    return this.clubPaymentConfigService.startOAuth(id, user.sub, body?.returnTo);
   }
 
   @Post(':id/payments/mock-connect')

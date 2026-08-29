@@ -50,7 +50,7 @@ export default function ClubsPage() {
       {isLoading ? (
         <p>Cargando clubes…</p>
       ) : (
-        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+        <div className="card card-table">
           <table className="table">
             <thead>
               <tr>

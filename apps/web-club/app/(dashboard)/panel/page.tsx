@@ -5,8 +5,10 @@ import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import type { ManagerReport } from '@/lib/club-manager';
 import { briefingActionHref } from '@/lib/manager-actions';
+import { type ClubTrialStatus } from '@/lib/club-trial';
 import { useClub } from '@/contexts/ClubContext';
 import { PageHeader } from '@/components/layout/AppSidebar';
+import { TrialStatusBanner } from '@/components/club/TrialStatusBanner';
 import {
   AtRiskList,
   ByCourtList,
@@ -36,6 +38,15 @@ export default function GerentePage() {
         params: { days: 30 },
       });
       return res.data as ManagerReport;
+    },
+    enabled: !!activeClubId,
+  });
+
+  const trialQuery = useQuery({
+    queryKey: ['club-trial-status', activeClubId],
+    queryFn: async () => {
+      const res = await api.get<ClubTrialStatus>(`/clubs/${activeClubId}/trial`);
+      return res.data;
     },
     enabled: !!activeClubId,
   });
@@ -82,6 +93,8 @@ export default function GerentePage() {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
+      <TrialStatusBanner trial={trialQuery.data} />
+
       <PageHeader
         title={report.clubName || activeClub?.name || 'Gerente'}
         subtitle={report.intro}

@@ -46,7 +46,7 @@ export default function CalendarPage() {
         error={errorMessage}
       />
 
-      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+      <div className="card card-table">
         <div style={{ padding: '16px 16px 0' }}>
           <h3 style={{ marginTop: 0 }}>
             {filters.expiringDays ? `Vencen en ≤ ${filters.expiringDays} días` : 'Trials en seguimiento'}

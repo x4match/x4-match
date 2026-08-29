@@ -97,7 +97,7 @@ export default function ClubDetailPage() {
         <StatusBadge value={trial.status} category="billingStatus" />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+      <div className="ops-grid-2" style={{ marginBottom: 16 }}>
         <div className="card">
           <h3 style={{ marginTop: 0 }}>Billing y trial</h3>
           <p>

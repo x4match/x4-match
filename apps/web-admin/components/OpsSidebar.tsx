@@ -9,11 +9,14 @@ import {
   CreditCard,
   LayoutDashboard,
   LogOut,
+  Menu,
   Swords,
   Timer,
   Trophy,
   Users,
+  X,
 } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 
 const NAV = [
@@ -28,71 +31,107 @@ const NAV = [
   { href: '/calendar', label: 'Agenda', icon: CalendarRange },
 ];
 
+function SidebarNav({
+  pathname,
+  onNavigate,
+}: {
+  pathname: string;
+  onNavigate?: () => void;
+}) {
+  return (
+    <nav className="ops-nav">
+      {NAV.map(({ href, label, icon: Icon }) => {
+        const active = pathname === href || pathname.startsWith(`${href}/`);
+        return (
+          <Link
+            key={href}
+            href={href}
+            className={`ops-nav-link${active ? ' ops-nav-link--active' : ''}`}
+            onClick={onNavigate}
+          >
+            <Icon size={16} />
+            {label}
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}
+
 export function OpsSidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const { user, logout } = useAuth();
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    setOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    document.body.style.overflow = open ? 'hidden' : '';
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [open]);
 
   return (
-    <aside
-      style={{
-        width: 240,
-        borderRight: '1px solid var(--border)',
-        background: 'var(--surface)',
-        padding: 16,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 16,
-        minHeight: '100vh',
-        position: 'sticky',
-        top: 0,
-      }}
-    >
-      <div>
-        <p style={{ fontSize: 11, letterSpacing: '0.2em', color: 'var(--primary)', fontWeight: 700 }}>
-          X4 MATCH OPS
-        </p>
-        <h2 style={{ margin: '4px 0 0', fontSize: 18 }}>Backoffice</h2>
-        <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--muted)' }}>{user?.name}</p>
-      </div>
+    <>
+      <header className="ops-mobile-bar">
+        <button
+          type="button"
+          className="btn btn-outline ops-menu-btn"
+          aria-label="Abrir menú"
+          onClick={() => setOpen(true)}
+        >
+          <Menu size={18} />
+        </button>
+        <div className="ops-mobile-brand">
+          <p className="ops-brand-kicker">X4 MATCH OPS</p>
+          <p className="ops-brand-title">Backoffice</p>
+        </div>
+      </header>
 
-      <nav style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-        {NAV.map(({ href, label, icon: Icon }) => {
-          const active = pathname === href || pathname.startsWith(`${href}/`);
-          return (
-            <Link
-              key={href}
-              href={href}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 10,
-                padding: '10px 12px',
-                borderRadius: 12,
-                fontSize: 14,
-                fontWeight: 600,
-                background: active ? 'rgba(245,197,24,0.12)' : 'transparent',
-                color: active ? 'var(--primary)' : 'var(--muted)',
-              }}
-            >
-              <Icon size={16} />
-              {label}
-            </Link>
-          );
-        })}
-      </nav>
+      {open ? (
+        <button
+          type="button"
+          className="ops-sidebar-backdrop"
+          aria-label="Cerrar menú"
+          onClick={() => setOpen(false)}
+        />
+      ) : null}
 
-      <button
-        className="btn btn-outline"
-        style={{ marginTop: 'auto' }}
-        onClick={() => {
-          logout();
-          router.replace('/login');
-        }}
-      >
-        <LogOut size={16} />
-        Salir
-      </button>
-    </aside>
+      <aside className={`ops-sidebar${open ? ' ops-sidebar--open' : ''}`}>
+        <div className="ops-sidebar-header">
+          <div>
+            <p className="ops-brand-kicker">X4 MATCH OPS</p>
+            <h2 className="ops-brand-title">Backoffice</h2>
+            <p className="ops-user-name">{user?.name}</p>
+          </div>
+          <button
+            type="button"
+            className="ops-sidebar-close btn btn-outline"
+            aria-label="Cerrar menú"
+            onClick={() => setOpen(false)}
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        <SidebarNav pathname={pathname} onNavigate={() => setOpen(false)} />
+
+        <button
+          className="btn btn-outline ops-logout-btn"
+          type="button"
+          onClick={() => {
+            logout();
+            router.replace('/login');
+          }}
+        >
+          <LogOut size={16} />
+          Salir
+        </button>
+      </aside>
+    </>
   );
 }

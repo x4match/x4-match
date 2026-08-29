@@ -24,9 +24,9 @@ export default function OpsLayout({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh' }}>
+    <div className="ops-layout">
       <OpsSidebar />
-      <main style={{ flex: 1, padding: 24, overflowX: 'auto' }}>{children}</main>
+      <main className="ops-main">{children}</main>
     </div>
   );
 }

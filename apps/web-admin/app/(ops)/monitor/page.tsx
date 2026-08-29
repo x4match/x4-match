@@ -42,7 +42,7 @@ export default function MonitorPage() {
         <StatCard label="MP conectados" value={t.mpConnectedClubs} />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+      <div className="ops-grid-2">
         <div className="card">
           <h3 style={{ marginTop: 0 }}>Clubes recientes</h3>
           <table className="table">

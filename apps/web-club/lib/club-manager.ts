@@ -14,6 +14,7 @@ export type BriefingAction =
       hourBucket?: number;
     }
   | { type: 'billing' }
+  | { type: 'payments' }
   | { type: 'auto_fill' }
   | { type: 'clients' }
   | { type: 'alerts' }

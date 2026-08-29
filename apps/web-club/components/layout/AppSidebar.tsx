@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import {
   AlertTriangle,
   CalendarClock,
+  CreditCard,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -36,6 +37,7 @@ const NAV = [
   { href: '/panel', label: 'Gerente', icon: LayoutDashboard },
   { href: '/gestion', label: 'Gestión', icon: CalendarClock },
   { href: '/facturacion', label: 'Facturación', icon: Receipt },
+  { href: '/pagos', label: 'Pagos MP', icon: CreditCard },
   { href: '/clientes', label: 'Clientes', icon: Users },
   { href: '/alertas', label: 'Alertas', icon: AlertTriangle },
   { href: '/tienda', label: 'Tienda', icon: ShoppingBag },

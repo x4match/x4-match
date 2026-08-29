@@ -53,7 +53,7 @@ export default function TrialsPage() {
       {isLoading ? (
         <p>Cargando trials…</p>
       ) : (
-        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+        <div className="card card-table">
           <table className="table">
             <thead>
               <tr>
