@@ -1,0 +1,2 @@
+ALTER TABLE clubs
+  ADD COLUMN IF NOT EXISTS cover_url TEXT;

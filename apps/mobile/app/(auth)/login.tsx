@@ -2,177 +2,160 @@ import { useState } from 'react';
 import {
   View,
   Text,
-  TextInput,
-  TouchableOpacity,
   Alert,
   ScrollView,
-  Platform,
   KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '@/contexts/AuthContext';
+import { isClub } from '@/lib/roles';
 import { api } from '@/lib/api';
+import { ui } from '@/theme/tokens';
+import { Screen, InputField, PrimaryButton, FadeInUp, PressableScale } from '@/components/padely';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
+  const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
   const { login } = useAuth();
   const router = useRouter();
 
-  const handleLogin = async () => {
-    if (!email || !password) {
-      Alert.alert('Error', 'Por favor completa todos los campos');
-      return;
-    }
+  const validate = () => {
+    const next: typeof errors = {};
+    if (!email) next.email = 'El email es requerido';
+    else if (!/\S+@\S+\.\S+/.test(email)) next.email = 'Email inválido';
+    if (!password) next.password = 'La contraseña es requerida';
+    setErrors(next);
+    return Object.keys(next).length === 0;
+  };
 
+  const handleLogin = async () => {
+    if (!validate()) return;
     setLoading(true);
     try {
       const response = await api.post('/auth/login', { email, password });
       await login(response.data.access_token, response.data.user);
-      router.replace('/(tabs)/home');
+      const role = response.data.user?.role;
+      router.replace(isClub(role) ? '/(tabs)/gerente' : '/(tabs)/home');
     } catch (error: any) {
-      Alert.alert('Error', error.response?.data?.message || 'Error al iniciar sesión');
+      const message = error.response?.data?.message || 'Error al iniciar sesión';
+      Alert.alert('Error', typeof message === 'string' ? message : JSON.stringify(message));
     } finally {
       setLoading(false);
     }
   };
 
-  const handleGoogleLogin = () => {
-    Alert.alert('Google', 'Inicio de sesión con Google próximamente');
-  };
-
-  const handleAppleLogin = () => {
-    Alert.alert('Apple', 'Inicio de sesión con Apple próximamente');
-  };
-
   return (
-    <KeyboardAvoidingView
-      className="flex-1"
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      <ScrollView
-        className="flex-1 rounded-t-3xl bg-white"
-        contentContainerStyle={{ flexGrow: 1 }}
-        keyboardShouldPersistTaps="handled"
-      >
-        <View className="flex-1 px-5 pt-8 pb-10">
-          {/* ═══ Header ═══ */}
-          <View className="items-center mb-8">
-            <View className="w-16 h-16 rounded-full bg-gray-900 items-center justify-center mb-4">
-              <Ionicons name="tennisball" size={28} color="#fbbf24" />
-            </View>
-            <Text className="text-2xl font-bold text-gray-900 mb-1">
-              Bienvenido de nuevo
-            </Text>
-            <Text className="text-sm text-gray-500">
-              Iniciá sesión para continuar
-            </Text>
-          </View>
+    <Screen>
+      <LinearGradient colors={[ui.colors.bg, ui.colors.bgElevated, ui.colors.surface0]} style={{ flex: 1 }}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          <ScrollView
+            contentContainerStyle={{
+              flexGrow: 1,
+              justifyContent: 'center',
+              paddingHorizontal: ui.spacing.lg,
+              paddingVertical: 48,
+            }}
+            keyboardShouldPersistTaps="handled"
+          >
+            <FadeInUp index={0}>
+              <View style={{ alignItems: 'center', marginBottom: 40 }}>
+                <LinearGradient
+                  colors={[ui.colors.primary, ui.colors.accent]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={{
+                    width: 84,
+                    height: 84,
+                    borderRadius: 28,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginBottom: 20,
+                    ...ui.shadow.glow,
+                  }}
+                >
+                  <Ionicons name="tennisball" size={42} color={ui.colors.bgElevated} />
+                </LinearGradient>
+                <Text style={[ui.typography.display, { color: ui.colors.textPrimary }]}>x4 match</Text>
+                <Text style={[ui.typography.bodySm, { color: ui.colors.textSecondary, marginTop: 6 }]}>
+                  Tu rendimiento de pádel, vivo
+                </Text>
+              </View>
+            </FadeInUp>
 
-          {/* ═══ Formulario ═══ */}
-          <View className="mb-6">
-            {/* Email */}
-            <View className="bg-gray-50 rounded-xl px-4 py-3.5 mb-3 flex-row items-center">
-              <Ionicons name="mail-outline" size={18} color="#9ca3af" />
-              <TextInput
-                className="flex-1 ml-3 text-sm text-gray-900"
-                placeholder="Email"
-                placeholderTextColor="#9ca3af"
+            <FadeInUp index={1}>
+              <InputField
+                label="Email"
+                placeholder="tu@email.com"
                 value={email}
                 onChangeText={setEmail}
+                error={errors.email}
                 keyboardType="email-address"
                 autoCapitalize="none"
-                autoComplete="email"
+                leftIcon={<Ionicons name="mail-outline" size={20} color={ui.colors.textMuted} />}
               />
-            </View>
-
-            {/* Contraseña */}
-            <View className="bg-gray-50 rounded-xl px-4 py-3.5 mb-2 flex-row items-center">
-              <Ionicons name="lock-closed-outline" size={18} color="#9ca3af" />
-              <TextInput
-                className="flex-1 ml-3 text-sm text-gray-900"
-                placeholder="Contraseña"
-                placeholderTextColor="#9ca3af"
+              <InputField
+                label="Contraseña"
+                placeholder="Tu contraseña"
                 value={password}
                 onChangeText={setPassword}
-                secureTextEntry={!showPassword}
-                autoComplete="password"
+                error={errors.password}
+                secureTextEntry
+                leftIcon={<Ionicons name="lock-closed-outline" size={20} color={ui.colors.textMuted} />}
               />
-              <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-                <Ionicons
-                  name={showPassword ? 'eye-off-outline' : 'eye-outline'}
-                  size={18}
-                  color="#9ca3af"
-                />
-              </TouchableOpacity>
-            </View>
-
-            {/* Olvidé contraseña */}
-            <TouchableOpacity className="self-end mb-4">
-              <Text className="text-xs text-blue-500 font-medium">
-                ¿Olvidaste tu contraseña?
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* ═══ Botón principal ═══ */}
-          <TouchableOpacity
-            className={`bg-gray-900 rounded-xl py-4 items-center justify-center mb-6 ${loading ? 'opacity-70' : ''}`}
-            onPress={handleLogin}
-            disabled={loading}
-            activeOpacity={0.8}
-          >
-            <Text className="text-white font-semibold text-sm">
-              {loading ? 'Iniciando sesión...' : 'Iniciar Sesión'}
-            </Text>
-          </TouchableOpacity>
-
-          {/* ═══ Separador ═══ */}
-          <View className="flex-row items-center mb-6">
-            <View className="flex-1 h-px bg-gray-200" />
-            <Text className="text-xs text-gray-400 mx-4">o continuar con</Text>
-            <View className="flex-1 h-px bg-gray-200" />
-          </View>
-
-          {/* ═══ Botones sociales ═══ */}
-          <View className="flex-row gap-3 mb-8">
-            {/* Google */}
-            <TouchableOpacity
-              className="flex-1 bg-gray-50 rounded-xl py-3.5 flex-row items-center justify-center"
-              onPress={handleGoogleLogin}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="logo-google" size={18} color="#374151" />
-              <Text className="text-sm font-semibold text-gray-700 ml-2">Google</Text>
-            </TouchableOpacity>
-
-            {/* Apple - solo en iOS */}
-            {Platform.OS === 'ios' && (
-              <TouchableOpacity
-                className="flex-1 bg-gray-50 rounded-xl py-3.5 flex-row items-center justify-center"
-                onPress={handleAppleLogin}
-                activeOpacity={0.7}
+              <PressableScale
+                onPress={() => router.push('/(auth)/forgot-password')}
+                accessibilityRole="link"
+                accessibilityLabel="Olvidé mi contraseña"
+                style={{ alignSelf: 'flex-end', marginTop: -8, marginBottom: 16, minHeight: 36, justifyContent: 'center' }}
               >
-                <Ionicons name="logo-apple" size={18} color="#374151" />
-                <Text className="text-sm font-semibold text-gray-700 ml-2">Apple</Text>
-              </TouchableOpacity>
-            )}
-          </View>
+                <Text
+                  style={{
+                    color: ui.colors.primary,
+                    fontFamily: ui.typography.label.fontFamily,
+                    fontSize: 14,
+                  }}
+                >
+                  ¿Olvidaste tu contraseña?
+                </Text>
+              </PressableScale>
+              <PrimaryButton
+                label="Iniciar sesión"
+                onPress={handleLogin}
+                loading={loading}
+                fullWidth
+                size="lg"
+              />
+            </FadeInUp>
 
-          {/* ═══ Link a registro ═══ */}
-          <View className="flex-row items-center justify-center">
-            <Text className="text-sm text-gray-500">¿No tenés cuenta? </Text>
-            <TouchableOpacity onPress={() => router.push('/(auth)/register')}>
-              <Text className="text-sm font-semibold text-blue-500">
-                Registrate
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+            <FadeInUp index={2}>
+              <PressableScale
+                onPress={() => router.push('/(auth)/register')}
+                accessibilityRole="link"
+                accessibilityLabel="Registrate, crear cuenta"
+                style={{ marginTop: 28, minHeight: 44, justifyContent: 'center' }}
+              >
+                <Text
+                  style={{
+                    textAlign: 'center',
+                    color: ui.colors.textMuted,
+                    fontFamily: ui.typography.body.fontFamily,
+                  }}
+                >
+                  ¿No tenés cuenta?{' '}
+                  <Text style={{ color: ui.colors.primary, fontFamily: ui.typography.label.fontFamily }}>
+                    Registrate
+                  </Text>
+                </Text>
+              </PressableScale>
+            </FadeInUp>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </LinearGradient>
+    </Screen>
   );
 }

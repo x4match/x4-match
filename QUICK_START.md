@@ -25,9 +25,8 @@ cp .env.example .env
 
 ```bash
 cd apps/api
-pnpm prisma:generate
-pnpm prisma:migrate
-pnpm prisma:seed
+pnpm db:migrate
+pnpm db:seed
 ```
 
 ## 5. Iniciar API
@@ -73,9 +72,9 @@ cd infra && docker compose up -d
 ### Error en Prisma
 ```bash
 cd apps/api
-pnpm prisma:generate
-pnpm prisma:migrate reset  # Si necesitas resetear
-pnpm prisma:seed
+cd apps/api && pnpm db:migrate
+pnpm db:migrate
+pnpm db:seed
 ```
 
 ### Error en Mobile

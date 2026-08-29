@@ -13,7 +13,13 @@
     "build:api": "pnpm --filter api build",
     "build:mobile": "pnpm --filter mobile build",
     "lint": "pnpm -r lint",
-    "typecheck": "pnpm -r typecheck"
+    "typecheck": "pnpm -r typecheck",
+    "dev:web-club": "pnpm --filter web-club dev",
+    "build:web-club": "pnpm --filter web-club build",
+    "dev:web-admin": "pnpm --filter web-admin dev",
+    "build:web-admin": "pnpm --filter web-admin build",
+    "dev:web": "pnpm --filter web dev",
+    "build:web": "pnpm --filter web build"
   },
   "devDependencies": {
     "typescript": "^5.3.3"

@@ -1,54 +1,107 @@
+import { useEffect, useCallback } from 'react';
 import { Stack } from 'expo-router';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { useFonts, Geist_400Regular, Geist_500Medium, Geist_600SemiBold, Geist_700Bold, Geist_800ExtraBold } from '@expo-google-fonts/geist';
+import * as SplashScreen from 'expo-splash-screen';
 import { AuthProvider } from '@/contexts/AuthContext';
+import { ThemeProvider } from '@/contexts/ThemeContext';
+import { ToastProvider } from '@/components/ui/Toast';
+import { applyGeistTextDefaults } from '@/lib/apply-geist';
+import { queryClient } from '@/lib/query-client';
+import { ui } from '@/theme/tokens';
 import '../global.css';
 
-const queryClient = new QueryClient();
+SplashScreen.preventAutoHideAsync();
 
-// Paleta de colores - Playtomic style
 export const Colors = {
-  primary: '#3B5BDB',       // Azul vibrante (header)
-  primaryLight: '#4C6EF5',  // Azul más claro
-  primaryDark: '#2B4ACB',   // Azul oscuro
-  accent: '#f59e0b',        // Ámbar/dorado
-  accentLight: '#fbbf24',   // Ámbar claro
-  white: '#ffffff',
-  textMuted: '#94a3b8',     // Gris suave
-  textDark: '#1a1a2e',      // Texto oscuro
-  background: '#f5f5f5',    // Fondo gris claro
-  cardBorder: '#e5e7eb',    // Borde de tarjetas
+  primary: ui.colors.bg,
+  primaryLight: ui.colors.surface1,
+  primaryDark: ui.colors.surface2,
+  accent: ui.colors.accent,
+  accentLight: '#BEF264',
+  white: ui.colors.textInverse,
+  textMuted: ui.colors.textMuted,
+  textDark: ui.colors.textPrimary,
+  background: ui.colors.bg,
+  cardBorder: ui.colors.border,
 };
 
 export default function RootLayout() {
+  const [fontsLoaded] = useFonts({
+    Geist_400Regular,
+    Geist_500Medium,
+    Geist_600SemiBold,
+    Geist_700Bold,
+    Geist_800ExtraBold,
+  });
+
+  const onLayoutRootView = useCallback(async () => {
+    if (fontsLoaded) {
+      await SplashScreen.hideAsync();
+    }
+  }, [fontsLoaded]);
+
+  useEffect(() => {
+    if (fontsLoaded) {
+      applyGeistTextDefaults();
+    }
+    onLayoutRootView();
+  }, [fontsLoaded, onLayoutRootView]);
+
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <Stack
-          screenOptions={{
-            headerStyle: {
-              backgroundColor: Colors.primary,
-            },
-            headerTintColor: Colors.white,
-            headerTitleStyle: {
-              fontWeight: 'bold',
-              fontSize: 18,
-            },
-            headerShadowVisible: false,
-            headerBackTitle: '',
-          }}
-        >
-          <Stack.Screen name="index" options={{ headerShown: false }} />
-          <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-          <Stack.Screen name="(tabs)" options={{ headerShown: false, headerBackTitle: '' }} />
-          <Stack.Screen name="match/[id]" options={{ title: 'Partido', headerBackTitle: '' }} />
-          <Stack.Screen name="match/[id]/result" options={{ title: 'Cargar Resultado', headerBackTitle: '' }} />
-          <Stack.Screen name="club/[id]" options={{ title: 'Club', headerBackTitle: '' }} />
-          <Stack.Screen name="matchmaking" options={{ title: 'Buscar Partido', headerBackTitle: '' }} />
-          <Stack.Screen name="availability" options={{ title: 'Disponibilidad', headerBackTitle: '' }} />
-          <Stack.Screen name="edit-profile" options={{ title: 'Editar perfil', headerBackTitle: '' }} />
-          <Stack.Screen name="edit-preferences" options={{ title: 'Preferencias', headerBackTitle: '' }} />
-        </Stack>
-      </AuthProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <ToastProvider>
+            <Stack
+              screenOptions={{
+                headerStyle: { backgroundColor: ui.colors.bg },
+                headerTintColor: ui.colors.textPrimary,
+                headerTitleStyle: {
+                  fontFamily: fontsLoaded ? ui.typography.h3.fontFamily : undefined,
+                  fontSize: 17,
+                },
+                contentStyle: { backgroundColor: ui.colors.bg },
+                headerShadowVisible: false,
+                headerBackButtonDisplayMode: 'minimal',
+              }}
+            >
+            <Stack.Screen name="index" options={{ headerShown: false }} />
+            <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            <Stack.Screen name="match/[id]" options={{ headerShown: false }} />
+            <Stack.Screen name="match/[id]/result" options={{ headerShown: false }} />
+            <Stack.Screen name="club/[id]" options={{ headerShown: false }} />
+            <Stack.Screen name="create-open-match" options={{ headerShown: false }} />
+            <Stack.Screen name="browse-open-matches" options={{ headerShown: false }} />
+            <Stack.Screen name="auto-matchmaking" options={{ headerShown: false }} />
+            <Stack.Screen name="matchmaking" options={{ headerShown: false }} />
+            <Stack.Screen name="availability" options={{ headerShown: false }} />
+            <Stack.Screen name="edit-profile" options={{ headerShown: false }} />
+            <Stack.Screen name="edit-preferences" options={{ headerShown: false }} />
+            <Stack.Screen name="notifications" options={{ headerShown: false }} />
+            <Stack.Screen name="player/[id]" options={{ headerShown: false }} />
+            <Stack.Screen name="conversation/[id]" options={{ headerShown: false }} />
+            <Stack.Screen name="tournaments" options={{ headerShown: false }} />
+            <Stack.Screen name="tournament/[id]/index" options={{ headerShown: false }} />
+            <Stack.Screen name="tournament/[id]/manage" options={{ headerShown: false }} />
+            <Stack.Screen name="tournament/[id]/register" options={{ headerShown: false }} />
+            <Stack.Screen name="circuit/[id]" options={{ headerShown: false }} />
+            <Stack.Screen name="manage-clubs" options={{ headerShown: false }} />
+            <Stack.Screen name="change-password" options={{ headerShown: false }} />
+            <Stack.Screen name="badges" options={{ headerShown: false }} />
+            <Stack.Screen name="club-billing" options={{ headerShown: false }} />
+            <Stack.Screen name="club-payments" options={{ headerShown: false }} />
+            <Stack.Screen name="club-alerts" options={{ headerShown: false }} />
+            <Stack.Screen name="club-clients" options={{ headerShown: false }} />
+            <Stack.Screen name="onboarding" options={{ headerShown: false }} />
+            <Stack.Screen name="ranking-general" options={{ headerShown: false }} />
+            <Stack.Screen name="recent-matches" options={{ headerShown: false }} />
+            <Stack.Screen name="history/[id]" options={{ headerShown: false }} />
+          </Stack>
+          </ToastProvider>
+        </AuthProvider>
+      </ThemeProvider>
     </QueryClientProvider>
   );
 }

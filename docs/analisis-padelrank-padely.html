@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Análisis competitivo: Padel Rank vs x4 match</title>
+  <style>
+    @page { margin: 2cm; size: A4; }
+    * { box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      font-size: 10.5pt;
+      line-height: 1.5;
+      color: #1a2332;
+      margin: 0;
+      padding: 0;
+    }
+    .cover {
+      page-break-after: always;
+      min-height: 90vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 2rem 0;
+      border-bottom: 4px solid #14B8A6;
+    }
+    .cover h1 { font-size: 28pt; font-weight: 800; color: #060A10; margin: 0 0 0.5rem; line-height: 1.2; }
+    .cover .subtitle { font-size: 14pt; color: #14B8A6; font-weight: 600; margin-bottom: 2rem; }
+    .cover .meta { font-size: 10pt; color: #64748b; margin-top: 3rem; }
+    .cover .badge {
+      display: inline-block; background: #ecfdf5; color: #0f766e;
+      padding: 6px 14px; border-radius: 20px; font-size: 9pt; font-weight: 600; margin-top: 1rem;
+    }
+    h2 {
+      font-size: 14pt; color: #0f766e; border-bottom: 2px solid #14B8A6;
+      padding-bottom: 6px; margin-top: 1.8rem; margin-bottom: 0.8rem; page-break-after: avoid;
+    }
+    h3 { font-size: 11pt; color: #1e3a5f; margin-top: 1.2rem; margin-bottom: 0.5rem; page-break-after: avoid; }
+    p { margin: 0.4rem 0 0.8rem; }
+    .note {
+      background: #f0fdfa; border-left: 4px solid #14B8A6;
+      padding: 10px 14px; margin: 1rem 0; font-size: 9.5pt; border-radius: 0 6px 6px 0;
+    }
+    .warn {
+      background: #fffbeb; border-left: 4px solid #f59e0b;
+      padding: 10px 14px; margin: 1rem 0; font-size: 9.5pt; border-radius: 0 6px 6px 0;
+    }
+    table {
+      width: 100%; border-collapse: collapse; margin: 0.8rem 0 1.2rem;
+      font-size: 9pt; page-break-inside: avoid;
+    }
+    th { background: #131D2B; color: #f4f7fb; text-align: left; padding: 8px 10px; font-weight: 600; }
+    td { padding: 7px 10px; border-bottom: 1px solid #e2e8f0; vertical-align: top; }
+    tr:nth-child(even) td { background: #f8fafc; }
+    .ok { color: #15803d; font-weight: 700; }
+    .no { color: #b91c1c; font-weight: 700; }
+    .partial { color: #b45309; font-weight: 700; }
+    .pro { color: #7c3aed; font-weight: 600; font-size: 8pt; }
+    .high { color: #b91c1c; font-weight: 600; }
+    .medium { color: #b45309; font-weight: 600; }
+    .low { color: #64748b; font-weight: 600; }
+    pre.matrix {
+      background: #131D2B; color: #a3e635; padding: 14px 16px; border-radius: 8px;
+      font-family: Consolas, Monaco, monospace; font-size: 8.5pt; line-height: 1.6; page-break-inside: avoid;
+    }
+    ul, ol { margin: 0.4rem 0 0.8rem; padding-left: 1.4rem; }
+    li { margin-bottom: 0.3rem; }
+    .phase {
+      background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;
+      padding: 12px 14px; margin: 0.8rem 0; page-break-inside: avoid;
+    }
+    .phase h3 { margin-top: 0; color: #0f766e; }
+    .footer {
+      margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #e2e8f0;
+      font-size: 8.5pt; color: #94a3b8; text-align: center;
+    }
+    .section-break { page-break-before: always; }
+    a { color: #0f766e; text-decoration: none; }
+  </style>
+</head>
+<body>
+
+<div class="cover">
+  <div class="badge">Documento interno · x4 match</div>
+  <h1>Análisis competitivo</h1>
+  <div class="subtitle">Padel Rank (padelrank.pro) vs x4 match — ELO, ligas y funcionalidades</div>
+  <p style="font-size: 11pt; color: #475569; max-width: 90%;">
+    Revisión de la app oficial <strong>Padel Rank</strong> (<a href="https://padelrank.pro">padelrank.pro</a>)
+    frente al estado actual de x4 match, con matriz comparativa y roadmap de prioridades.
+  </p>
+  <div class="meta">
+    <strong>Fecha:</strong> 3 de julio de 2026<br />
+    <strong>Fuentes:</strong> padelrank.pro · App Store · Google Play · código fuente x4 match<br />
+    <strong>Versión competidor:</strong> 1.1.7 (julio 2026)
+  </div>
+</div>
+
+<div class="warn">
+  <strong>Corrección importante:</strong> Existen dos productos distintos con nombres similares.
+  <strong>Padel Rank</strong> (<a href="https://padelrank.pro">padelrank.pro</a>) es el competidor relevante:
+  ligas amateur con ELO real. <strong>PadelRank</strong> (<a href="https://padelrank.app">padelrank.app</a>, Digital Envision)
+  es otra app con TrueSkill y rankings globales. Este documento analiza <strong>padelrank.pro</strong>.
+</div>
+
+<h2>1. Qué es Padel Rank (padelrank.pro)</h2>
+<p>
+  App para <strong>ligas de pádel amateur</strong>: crear una liga, invitar al grupo, marcar partidos en vivo
+  (móvil o reloj) y ver el <strong>ELO actualizarse en tiempo real</strong>. No es una plataforma global ni
+  de reservas de clubes — es el "Excel/WhatsApp killer" de tu liga del miércoles.
+</p>
+
+<div class="note">
+  <strong>Posicionamiento:</strong> "Marca el punto desde tu reloj. Tu liga con ELO, voz y análisis pro."
+  Gratis para empezar, sin anuncios. Plan PRO opcional (€4,99/mes o €39,99/año) con 2 meses gratis al registrarse.
+</div>
+
+<h3>1.1 Funcionalidades principales</h3>
+<table>
+  <thead><tr><th>Área</th><th>Padel Rank</th><th>Plan</th></tr></thead>
+  <tbody>
+    <tr><td>Algoritmo</td><td><strong>ELO real</strong> en tiempo real (ej. 1842 +12). K-factor y multiplicadores documentados</td><td>FREE</td></tr>
+    <tr><td>Marcador en vivo</td><td>Móvil + <strong>Apple Watch + Wear OS</strong>. Modo multi-reloj (1 anotador + 3 espectadores)</td><td class="pro">PRO</td></tr>
+    <tr><td>Comandos de voz</td><td>"Punto Juan", "Fallo Sara", "Presión Carlos", "Resultado", "Deshacer" — 6 idiomas</td><td class="pro">PRO</td></tr>
+    <tr><td>6 rankings por liga</td><td>ELO · Tabla de liga · Win rate · Ranking de parejas · Gráficos ELO · Tiempo de juego</td><td>FREE</td></tr>
+    <tr><td>Simulador ELO</td><td>Calcula impacto exacto antes del partido (delta + nueva posición)</td><td class="pro">PRO</td></tr>
+    <tr><td>Análisis profundo</td><td>Crónica, MVP, momentum, puntos de presión, radar pentagonal, carta de jugador (OVR + 6 atributos)</td><td class="pro">PRO</td></tr>
+    <tr><td>Insignias y rachas</td><td>Primer partido, 10 victorias seguidas, comeback tras perder 1er set</td><td>FREE</td></tr>
+    <tr><td>Partidos abiertos</td><td>1–3 plazas libres, push al completarse, reparto de coste de pista</td><td>FREE</td></tr>
+    <tr><td>Modo invitado</td><td>Sin alta; no afecta ELO de la liga; conserva stats propias</td><td>FREE</td></tr>
+    <tr><td>Sondeos disponibilidad</td><td>2–5 huecos, voto Puedo/Tal vez/No, auto-crea partido con 4 confirmaciones</td><td>2/mes FREE · ilimitado PRO</td></tr>
+    <tr><td>Meteo outdoor</td><td>Pronóstico + lluvia 6h previas + estado de pista (seca/húmeda/mojada)</td><td>FREE</td></tr>
+    <tr><td>El Pagabirras</td><td>Perdedores pagan ronda; ranking de quién más ha invitado</td><td>FREE</td></tr>
+    <tr><td>Recordatorios push</td><td>24h y 2h antes del partido; aviso de plaza libre</td><td>FREE</td></tr>
+    <tr><td>Seguir en directo</td><td>Espectadores ven marcador en móvil/reloj; narración por voz</td><td class="pro">PRO</td></tr>
+    <tr><td>Auth</td><td>Google / Apple (link de invitación a la liga)</td><td>—</td></tr>
+    <tr><td>Idiomas</td><td>ES · EN · FR · DE · IT · PT</td><td>—</td></tr>
+    <tr><td>Plataformas</td><td>iOS · Android · Apple Watch · Wear OS</td><td>—</td></tr>
+  </tbody>
+</table>
+
+<h3>1.2 Modelo de negocio</h3>
+<table>
+  <thead><tr><th>Plan</th><th>Precio</th><th>Incluye</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>FREE</strong></td><td>Gratis para siempre</td>
+      <td>Liga, ELO, partidos abiertos, invitados, insignias, meteo, push, 2 sondeos/mes</td>
+    </tr>
+    <tr>
+      <td><strong>PRO</strong></td><td>€4,99/mes · €39,99/año</td>
+      <td>Reloj + voz, análisis profundo, simulador ELO, espectador en directo, sondeos ilimitados</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="section-break"></div>
+
+<h2>2. Qué tenemos hoy en x4 match</h2>
+<p>x4 match es una <strong>plataforma integral</strong> estilo Playtomic: clubs, matchmaking, torneos, social y ranking.</p>
+
+<h3>2.1 Sistema ELO / rating (comparable)</h3>
+<table>
+  <thead><tr><th>Feature</th><th>x4 match</th><th>Estado</th></tr></thead>
+  <tbody>
+    <tr><td>Rating dinámico post-partido</td><td>ELO (K=24), rating inicial ~1000</td><td class="ok">✅</td></tr>
+    <tr><td>Ajuste por fuerza del rival</td><td>Promedio de equipos</td><td class="ok">✅</td></tr>
+    <tr><td>Bonus por margen de sets</td><td>Factor 0.8–1.2</td><td class="ok">✅</td></tr>
+    <tr><td>Anti-farming</td><td>Factor de novedad por rivales repetidos</td><td class="ok">✅</td></tr>
+    <tr><td>Visualización de nivel</td><td>SkillScore 0–100 + categoría 8va–1ra</td><td class="ok">✅</td></tr>
+    <tr><td>Verificación de resultado</td><td>Propuesta + confirmación 48h + rechazo</td><td class="ok">✅</td></tr>
+    <tr><td>Invitados sin cuenta</td><td>guestInvites en partidos</td><td class="ok">✅</td></tr>
+    <tr><td>Historial W/L</td><td>PlayerMatchStatsCard</td><td class="ok">✅</td></tr>
+    <tr><td>Rankings por club</td><td>Semanal / mensual / anual + leaderboard</td><td class="ok">✅</td></tr>
+    <tr><td>Puntos competitivos mensuales</td><td>En perfil del jugador</td><td class="ok">✅</td></tr>
+    <tr><td>Marcador punto a punto en vivo</td><td>—</td><td class="no">❌</td></tr>
+    <tr><td>Simulador ELO pre-partido</td><td>—</td><td class="no">❌</td></tr>
+    <tr><td>Gráfico evolución ELO</td><td>—</td><td class="no">❌</td></tr>
+    <tr><td>Ranking de parejas</td><td>—</td><td class="no">❌</td></tr>
+    <tr><td>Insignias / rachas</td><td>—</td><td class="no">❌</td></tr>
+  </tbody>
+</table>
+
+<h3>2.2 Donde ya superamos a Padel Rank</h3>
+<table>
+  <thead><tr><th>Área</th><th>x4 match</th><th>Padel Rank</th></tr></thead>
+  <tbody>
+    <tr><td>Reserva de canchas / slots</td><td class="ok">✅</td><td class="no">❌</td></tr>
+    <tr><td>Matchmaking automático</td><td class="ok">✅</td><td class="partial">Partidos abiertos manuales</td></tr>
+    <tr><td>Chat de partido (WebSocket)</td><td class="ok">✅</td><td class="no">❌</td></tr>
+    <tr><td>Mensajería / amigos</td><td class="ok">✅</td><td class="no">❌</td></tr>
+    <tr><td>Comunidad / feed</td><td class="ok">✅</td><td class="no">❌</td></tr>
+    <tr><td>Torneos + circuitos + máster</td><td class="ok">✅</td><td class="no">❌</td></tr>
+    <tr><td>Panel club (billing, tienda, premios)</td><td class="ok">✅</td><td class="no">❌</td></tr>
+    <tr><td>Roles (jugador / club / organizador)</td><td class="ok">✅</td><td class="no">❌ Solo ligas</td></tr>
+    <tr><td>Ecosistema multi-club</td><td class="ok">✅</td><td class="partial">Ligas independientes</td></tr>
+  </tbody>
+</table>
+
+<div class="section-break"></div>
+
+<h2>3. Qué nos falta para superarlos en ELO y experiencia de liga</h2>
+
+<h3>3.1 Crítico — producto de ranking y partido</h3>
+<table>
+  <thead><tr><th>Gap</th><th>Impacto</th><th>Detalle</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>Marcador en vivo punto a punto</td>
+      <td class="high">🔴 Alto</td>
+      <td>Ellos marcan desde móvil/reloj con sync en &lt;1s. Nosotros solo cargamos resultado final.</td>
+    </tr>
+    <tr>
+      <td>6 dimensiones de ranking</td>
+      <td class="high">🔴 Alto</td>
+      <td>Tenemos puntos por club; ellos tienen ELO, tabla, win rate, parejas, gráfico y tiempo en pista.</td>
+    </tr>
+    <tr>
+      <td>Insignias y rachas</td>
+      <td class="medium">🟠 Medio-alto</td>
+      <td>Enganche emocional clave en ligas recurrentes. No tenemos nada equivalente.</td>
+    </tr>
+    <tr>
+      <td>Simulador ELO pre-partido</td>
+      <td class="medium">🟠 Medio</td>
+      <td>"¿Cuánto subo si gano 2-0?" — aumenta stakes antes de jugar.</td>
+    </tr>
+    <tr>
+      <td>Gráfico evolución ELO</td>
+      <td class="medium">🟠 Medio</td>
+      <td>Tenemos migración de historial en API pero sin UI visible.</td>
+    </tr>
+    <tr>
+      <td>Ranking de parejas</td>
+      <td class="low">🟡 Medio</td>
+      <td>Útil en ligas fijas; no lo exponemos.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>3.2 Diferenciadores PRO de Padel Rank</h3>
+<table>
+  <thead><tr><th>Feature PRO</th><th>Padel Rank</th><th>x4 match</th></tr></thead>
+  <tbody>
+    <tr><td>Apple Watch / Wear OS</td><td class="ok">✅</td><td class="no">❌</td></tr>
+    <tr><td>Comandos de voz en pista</td><td class="ok">✅</td><td class="no">❌</td></tr>
+    <tr><td>Análisis profundo (MVP, momentum, presión)</td><td class="ok">✅</td><td class="no">❌</td></tr>
+    <tr><td>Carta de jugador (OVR + atributos)</td><td class="ok">✅</td><td class="partial">SkillScore básico</td></tr>
+    <tr><td>Modo espectador multi-dispositivo</td><td class="ok">✅</td><td class="no">❌</td></tr>
+    <tr><td>Sondeos de disponibilidad ilimitados</td><td class="ok">✅</td><td class="partial">Disponibilidad sin sondeos grupales</td></tr>
+  </tbody>
+</table>
+
+<h3>3.3 UX de liga y retención</h3>
+<table>
+  <thead><tr><th>Feature</th><th>Padel Rank</th><th>x4 match</th></tr></thead>
+  <tbody>
+    <tr><td>Crear liga en 2 min</td><td class="ok">✅ Link de invitación</td><td class="partial">Onboarding + club principal</td></tr>
+    <tr><td>Partidos abiertos (plazas libres)</td><td class="ok">✅</td><td class="partial">Matchmaking distinto</td></tr>
+    <tr><td>Reparto coste de pista</td><td class="ok">✅</td><td class="partial">Depósitos en partido</td></tr>
+    <tr><td>Meteo para pistas outdoor</td><td class="ok">✅</td><td class="no">❌</td></tr>
+    <tr><td>El Pagabirras</td><td class="ok">✅</td><td class="no">❌</td></tr>
+    <tr><td>Push 24h / 2h antes</td><td class="ok">✅</td><td class="partial">Notificaciones básicas</td></tr>
+    <tr><td>Login social (Apple/Google)</td><td class="ok">✅</td><td class="no">❌ Email/password</td></tr>
+    <tr><td>Multi-idioma</td><td class="ok">6 idiomas</td><td class="partial">Español</td></tr>
+    <tr><td>Sin anuncios</td><td class="ok">✅</td><td class="ok">✅</td></tr>
+  </tbody>
+</table>
+
+<h2>4. Matriz comparativa resumida</h2>
+<pre class="matrix">                    Padel Rank     x4 match
+──────────────────────────────────────────
+ELO en tiempo real    ████           ██
+Marcador en vivo      ████           ░
+6 rankings / liga     ████           ██
+Gamificación          ████           ░
+Análisis pro          ████           ░
+Reservas / club       ░              ████
+Matchmaking           ██             ████
+Torneos / circuitos   ░              ████
+Social / chat         ░              ████
+Ecosistema club       ░              ████</pre>
+
+<div class="section-break"></div>
+
+<h2>5. Recomendaciones priorizadas</h2>
+
+<div class="phase">
+  <h3>Fase 1 — Paridad en ranking y liga (4–6 semanas)</h3>
+  <ol>
+    <li><strong>Gráfico de evolución ELO</strong> en perfil (usar historial de rating existente).</li>
+    <li><strong>Insignias y rachas</strong>: primer partido, racha de victorias, comeback.</li>
+    <li><strong>Ranking de parejas</strong> y win rate por jugador en el club.</li>
+    <li><strong>Simulador ELO</strong> antes de confirmar un partido competitivo.</li>
+    <li><strong>Partidos con plazas abiertas</strong> mejorados (push al completar, como su flujo).</li>
+  </ol>
+</div>
+
+<div class="phase">
+  <h3>Fase 2 — Diferenciación (donde ganamos de verdad)</h3>
+  <ol>
+    <li><strong>ELO integrado al matchmaking</strong>: emparejar por rating real, no solo categoría.</li>
+    <li><strong>Flujo unificado</strong>: reserva de pista → partido → marcador → ELO → ranking club.</li>
+    <li><strong>Torneos con ELO automático</strong> (ya tenemos torneos; falta conectar el rating).</li>
+    <li><strong>Leaderboard en pantalla</strong> para clubs (URL pública en tiempo real).</li>
+    <li><strong>Login Apple/Google</strong> para reducir fricción de alta.</li>
+  </ol>
+</div>
+
+<div class="phase">
+  <h3>Fase 3 — Respuesta al stack PRO (opcional / premium)</h3>
+  <ol>
+    <li><strong>Marcador en vivo</strong> en móvil (sin reloj al principio).</li>
+    <li><strong>Stats avanzadas</strong>: MVP, sets apretados, rendimiento por franja horaria.</li>
+    <li><strong>Carta de jugador x4 match</strong> compartible (OVR derivado del ELO + atributos).</li>
+    <li><strong>Sondeos de disponibilidad</strong> que auto-crean partido al llegar a 4 confirmaciones.</li>
+    <li><strong>Meteo</strong> al crear partido en sedes outdoor.</li>
+  </ol>
+</div>
+
+<h2>6. Conclusión estratégica</h2>
+<p>
+  <strong>Padel Rank</strong> (<a href="https://padelrank.pro">padelrank.pro</a>) compite en un nicho distinto al de
+  padelrank.app: no busca ser el ranking mundial, sino ser <strong>la app de tu liga amateur</strong> con el mejor
+  ELO, marcador y gamificación. Su ventaja es el <strong>producto de partido en vivo</strong> (reloj, voz, análisis)
+  y los <strong>6 rankings</strong> que responden preguntas distintas sobre la liga.
+</p>
+<p>
+  <strong>x4 match</strong> ya tiene motor ELO sólido y ecosistema mucho más amplio (clubs, reservas, torneos, social).
+  El gap no es el algoritmo — es la <strong>experiencia de liga</strong>: marcador, stats visuales, rachas, simulador
+  y dimensiones de ranking que hacen adictivo volver cada semana.
+</p>
+<p>
+  Para superarlos no hace falta copiar el reloj el día 1. Con <strong>ELO visible + evolución + gamificación +
+  flujo reserva→partido→ranking</strong> ya somos superiores como plataforma completa. El reloj y la voz son el
+  siguiente nivel si queremos competir en su tier PRO.
+</p>
+
+<div class="footer">
+  x4 match · Análisis competitivo Padel Rank (padelrank.pro) · Julio 2026
+</div>
+
+</body>
+</html>

@@ -1,67 +1,21 @@
 import { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  ScrollView,
-  Alert,
-  ActivityIndicator,
-} from 'react-native';
-import { useRouter, Stack } from 'expo-router';
+import { View, Text, TouchableOpacity, ScrollView, Alert, ActivityIndicator } from 'react-native';
+import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { api } from '@/lib/api';
+import { ui } from '@/theme/tokens';
+import { Screen, StackHeader, AppCard, PrimaryButton, OptionChips } from '@/components/padely';
 
 const HAND_OPTIONS = ['Derecha', 'Izquierda'] as const;
-const POSITION_OPTIONS = ['Lado derecho', 'Lado izquierdo'] as const;
+const POSITION_OPTIONS = ['Drive', 'Revés', 'Ambos'] as const;
 const MATCH_TYPE_OPTIONS = ['Competitivo', 'Amistoso'] as const;
 const PLAY_TIME_OPTIONS = ['Mañana', 'Tarde', 'Noche'] as const;
-
-function OptionSelector({
-  label,
-  options,
-  selected,
-  onSelect,
-}: {
-  label: string;
-  options: readonly string[];
-  selected?: string;
-  onSelect: (value: string) => void;
-}) {
-  return (
-    <View className="mb-6">
-      <Text className="text-sm font-semibold text-gray-700 mb-3">{label}</Text>
-      <View className="flex-row flex-wrap gap-2">
-        {options.map((option) => (
-          <TouchableOpacity
-            key={option}
-            onPress={() => onSelect(option)}
-            className={`px-5 py-2.5 rounded-full border ${
-              selected === option
-                ? 'bg-gray-900 border-gray-900'
-                : 'bg-white border-gray-300'
-            }`}
-          >
-            <Text
-              className={`text-sm font-medium ${
-                selected === option ? 'text-white' : 'text-gray-700'
-              }`}
-            >
-              {option}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-    </View>
-  );
-}
 
 export default function EditPreferencesScreen() {
   const router = useRouter();
   const { updateUser } = useAuth();
-
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-
   const [hand, setHand] = useState<string | undefined>();
   const [position, setPosition] = useState<string | undefined>();
   const [matchType, setMatchType] = useState<string | undefined>();
@@ -95,7 +49,7 @@ export default function EditPreferencesScreen() {
         matchType: matchType,
         preferredPlayTime: playTime,
       });
-      updateUser({
+      await updateUser({
         preferredHand: response.data.preferredHand,
         courtPosition: response.data.courtPosition,
         matchType: response.data.matchType,
@@ -103,70 +57,59 @@ export default function EditPreferencesScreen() {
       });
       Alert.alert('Listo', 'Preferencias actualizadas correctamente');
       router.back();
-    } catch (error) {
-      console.error('Error saving preferences:', error);
-      Alert.alert('Error', 'No se pudieron actualizar las preferencias');
+    } catch (error: any) {
+      const message = error?.response?.data?.message;
+      Alert.alert(
+        'Error',
+        Array.isArray(message)
+          ? message.join('\n')
+          : typeof message === 'string'
+            ? message
+            : 'No se pudieron actualizar las preferencias',
+      );
     } finally {
       setSaving(false);
     }
   };
 
+  const saveButton = (
+    <TouchableOpacity onPress={handleSave} disabled={saving || loading} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+      {saving ? (
+        <ActivityIndicator size="small" color={ui.colors.primary} />
+      ) : (
+        <Text style={{ color: ui.colors.primary, fontWeight: '700', fontSize: 15 }}>Guardar</Text>
+      )}
+    </TouchableOpacity>
+  );
+
   if (loading) {
     return (
-      <View className="flex-1 bg-white items-center justify-center">
-        <ActivityIndicator size="large" color="#3B5BDB" />
-      </View>
+      <Screen>
+        <StackHeader title="Preferencias" />
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+          <ActivityIndicator size="large" color={ui.colors.primary} />
+        </View>
+      </Screen>
     );
   }
 
   return (
-    <View className="flex-1 bg-white">
-      <Stack.Screen
-        options={{
-          headerRight: () => (
-            <TouchableOpacity onPress={handleSave} disabled={saving} style={{ marginRight: 4 }}>
-              {saving ? (
-                <ActivityIndicator size="small" color="#ffffff" />
-              ) : (
-                <Text className="text-white text-base font-semibold">
-                  Guardar
-                </Text>
-              )}
-            </TouchableOpacity>
-          ),
-        }}
-      />
+    <Screen>
+      <StackHeader title="Preferencias de juego" rightAction={saveButton} />
+      <ScrollView contentContainerStyle={{ padding: ui.spacing.lg, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+        <Text style={{ fontSize: 14, color: ui.colors.textMuted, marginBottom: ui.spacing.lg }}>
+          Contanos cómo te gusta jugar para mejorar el matchmaking
+        </Text>
 
-      <ScrollView className="flex-1 px-5 pt-6" showsVerticalScrollIndicator={false}>
-        <OptionSelector
-          label="Mejor mano"
-          options={HAND_OPTIONS}
-          selected={hand}
-          onSelect={setHand}
-        />
+        <AppCard>
+          <OptionChips label="Mejor mano" options={HAND_OPTIONS} selected={hand} onSelect={setHand} />
+          <OptionChips label="Posición en pista" options={POSITION_OPTIONS} selected={position} onSelect={setPosition} />
+          <OptionChips label="Tipo de partido" options={MATCH_TYPE_OPTIONS} selected={matchType} onSelect={setMatchType} />
+          <OptionChips label="Horario preferido" options={PLAY_TIME_OPTIONS} selected={playTime} onSelect={setPlayTime} />
+        </AppCard>
 
-        <OptionSelector
-          label="Lado de la pista"
-          options={POSITION_OPTIONS}
-          selected={position}
-          onSelect={setPosition}
-        />
-
-        <OptionSelector
-          label="Tipo de partido"
-          options={MATCH_TYPE_OPTIONS}
-          selected={matchType}
-          onSelect={setMatchType}
-        />
-
-        <OptionSelector
-          label="Horario de juego preferido"
-          options={PLAY_TIME_OPTIONS}
-          selected={playTime}
-          onSelect={setPlayTime}
-        />
+        <PrimaryButton label="Guardar preferencias" onPress={handleSave} loading={saving} fullWidth size="lg" />
       </ScrollView>
-    </View>
+    </Screen>
   );
 }
-

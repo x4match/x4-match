@@ -1,0 +1,33 @@
+# Dependencias y compilado
+node_modules/
+dist/
+build/
+*.tsbuildinfo
+
+# Entorno (no subir secretos; sí el código y prisma/schema)
+.env
+.env.*
+!.env.example
+
+# Tests y cobertura
+coverage/
+.nyc_output/
+
+# Logs y depuración
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Nest / herramientas
+.eslintcache
+
+# Repositorio git anidado por error (no versionar)
+.git/
+
+# Prisma local (SQLite si se usa)
+*.db
+*.db-journal
+
+.env

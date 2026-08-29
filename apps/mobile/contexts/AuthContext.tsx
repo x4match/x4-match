@@ -1,18 +1,33 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import * as SecureStore from 'expo-secure-store';
 import { api } from '@/lib/api';
+import { queryClient } from '@/lib/query-client';
+import { resolveSkillScore } from '@/lib/skill';
 
 interface User {
   id: string;
   email: string;
   name: string;
+  role?: 'PLAYER' | 'CLUB_ADMIN' | 'ORGANIZER' | 'SUPER_ADMIN';
   photo?: string;
+  nickname?: string;
   phone?: string;
   gender?: string;
   birthDate?: string;
   description?: string;
   location?: string;
-  rating: number;
+  dni?: string;
+  fejubaId?: string;
+  fejubaCategory?: string;
+  fejubaFound?: boolean;
+  rating?: number;
+  skillScore?: number;
+  levelCategory?: string;
+  declaredCategory?: string;
+  categoryStatus?: 'provisional' | 'confirmed';
+  placementMatchesPlayed?: number;
+  placementMatchesRequired?: number;
+  mainClubId?: string;
   weeklyPoints?: number;
   monthlyPoints?: number;
   seasonPoints?: number;
@@ -21,6 +36,7 @@ interface User {
   courtPosition?: string;
   matchType?: string;
   preferredPlayTime?: string;
+  availabilityWindows?: string[];
 }
 
 interface AuthContextType {
@@ -43,6 +59,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loadAuth();
   }, []);
 
+  const normalizeUser = (rawUser: User): User => ({
+    ...rawUser,
+    skillScore: resolveSkillScore(rawUser.skillScore, rawUser.rating),
+  });
+
   const loadAuth = async () => {
     try {
       const storedToken = await SecureStore.getItemAsync('auth_token');
@@ -50,7 +71,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (storedToken && storedUser) {
         setToken(storedToken);
-        setUser(JSON.parse(storedUser));
+        setUser(normalizeUser(JSON.parse(storedUser)));
         api.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
       }
     } catch (error) {
@@ -62,10 +83,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (newToken: string, newUser: User) => {
     try {
+      const normalizedUser = normalizeUser(newUser);
       await SecureStore.setItemAsync('auth_token', newToken);
-      await SecureStore.setItemAsync('auth_user', JSON.stringify(newUser));
+      await SecureStore.setItemAsync('auth_user', JSON.stringify(normalizedUser));
+      // Evita mostrar clubs/canchas cacheados de otra sesión
+      queryClient.clear();
       setToken(newToken);
-      setUser(newUser);
+      setUser(normalizedUser);
       api.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
     } catch (error) {
       console.error('Error saving auth:', error);
@@ -79,6 +103,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setToken(null);
       setUser(null);
       delete api.defaults.headers.common['Authorization'];
+      queryClient.clear();
     } catch (error) {
       console.error('Error logging out:', error);
     }
@@ -86,7 +111,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const updateUser = async (updatedFields: Partial<User>) => {
     if (user) {
-      const updatedUser = { ...user, ...updatedFields };
+      const updatedUser = normalizeUser({ ...user, ...updatedFields });
       setUser(updatedUser);
       await SecureStore.setItemAsync('auth_user', JSON.stringify(updatedUser));
     }

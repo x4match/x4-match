@@ -1,180 +1,436 @@
-import { View, Text, TouchableOpacity, ScrollView, RefreshControl } from 'react-native';
+import { useState, useCallback, useMemo } from 'react';
+import { ScrollView, Text, View, RefreshControl } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '@/lib/api';
+import { useAuth } from '@/contexts/AuthContext';
+import { isClub, isPlayer } from '@/lib/roles';
+import { mapMatch, safeMapCircuit, mapTournament } from '@/lib/mappers';
+import type { Match, Circuit, Tournament } from '@/lib/types';
+import { formatShortDate, formatTime, startOfDay } from '@/lib/format';
+import { playerFitsTournamentCategory } from '@/lib/tournament/types';
+import { ui } from '@/theme/tokens';
+import { tabScreenPadding } from '@/lib/layout';
+import {
+  Screen,
+  AppHeader,
+  AppCard,
+  StatusPill,
+  PrimaryButton,
+  EmptyState,
+  Avatar,
+  SegmentedControl,
+  MonthlyCalendar,
+} from '@/components/padely';
 
-function getStatusConfig(status: string) {
-  switch (status) {
-    case 'CONFIRMED':
-      return { label: 'Confirmado', bg: 'bg-green-50', text: 'text-green-600', icon: 'checkmark-circle' as const, iconColor: '#16a34a' };
-    case 'COMPLETED':
-      return { label: 'Finalizado', bg: 'bg-blue-50', text: 'text-blue-600', icon: 'flag' as const, iconColor: '#2563eb' };
-    case 'CANCELED':
-      return { label: 'Cancelado', bg: 'bg-red-50', text: 'text-red-500', icon: 'close-circle' as const, iconColor: '#ef4444' };
-    case 'PENDING':
-      return { label: 'Pendiente', bg: 'bg-amber-50', text: 'text-amber-600', icon: 'time' as const, iconColor: '#d97706' };
-    default:
-      return { label: status, bg: 'bg-gray-100', text: 'text-gray-500', icon: 'ellipse' as const, iconColor: '#6b7280' };
-  }
+type MainTab = 'matches' | 'tournaments';
+type MatchesTab = 'upcoming' | 'history';
+
+type CompetitionItem =
+  | { kind: 'tournament'; id: string; data: Tournament; dayKey: string | null }
+  | { kind: 'circuit'; id: string; data: Circuit; dayKey: string | null };
+
+function toDayKey(date: string | Date): string | null {
+  const d = typeof date === 'string' ? new Date(date) : date;
+  if (Number.isNaN(d.getTime())) return null;
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function tournamentStart(t: Tournament): string | undefined {
+  return t.startDate || t.start_date;
+}
+
+function circuitDay(c: Circuit): string | undefined {
+  return c.nextStageDate || c.startDate;
 }
 
 export default function MatchesScreen() {
   const router = useRouter();
+  const { user } = useAuth();
+  const [mainTab, setMainTab] = useState<MainTab>('matches');
+  const [matchesTab, setMatchesTab] = useState<MatchesTab>('upcoming');
+  const [selectedCalendarDate, setSelectedCalendarDate] = useState<Date | null>(null);
+  const isClubAccount = isClub(user?.role);
+  const isStaffAccount = isClubAccount;
 
-  const { data: matches, isLoading, refetch } = useQuery({
+  const { data: matches, isLoading: loadingMatches, refetch: refetchMatches } = useQuery({
     queryKey: ['my-matches'],
     queryFn: async () => {
       const res = await api.get('/matches/me');
       return res.data;
     },
+    enabled: mainTab === 'matches' && isPlayer(user?.role),
   });
 
-  const upcoming = matches?.filter((m: any) => m.status === 'PENDING' || m.status === 'CONFIRMED') || [];
-  const past = matches?.filter((m: any) => m.status === 'COMPLETED' || m.status === 'CANCELED') || [];
+  const { data: tournaments, isLoading: loadingTournaments, refetch: refetchTournaments } = useQuery({
+    queryKey: ['tournaments-tab'],
+    queryFn: async () => {
+      const res = await api.get('/tournaments');
+      return res.data;
+    },
+    enabled: mainTab === 'tournaments',
+  });
 
-  return (
-    <ScrollView
-      className="flex-1 rounded-t-3xl bg-white"
-      refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refetch} />}
-    >
-      {/* ═══ Header ═══ */}
-      <View className="px-5 pt-6 pb-4">
-        <Text className="text-lg font-bold text-gray-900 mb-1">Mis Partidos</Text>
-        <Text className="text-xs text-gray-500">
-          {matches?.length ?? 0} en total
-        </Text>
-      </View>
+  const { data: circuits, isLoading: loadingCircuits, refetch: refetchCircuits } = useQuery({
+    queryKey: ['circuits-tab'],
+    queryFn: async () => {
+      const res = await api.get('/circuits');
+      return res.data;
+    },
+    enabled: mainTab === 'tournaments',
+  });
 
-      <View className="px-5 pb-10">
-        {isLoading ? (
-          <View className="items-center py-12">
-            <Text className="text-sm text-gray-400">Cargando...</Text>
-          </View>
-        ) : matches?.length === 0 ? (
-          <View className="items-center py-16">
-            <View className="w-14 h-14 rounded-full bg-gray-100 items-center justify-center mb-4">
-              <Ionicons name="tennisball-outline" size={24} color="#9ca3af" />
-            </View>
-            <Text className="text-sm font-semibold text-gray-900 mb-1">
-              Sin partidos aún
-            </Text>
-            <Text className="text-xs text-gray-500 text-center mb-4">
-              Buscá un partido y empezá a jugar
-            </Text>
-            <TouchableOpacity
-              className="bg-gray-900 rounded-full px-6 py-3"
-              onPress={() => router.push('/matchmaking' as any)}
-            >
-              <Text className="text-white font-bold text-xs">Buscar partido</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <>
-            {/* ═══ Próximos ═══ */}
-            {upcoming.length > 0 && (
-              <View className="mb-6">
-                <View className="flex-row items-center mb-3">
-                  <Ionicons name="calendar-outline" size={14} color="#374151" />
-                  <Text className="text-xs font-semibold text-gray-700 ml-1.5 uppercase tracking-wide">
-                    Próximos
-                  </Text>
-                  <View className="bg-gray-900 w-5 h-5 rounded-full items-center justify-center ml-2">
-                    <Text className="text-white text-[9px] font-bold">{upcoming.length}</Text>
-                  </View>
-                </View>
+  const isLoading = mainTab === 'matches' ? loadingMatches : loadingTournaments || loadingCircuits;
 
-                {upcoming.map((match: any) => (
-                  <MatchCard key={match.id} match={match} router={router} />
-                ))}
-              </View>
-            )}
+  const onRefresh = useCallback(() => {
+    if (mainTab === 'matches') {
+      refetchMatches();
+      return;
+    }
+    refetchTournaments();
+    refetchCircuits();
+  }, [mainTab, refetchMatches, refetchTournaments, refetchCircuits]);
 
-            {/* ═══ Historial ═══ */}
-            {past.length > 0 && (
-              <View>
-                <View className="flex-row items-center mb-3">
-                  <Ionicons name="archive-outline" size={14} color="#374151" />
-                  <Text className="text-xs font-semibold text-gray-700 ml-1.5 uppercase tracking-wide">
-                    Historial
-                  </Text>
-                </View>
+  const all: Match[] = (matches || []).map(mapMatch);
+  const upcoming = all.filter((m) => ['OPEN', 'FULL', 'CONFIRMED', 'IN_PROGRESS'].includes(m.status));
+  const history = all.filter((m) => ['FINISHED', 'CANCELLED', 'DISPUTED'].includes(m.status));
+  const matchList = matchesTab === 'upcoming' ? upcoming : history;
 
-                {past.map((match: any) => (
-                  <MatchCard key={match.id} match={match} router={router} />
-                ))}
-              </View>
-            )}
-          </>
-        )}
-      </View>
-    </ScrollView>
+  const playerCategory = user?.levelCategory ?? user?.declaredCategory;
+
+  const tournamentList: Tournament[] = useMemo(() => {
+    const mapped = (tournaments || []).map(mapTournament);
+    if (!isPlayer(user?.role)) return mapped;
+    return mapped.filter((t) => playerFitsTournamentCategory(playerCategory, t.category));
+  }, [tournaments, user?.role, playerCategory]);
+
+  const circuitList: Circuit[] = useMemo(
+    () =>
+      (circuits || [])
+        .map(safeMapCircuit)
+        .filter((c): c is Circuit => c != null && Boolean(c.id)),
+    [circuits],
   );
-}
 
-function MatchCard({ match, router }: { match: any; router: any }) {
-  const status = getStatusConfig(match.status);
-  const matchDate = new Date(match.date);
-  const dayName = matchDate.toLocaleDateString('es-AR', { weekday: 'short' });
-  const dayNum = matchDate.getDate();
-  const month = matchDate.toLocaleDateString('es-AR', { month: 'short' });
+  const competitionItems: CompetitionItem[] = useMemo(() => {
+    const items: CompetitionItem[] = [
+      ...tournamentList.map((t) => {
+        const start = tournamentStart(t);
+        return {
+          kind: 'tournament' as const,
+          id: `tournament-${t.id}`,
+          data: t,
+          dayKey: start ? toDayKey(start) : null,
+        };
+      }),
+      ...circuitList.map((c) => {
+        const day = circuitDay(c);
+        return {
+          kind: 'circuit' as const,
+          id: `circuit-${c.id}`,
+          data: c,
+          dayKey: day ? toDayKey(day) : null,
+        };
+      }),
+    ];
+
+    items.sort((a, b) => {
+      if (a.dayKey && b.dayKey) return a.dayKey.localeCompare(b.dayKey);
+      if (a.dayKey) return -1;
+      if (b.dayKey) return 1;
+      return a.data.name.localeCompare(b.data.name);
+    });
+
+    return items;
+  }, [tournamentList, circuitList]);
+
+  const competitionDayKeys = useMemo(
+    () => competitionItems.map((item) => item.dayKey).filter((key): key is string => !!key),
+    [competitionItems],
+  );
+
+  const filteredCompetitions = useMemo(() => {
+    if (!selectedCalendarDate) return competitionItems;
+    const selectedKey = toDayKey(selectedCalendarDate);
+    if (!selectedKey) return competitionItems;
+    return competitionItems.filter((item) => item.dayKey === selectedKey);
+  }, [competitionItems, selectedCalendarDate]);
+
+  const handleCalendarChange = useCallback((date: Date) => {
+    setSelectedCalendarDate((prev) => {
+      if (prev && startOfDay(prev).getTime() === startOfDay(date).getTime()) return null;
+      return date;
+    });
+  }, []);
 
   return (
-    <TouchableOpacity
-      className="bg-gray-50 rounded-xl px-4 py-4 mb-3"
-      onPress={() => router.push(`/match/${match.id}`)}
-      activeOpacity={0.7}
-    >
-      <View className="flex-row items-start">
-        {/* Fecha compacta */}
-        <View className="w-12 h-12 rounded-xl bg-white items-center justify-center mr-3">
-          <Text className="text-[10px] text-gray-400 uppercase">{dayName}</Text>
-          <Text className="text-base font-bold text-gray-900 -mt-0.5">{dayNum}</Text>
-          <Text className="text-[9px] text-gray-400 uppercase -mt-0.5">{month}</Text>
-        </View>
+    <Screen>
+      <AppHeader title="Partidos" />
+      <View style={{ marginHorizontal: ui.spacing.lg, marginBottom: ui.spacing.md }}>
+        <SegmentedControl
+          options={[
+            { value: 'matches', label: 'Partidos' },
+            { value: 'tournaments', label: 'Torneos' },
+          ]}
+          value={mainTab}
+          onChange={setMainTab}
+        />
+      </View>
 
-        {/* Contenido */}
-        <View className="flex-1">
-          <View className="flex-row items-center justify-between mb-1">
-            <View className="flex-row items-center">
-              <Ionicons name="time-outline" size={12} color="#9ca3af" />
-              <Text className="text-sm font-semibold text-gray-900 ml-1">
-                {match.startHour}:00 - {match.endHour}:00
-              </Text>
+      {mainTab === 'matches' ? (
+        <>
+          {isStaffAccount ? (
+            <View style={{ paddingHorizontal: ui.spacing.lg }}>
+              <AppCard>
+                <Text style={{ fontSize: 18, fontWeight: '800', color: ui.colors.textPrimary, marginBottom: 8 }}>
+                  {isClubAccount ? 'Cuenta de club' : 'Cuenta de organizador'}
+                </Text>
+                <Text style={{ fontSize: 13, color: ui.colors.textSecondary, marginBottom: 16 }}>
+                  {isClubAccount
+                    ? 'Publicá horarios libres de canchas desde la pestaña Horarios.'
+                    : 'Gestioná torneos y circuitos desde el panel de organización.'}
+                </Text>
+                <PrimaryButton
+                  label={isClubAccount ? 'Ir a horarios' : 'Ir al panel'}
+                  onPress={() =>
+                    router.push((isClubAccount ? '/(tabs)/court-slots' : '/(tabs)/organizer') as any)
+                  }
+                  variant="dark"
+                  fullWidth
+                />
+              </AppCard>
             </View>
-            <Ionicons name="chevron-forward" size={16} color="#9ca3af" />
-          </View>
+          ) : (
+            <>
+              <View style={{ flexDirection: 'row', gap: 8, marginHorizontal: ui.spacing.lg, marginBottom: 16 }}>
+                {(['upcoming', 'history'] as const).map((key) => (
+                  <View key={key} style={{ flex: 1 }}>
+                    <PrimaryButton
+                      label={key === 'upcoming' ? `Próximos (${upcoming.length})` : `Historial (${history.length})`}
+                      onPress={() => setMatchesTab(key)}
+                      variant={matchesTab === key ? 'primary' : 'ghost'}
+                      fullWidth
+                      size="sm"
+                      style={matchesTab !== key ? { backgroundColor: ui.colors.surface } : undefined}
+                    />
+                  </View>
+                ))}
+              </View>
 
-          {match.club && (
-            <View className="flex-row items-center mb-2">
-              <Ionicons name="location-outline" size={11} color="#9ca3af" />
-              <Text className="text-xs text-gray-500 ml-1" numberOfLines={1}>
-                {match.club.name}
+              <ScrollView
+                contentContainerStyle={tabScreenPadding}
+                refreshControl={
+                  <RefreshControl refreshing={loadingMatches} onRefresh={refetchMatches} tintColor={ui.colors.primary} />
+                }
+              >
+                {matchList.length === 0 ? (
+                  <EmptyState
+                    icon={<Ionicons name="calendar-outline" size={32} color={ui.colors.textMuted} />}
+                    title={matchesTab === 'upcoming' ? 'Sin partidos próximos' : 'Sin historial'}
+                    description={
+                      matchesTab === 'upcoming'
+                        ? 'Unite a un partido abierto o creá uno nuevo'
+                        : 'Acá vas a ver tus partidos jugados'
+                    }
+                    action={
+                      matchesTab === 'upcoming' ? (
+                        <PrimaryButton label="Buscar partido" onPress={() => router.push('/browse-open-matches' as any)} />
+                      ) : undefined
+                    }
+                  />
+                ) : (
+                  matchList.map((match) => (
+                    <AppCard key={match.id} onPress={() => router.push(`/match/${match.id}` as any)}>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ fontWeight: '700', fontSize: 15, color: ui.colors.textPrimary }}>{match.title}</Text>
+                          <Text style={{ fontSize: 13, color: ui.colors.textSecondary }}>{match.club?.name}</Text>
+                        </View>
+                        <StatusPill status={match.status} />
+                      </View>
+                      <Text style={{ fontSize: 12, color: ui.colors.textSecondary, marginBottom: 10 }}>
+                        {formatShortDate(match.date)} · {formatTime(match.date)}
+                        {match.zone ? ` · ${match.zone}` : ''}
+                      </Text>
+                      {match.result?.score ? (
+                        <Text style={{ fontWeight: '700', color: ui.colors.textPrimary }}>Resultado: {match.result.score}</Text>
+                      ) : (
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <View style={{ flexDirection: 'row' }}>
+                            {match.players.map((p, i) => (
+                              <Avatar
+                                key={p.id}
+                                name={p.name}
+                                size="sm"
+                                style={{ marginLeft: i > 0 ? -8 : 0 }}
+                                borderColor={ui.colors.card}
+                              />
+                            ))}
+                          </View>
+                          <Text style={{ fontSize: 12, color: ui.colors.textSecondary }}>
+                            {match.joinedCount}/{match.neededPlayers}
+                          </Text>
+                        </View>
+                      )}
+                    </AppCard>
+                  ))
+                )}
+              </ScrollView>
+
+              {matchesTab === 'upcoming' && upcoming.length > 0 && (
+                <View style={{ position: 'absolute', bottom: 24, right: 20, left: 20 }}>
+                  <PrimaryButton
+                    label="+ Nuevo partido"
+                    onPress={() => router.push('/create-open-match' as any)}
+                    fullWidth
+                    size="lg"
+                  />
+                </View>
+              )}
+            </>
+          )}
+        </>
+      ) : (
+        <ScrollView
+          contentContainerStyle={tabScreenPadding}
+          refreshControl={
+            <RefreshControl refreshing={isLoading} onRefresh={onRefresh} tintColor={ui.colors.primary} />
+          }
+        >
+          <MonthlyCalendar
+            value={selectedCalendarDate}
+            onChange={handleCalendarChange}
+            minDate={null}
+            markedDates={competitionDayKeys}
+          />
+
+          {selectedCalendarDate ? (
+            <Text style={{ fontSize: 13, color: ui.colors.textSecondary, marginBottom: 12 }}>
+              Torneos del {formatShortDate(selectedCalendarDate)}
+              {' · '}
+              <Text
+                style={{ color: ui.colors.primary, fontWeight: '600' }}
+                onPress={() => setSelectedCalendarDate(null)}
+              >
+                Ver todos
               </Text>
-            </View>
+            </Text>
+          ) : (
+            <Text style={{ fontSize: 12, color: ui.colors.textMuted, marginBottom: 12 }}>
+              Los días con punto tienen torneos
+            </Text>
           )}
 
-          <View className="flex-row items-center gap-2">
-            {/* Status badge */}
-            <View className={`flex-row items-center px-2.5 py-1 rounded-full ${status.bg}`}>
-              <Ionicons name={status.icon} size={10} color={status.iconColor} />
-              <Text className={`text-[10px] font-semibold ml-1 ${status.text}`}>
-                {status.label}
-              </Text>
-            </View>
+          {filteredCompetitions.length === 0 && !isLoading ? (
+            <EmptyState
+              icon={<Ionicons name="trophy-outline" size={32} color={ui.colors.textMuted} />}
+              title={selectedCalendarDate ? 'Sin torneos ese día' : 'Sin torneos'}
+              description={
+                selectedCalendarDate
+                  ? 'Probá otro día o mirá el listado completo'
+                  : 'No hay torneos disponibles en este momento'
+              }
+            />
+          ) : (
+            filteredCompetitions.map((item) => {
+              if (item.kind === 'tournament') {
+                const t = item.data;
+                return (
+                  <AppCard key={item.id} onPress={() => router.push(`/tournament/${t.id}` as any)}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                      <View
+                        style={{
+                          width: 48,
+                          height: 48,
+                          borderRadius: 12,
+                          backgroundColor: ui.colors.warningSoft,
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                      >
+                        <Ionicons name="trophy" size={24} color={ui.colors.accent} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <View
+                          style={{
+                            flexDirection: 'row',
+                            justifyContent: 'space-between',
+                            alignItems: 'flex-start',
+                            gap: 8,
+                          }}
+                        >
+                          <Text style={{ fontWeight: '700', color: ui.colors.textPrimary, flex: 1 }}>{t.name}</Text>
+                          <StatusPill status={t.status} />
+                        </View>
+                        <Text style={{ fontSize: 12, color: ui.colors.textSecondary, marginTop: 4 }}>
+                          {[
+                            t.category ? `Cat. ${t.category}` : null,
+                            t.startDate ? formatShortDate(t.startDate) : null,
+                            t.maxTeams ? `${t.maxTeams} equipos máx.` : null,
+                          ]
+                            .filter(Boolean)
+                            .join(' · ')}
+                        </Text>
+                      </View>
+                      <Ionicons name="chevron-forward" size={18} color={ui.colors.textMuted} />
+                    </View>
+                  </AppCard>
+                );
+              }
 
-            {/* Resultado */}
-            {match.result && (
-              <View className="flex-row items-center bg-gray-100 px-2.5 py-1 rounded-full">
-                <Ionicons name="football-outline" size={10} color="#374151" />
-                <Text className="text-[10px] font-bold text-gray-700 ml-1">
-                  {match.result.teamAScore} - {match.result.teamBScore}
-                </Text>
-              </View>
-            )}
-          </View>
-        </View>
-      </View>
-    </TouchableOpacity>
+              const c = item.data;
+              return (
+                <AppCard key={item.id} onPress={() => router.push(`/circuit/${c.id}` as any)}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                    <View
+                      style={{
+                        width: 48,
+                        height: 48,
+                        borderRadius: 12,
+                        backgroundColor: ui.colors.primarySoft,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <Ionicons name="trophy" size={24} color={ui.colors.primary} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <View
+                        style={{
+                          flexDirection: 'row',
+                          justifyContent: 'space-between',
+                          alignItems: 'flex-start',
+                          gap: 8,
+                        }}
+                      >
+                        <Text style={{ fontWeight: '700', color: ui.colors.textPrimary, flex: 1 }}>{c.name}</Text>
+                        <StatusPill status={c.status} />
+                      </View>
+                      <Text style={{ fontSize: 12, color: ui.colors.textSecondary, marginTop: 4 }}>
+                        {[
+                          c.season,
+                          c.venueCount != null && c.venueCount > 0
+                            ? `${c.venueCount} sede${c.venueCount !== 1 ? 's' : ''}`
+                            : null,
+                          c.categoryCount != null && c.categoryCount > 0 ? `${c.categoryCount} cat.` : null,
+                          c.nextStageDate ? `Próx: ${formatShortDate(c.nextStageDate)}` : null,
+                        ]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={18} color={ui.colors.textMuted} />
+                  </View>
+                </AppCard>
+              );
+            })
+          )}
+        </ScrollView>
+      )}
+    </Screen>
   );
 }

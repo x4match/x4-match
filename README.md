@@ -53,9 +53,8 @@ PORT=3000
 
 ```bash
 cd apps/api
-pnpm prisma:generate
-pnpm prisma:migrate
-pnpm prisma:seed
+cd apps/api && pnpm db:migrate
+cd apps/api && pnpm db:seed
 ```
 
 ### 5. Iniciar API
@@ -256,22 +255,15 @@ Abrir `http://localhost:8080` y usar:
 - Contraseña: password
 - Base de datos: playtomic_db
 
-### Comandos Prisma
+### Comandos base de datos
 
 ```bash
 cd apps/api
 
-# Generar cliente
-pnpm prisma:generate
-
-# Crear migración
-pnpm prisma:migrate
-
-# Ejecutar seed
-pnpm prisma:seed
-
-# Abrir Prisma Studio
-pnpm prisma:studio
+pnpm db:migrate          # migraciones SQL (001…005)
+pnpm db:seed             # datos demo
+pnpm db:setup            # migrate + seed
+pnpm db:migrate:create nombre_snake   # nuevo archivo .sql
 ```
 
 ## 🧪 Usuarios de Prueba
@@ -280,8 +272,7 @@ Después de ejecutar el seed, puedes usar:
 
 - `juan@example.com` / `password123`
 - `maria@example.com` / `password123`
-- `carlos@example.com` / `password123`
-- `ana@example.com` / `password123`
+- `admin@x4match.com` / `password123` (organizador)
 
 ## 📦 Scripts Disponibles
 
@@ -297,15 +288,15 @@ Después de ejecutar el seed, puedes usar:
 
 - `pnpm dev` - Iniciar en modo watch
 - `pnpm start` - Iniciar producción
-- `pnpm prisma:migrate` - Ejecutar migraciones
-- `pnpm prisma:seed` - Ejecutar seed
+- `cd apps/api && pnpm db:migrate` - Ejecutar migraciones
+- `cd apps/api && pnpm db:seed` - Ejecutar seed
 
 ## 🏗️ Arquitectura
 
 ### Backend (NestJS)
 
 - **Auth**: JWT con bcrypt
-- **ORM**: Prisma
+- **ORM**: Sequelize + SQL (pg / Umzug)
 - **DB**: PostgreSQL
 - **WebSocket**: Socket.io para chat
 - **Validación**: class-validator

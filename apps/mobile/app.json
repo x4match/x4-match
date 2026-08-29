@@ -1,39 +1,56 @@
 {
   "expo": {
-    "name": "Padel Pro",
+    "name": "x4 match",
     "slug": "padelpro",
+    "platforms": [
+      "ios",
+      "android"
+    ],
     "version": "1.0.0",
     "sdkVersion": "54.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#000000"
     },
     "assetBundlePatterns": [
       "**/*"
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.padelpro.app"
+      "bundleIdentifier": "com.padelpro.app",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "x4 match usa tu ubicación para mostrarte partidos y jugadores cerca tuyo.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "x4 match usa tu ubicación para mostrarte partidos y jugadores cerca tuyo."
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#000000"
       },
-      "package": "com.padelpro.app"
-    },
-    "web": {
-      "favicon": "./assets/favicon.png"
+      "package": "com.padelpro.app",
+      "usesCleartextTraffic": true,
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION"
+      ]
     },
     "scheme": "playtomic",
     "plugins": [
       "expo-router",
       "expo-secure-store",
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      "expo-font",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "x4 match usa tu ubicación para mostrarte partidos y jugadores cerca tuyo."
+        }
+      ]
     ],
     "extra": {
       "router": {},
@@ -41,6 +58,12 @@
         "projectId": "3e49019e-101b-498b-87df-e4c91e98959c"
       }
     },
-    "owner": "fosorio"
+    "owner": "fosorio",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/3e49019e-101b-498b-87df-e4c91e98959c"
+    }
   }
 }

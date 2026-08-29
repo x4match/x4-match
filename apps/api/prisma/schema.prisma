@@ -1,0 +1,11 @@
+// Prisma ya no se usa en este proyecto.
+//
+// Stack de base de datos:
+// - Esquema: migraciones SQL en src/database/migrations/ (Umzug + pg)
+// - ORM parcial: Sequelize (torneos y modelos en src/database/sequelize/models/)
+// - Queries: pg vía DatabaseService en la mayoría de módulos
+//
+// Comandos:
+//   pnpm db:migrate   — aplicar migraciones SQL
+//   pnpm db:seed      — datos de demo
+//   pnpm db:setup     — migrate + seed

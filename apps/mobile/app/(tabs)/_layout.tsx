@@ -1,78 +1,61 @@
 import { Tabs } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import { Colors } from '../_layout';
+import { useAuth } from '@/contexts/AuthContext';
+import { isClub, isPlayer } from '@/lib/roles';
+import { FloatingTabBar } from '@/components/ui';
+import type { TabBarProps } from '@/components/ui/FloatingTabBar';
+import { ui } from '@/theme/tokens';
 
 export default function TabsLayout() {
+  const { user } = useAuth();
+  const isClubAccount = isClub(user?.role);
+  const isPlayerAccount = isPlayer(user?.role);
+
   return (
     <Tabs
+      tabBar={(props) => <FloatingTabBar {...(props as TabBarProps)} />}
       screenOptions={{
-        headerStyle: {
-          backgroundColor: Colors.primary,
-          height: 120,
-        },
-        headerTintColor: Colors.white,
-        headerTitleStyle: {
-          fontWeight: 'bold',
-          fontSize: 18,
-        },
-        sceneStyle: {
-          backgroundColor: Colors.primary,
-        },
-        headerShadowVisible: false,
-        tabBarActiveTintColor: Colors.primary,
-        tabBarInactiveTintColor: Colors.textMuted,
-        tabBarStyle: {
-          backgroundColor: Colors.white,
-          borderTopColor: Colors.cardBorder,
-          borderTopWidth: 1,
-        },
+        headerShown: false,
+        tabBarActiveTintColor: ui.colors.primary,
+        tabBarInactiveTintColor: ui.colors.textMuted,
+        sceneStyle: { backgroundColor: ui.colors.bg },
       }}
     >
+      <Tabs.Screen name="home" options={{ title: 'Inicio', href: isClubAccount ? null : undefined }} />
       <Tabs.Screen
-        name="home"
-        options={{
-          title: 'Inicio',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="home" size={size} color={color} />
-          ),
-        }}
+        name="gerente"
+        options={{ href: isClubAccount ? undefined : null, title: 'Gerente' }}
       />
       <Tabs.Screen
         name="matches"
-        options={{
-          title: 'Partidos',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="tennisball" size={size} color={color} />
-          ),
-        }}
+        options={{ href: isPlayerAccount ? undefined : null, title: 'Partidos' }}
       />
       <Tabs.Screen
-        name="clubs"
-        options={{
-          title: 'Clubs',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="location" size={size} color={color} />
-          ),
-        }}
+        name="search"
+        options={{ href: isPlayerAccount ? undefined : null, title: 'Buscar' }}
       />
       <Tabs.Screen
-        name="rankings"
-        options={{
-          title: 'Rankings',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="trophy" size={size} color={color} />
-          ),
-        }}
+        name="court-slots"
+        options={{ href: isClubAccount ? undefined : null, title: 'Gestión' }}
       />
       <Tabs.Screen
-        name="profile"
-        options={{
-          title: 'Perfil',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="person" size={size} color={color} />
-          ),
-        }}
+        name="shop"
+        options={{ href: isClubAccount ? undefined : null, title: 'Tienda' }}
       />
+      <Tabs.Screen
+        name="club-ranking"
+        options={{ href: isClubAccount ? undefined : null, title: 'Ranking' }}
+      />
+      <Tabs.Screen name="community" options={{ href: null, title: 'Comunidad' }} />
+      <Tabs.Screen
+        name="messages"
+        options={{ href: isPlayerAccount ? undefined : null, title: 'Mensajes' }}
+      />
+      <Tabs.Screen name="clubs" options={{ href: null, title: 'Clubs' }} />
+      <Tabs.Screen name="rankings" options={{ href: null }} />
+      {/* Accesible desde Perfil; no ocupa un tab del shell de jugador */}
+      <Tabs.Screen name="organizer" options={{ href: null, title: 'Gestión' }} />
+      <Tabs.Screen name="history" options={{ href: null, title: 'Historial' }} />
+      <Tabs.Screen name="profile" options={{ title: 'Perfil' }} />
     </Tabs>
   );
 }

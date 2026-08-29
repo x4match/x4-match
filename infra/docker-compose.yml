@@ -9,11 +9,11 @@ services:
       POSTGRES_PASSWORD: password
       POSTGRES_DB: playtomic_db
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U user"]
+      test: ["CMD-SHELL", "pg_isready -U user -d playtomic_db"]
       interval: 10s
       timeout: 5s
       retries: 5

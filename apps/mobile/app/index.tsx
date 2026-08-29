@@ -1,7 +1,10 @@
 import { useEffect } from 'react';
-import { View, Text, Button } from 'react-native';
+import { View, Text, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
+import { isClub } from '@/lib/roles';
+import { ui } from '@/theme/tokens';
+import { Ionicons } from '@expo/vector-icons';
 
 export default function Index() {
   const { user, loading } = useAuth();
@@ -10,7 +13,7 @@ export default function Index() {
   useEffect(() => {
     if (!loading) {
       if (user) {
-        router.replace('/(tabs)/home');
+        router.replace(isClub(user.role) ? '/(tabs)/gerente' : '/(tabs)/home');
       } else {
         router.replace('/(auth)/login');
       }
@@ -18,10 +21,22 @@ export default function Index() {
   }, [user, loading]);
 
   return (
-    <View className="flex-1 items-center justify-center bg-white">
-      <Text className="text-2xl font-bold mb-4">Playtomic Clone</Text>
-      <Text className="text-gray-600">Cargando...</Text>
+    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: ui.colors.bg }}>
+      <View
+        style={{
+          width: 72,
+          height: 72,
+          borderRadius: 22,
+          backgroundColor: ui.colors.primary,
+          alignItems: 'center',
+          justifyContent: 'center',
+          marginBottom: 16,
+        }}
+      >
+        <Ionicons name="tennisball" size={36} color="#fff" />
+      </View>
+      <Text style={[ui.typography.h2, { color: ui.colors.textPrimary, marginBottom: 16 }]}>x4 match</Text>
+      <ActivityIndicator color={ui.colors.primary} />
     </View>
   );
 }
-

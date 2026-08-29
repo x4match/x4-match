@@ -1,26 +1,47 @@
 import { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  ScrollView,
-  Alert,
-  ActivityIndicator,
-} from 'react-native';
-import { Stack } from 'expo-router';
+import { View, Text, TouchableOpacity, ScrollView, Alert, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { api } from '@/lib/api';
+import { ui } from '@/theme/tokens';
+import { Screen, StackHeader, AppCard, PrimaryButton, EmptyState } from '@/components/padely';
 
 const DAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 const DAYS_SHORT = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
-const HOURS = Array.from({ length: 17 }, (_, i) => i + 6); // 6:00 a 22:00
+const HOURS = Array.from({ length: 17 }, (_, i) => i + 6);
 
 interface AvailabilitySlot {
-  id?: string; // undefined si es nuevo y no se guardó aún
+  id?: string;
   dayOfWeek: number;
   startHour: number;
   endHour: number;
+}
+
+function Chip({
+  label,
+  active,
+  onPress,
+}: {
+  label: string;
+  active: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      style={{
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: ui.radius.sm,
+        backgroundColor: active ? ui.colors.primary : ui.colors.card,
+        borderWidth: 1,
+        borderColor: active ? ui.colors.primary : ui.colors.border,
+        marginRight: 8,
+      }}
+    >
+      <Text style={{ fontSize: 12, fontWeight: '600', color: active ? '#fff' : ui.colors.textPrimary }}>{label}</Text>
+    </TouchableOpacity>
+  );
 }
 
 export default function AvailabilityScreen() {
@@ -49,59 +70,45 @@ export default function AvailabilityScreen() {
   }, [currentAvailability]);
 
   const saveMutation = useMutation({
-    mutationFn: async (data: any) => {
+    mutationFn: async (data: { availabilities: AvailabilitySlot[] }) => {
       const res = await api.post('/availability', data);
       return res.data;
     },
-    onSuccess: () => {
-      Alert.alert('Listo', 'Disponibilidad guardada correctamente');
-    },
+    onSuccess: () => Alert.alert('Listo', 'Disponibilidad guardada correctamente'),
     onError: (error: any) => {
-      const message =
-        error?.response?.data?.message || 'No se pudo guardar la disponibilidad';
+      const message = error?.response?.data?.message || 'No se pudo guardar la disponibilidad';
+      Alert.alert('Error', Array.isArray(message) ? message[0] : message);
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (slotId: string) => api.delete(`/availability/slot/${slotId}`),
+    onError: (error: any) => {
+      const message = error?.response?.data?.message || 'No se pudo eliminar el horario';
       Alert.alert('Error', Array.isArray(message) ? message[0] : message);
     },
   });
 
   const addSlot = () => {
-    // Buscar un día que no tenga horarios aún
     const usedDays = new Set(availabilities.map((a) => a.dayOfWeek));
-    let nextDay = 1; // Lunes por defecto
+    let nextDay = 1;
     for (let d = 1; d <= 6; d++) {
       if (!usedDays.has(d)) {
         nextDay = d;
         break;
       }
     }
-    if (usedDays.has(nextDay)) {
-      // Si todos los días de semana están ocupados, probar domingo
-      nextDay = usedDays.has(0) ? 1 : 0;
-    }
-
+    if (usedDays.has(nextDay)) nextDay = usedDays.has(0) ? 1 : 0;
     const newIndex = availabilities.length;
-    setAvailabilities([
-      ...availabilities,
-      { dayOfWeek: nextDay, startHour: 10, endHour: 18 },
-    ]);
+    setAvailabilities([...availabilities, { dayOfWeek: nextDay, startHour: 10, endHour: 18 }]);
     setExpandedSlot(newIndex);
   };
 
-  const updateSlot = (index: number, field: string, value: number) => {
+  const updateSlot = (index: number, field: keyof AvailabilitySlot, value: number) => {
     const updated = [...availabilities];
     updated[index] = { ...updated[index], [field]: value };
     setAvailabilities(updated);
   };
-
-  const deleteMutation = useMutation({
-    mutationFn: async (slotId: string) => {
-      await api.delete(`/availability/slot/${slotId}`);
-    },
-    onError: (error: any) => {
-      const message =
-        error?.response?.data?.message || 'No se pudo eliminar el horario';
-      Alert.alert('Error', Array.isArray(message) ? message[0] : message);
-    },
-  });
 
   const removeSlot = (index: number) => {
     const slot = availabilities[index];
@@ -111,9 +118,7 @@ export default function AvailabilityScreen() {
         text: 'Eliminar',
         style: 'destructive',
         onPress: () => {
-          if (slot.id) {
-            deleteMutation.mutate(slot.id);
-          }
+          if (slot.id) deleteMutation.mutate(slot.id);
           setAvailabilities(availabilities.filter((_, i) => i !== index));
           if (expandedSlot === index) setExpandedSlot(null);
         },
@@ -142,220 +147,148 @@ export default function AvailabilityScreen() {
       Alert.alert('Horarios superpuestos', overlap);
       return;
     }
-
-    const cleanedAvailabilities = availabilities.map(({ dayOfWeek, startHour, endHour }) => ({
-      dayOfWeek,
-      startHour,
-      endHour,
-    }));
-    saveMutation.mutate({ availabilities: cleanedAvailabilities });
+    saveMutation.mutate({
+      availabilities: availabilities.map(({ dayOfWeek, startHour, endHour }) => ({
+        dayOfWeek,
+        startHour,
+        endHour,
+      })),
+    });
   };
 
-  const formatHour = (hour: number) => {
-    return `${hour.toString().padStart(2, '0')}:00`;
-  };
+  const formatHour = (hour: number) => `${hour.toString().padStart(2, '0')}:00`;
+
+  const saveButton = (
+    <TouchableOpacity onPress={handleSave} disabled={saveMutation.isPending} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+      {saveMutation.isPending ? (
+        <ActivityIndicator size="small" color={ui.colors.primary} />
+      ) : (
+        <Text style={{ color: ui.colors.primary, fontWeight: '700', fontSize: 15 }}>Guardar</Text>
+      )}
+    </TouchableOpacity>
+  );
 
   return (
-    <View className="flex-1 bg-white">
-      <Stack.Screen
-        options={{
-          title: 'Disponibilidad',
-          headerRight: () => (
-            <TouchableOpacity
-              onPress={handleSave}
-              disabled={saveMutation.isPending}
-              style={{ marginRight: 4 }}
-            >
-              {saveMutation.isPending ? (
-                <ActivityIndicator size="small" color="#ffffff" />
-              ) : (
-                <Text className="text-white text-base font-semibold">
-                  Guardar
-                </Text>
-              )}
-            </TouchableOpacity>
-          ),
-        }}
-      />
+    <Screen>
+      <StackHeader title="Disponibilidad" rightAction={saveButton} />
+      <ScrollView contentContainerStyle={{ padding: ui.spacing.lg, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+        <Text style={{ fontSize: 14, color: ui.colors.textMuted, marginBottom: ui.spacing.lg }}>
+          Configurá los días y horarios en los que podés jugar
+        </Text>
 
-      <ScrollView className="flex-1 pt-4" showsVerticalScrollIndicator={false}>
-        {/* Descripción */}
-        <View className="px-5 mb-5">
-          <Text className="text-lg font-bold text-gray-900 mb-1">
-            Tus horarios
-          </Text>
-          <Text className="text-sm text-gray-500">
-            Configurá los días y horarios en los que podés jugar
-          </Text>
-        </View>
-
-        {/* Slots de disponibilidad */}
-        <View className="px-5">
-          {availabilities.length === 0 && (
-            <View className="bg-gray-50 rounded-xl px-5 py-8 items-center mb-4">
-              <View className="w-14 h-14 rounded-full bg-blue-50 items-center justify-center mb-3">
-                <Ionicons name="calendar-outline" size={28} color="#3B5BDB" />
-              </View>
-              <Text className="text-base font-semibold text-gray-900 mb-1">
-                Sin horarios configurados
-              </Text>
-              <Text className="text-sm text-gray-500 text-center">
-                Agregá tus horarios disponibles para que te encuentren otros jugadores
-              </Text>
-            </View>
-          )}
-
-          {availabilities.map((slot, index) => {
+        {availabilities.length === 0 ? (
+          <EmptyState
+            icon={<Ionicons name="calendar-outline" size={32} color={ui.colors.textMuted} />}
+            title="Sin horarios configurados"
+            description="Agregá tus horarios para que otros jugadores te encuentren"
+            action={<PrimaryButton label="Agregar horario" onPress={addSlot} />}
+          />
+        ) : (
+          availabilities.map((slot, index) => {
             const isExpanded = expandedSlot === index;
-
             return (
-              <View key={index} className="bg-gray-50 rounded-xl mb-3 overflow-hidden">
-                {/* Header del slot (siempre visible) */}
+              <AppCard key={index} style={{ padding: 0, overflow: 'hidden' }}>
                 <TouchableOpacity
-                  className="px-4 py-3.5 flex-row items-center justify-between"
+                  style={{ flexDirection: 'row', alignItems: 'center', padding: 14 }}
                   onPress={() => setExpandedSlot(isExpanded ? null : index)}
                 >
-                  <View className="flex-row items-center flex-1">
-                    <View className="w-10 h-10 rounded-full bg-blue-50 items-center justify-center mr-3">
-                      <Text className="text-blue-600 font-bold text-xs">
-                        {DAYS_SHORT[slot.dayOfWeek]}
-                      </Text>
-                    </View>
-                    <View>
-                      <Text className="text-sm font-semibold text-gray-900">
-                        {DAYS[slot.dayOfWeek]}
-                      </Text>
-                      <Text className="text-xs text-gray-500 mt-0.5">
-                        {formatHour(slot.startHour)} - {formatHour(slot.endHour)}
-                      </Text>
-                    </View>
+                  <View
+                    style={{
+                      width: 40,
+                      height: 40,
+                      borderRadius: 20,
+                      backgroundColor: 'rgba(20,184,166,0.15)',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      marginRight: 12,
+                    }}
+                  >
+                    <Text style={{ color: ui.colors.primary, fontWeight: '800', fontSize: 11 }}>
+                      {DAYS_SHORT[slot.dayOfWeek]}
+                    </Text>
                   </View>
-                  <View className="flex-row items-center">
-                    <TouchableOpacity
-                      onPress={() => removeSlot(index)}
-                      className="mr-2 p-1"
-                    >
-                      <Ionicons name="trash-outline" size={18} color="#ef4444" />
-                    </TouchableOpacity>
-                    <Ionicons
-                      name={isExpanded ? 'chevron-up' : 'chevron-down'}
-                      size={18}
-                      color="#9ca3af"
-                    />
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontWeight: '700', color: ui.colors.textPrimary }}>{DAYS[slot.dayOfWeek]}</Text>
+                    <Text style={{ fontSize: 12, color: ui.colors.textSecondary, marginTop: 2 }}>
+                      {formatHour(slot.startHour)} – {formatHour(slot.endHour)}
+                    </Text>
                   </View>
+                  <TouchableOpacity onPress={() => removeSlot(index)} style={{ padding: 8, marginRight: 4 }}>
+                    <Ionicons name="trash-outline" size={18} color={ui.colors.danger} />
+                  </TouchableOpacity>
+                  <Ionicons name={isExpanded ? 'chevron-up' : 'chevron-down'} size={18} color={ui.colors.textMuted} />
                 </TouchableOpacity>
 
-                {/* Contenido expandido */}
                 {isExpanded && (
-                  <View className="px-4 pb-4 pt-1">
-                    {/* Selector de día */}
-                    <Text className="text-xs text-gray-500 mb-2">Día</Text>
-                    <ScrollView
-                      horizontal
-                      showsHorizontalScrollIndicator={false}
-                      className="mb-4"
-                    >
-                      <View className="flex-row gap-2">
-                        {DAYS.map((day, dayIndex) => (
-                          <TouchableOpacity
+                  <View style={{ paddingHorizontal: 14, paddingBottom: 14, borderTopWidth: 1, borderTopColor: ui.colors.border }}>
+                    <Text style={{ fontSize: 12, color: ui.colors.textSecondary, marginTop: 12, marginBottom: 8 }}>Día</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 14 }}>
+                      <View style={{ flexDirection: 'row' }}>
+                        {DAYS_SHORT.map((day, dayIndex) => (
+                          <Chip
                             key={day}
-                            className={`px-3.5 py-2 rounded-lg ${slot.dayOfWeek === dayIndex
-                              ? 'bg-blue-600'
-                              : 'bg-white'
-                              }`}
+                            label={day}
+                            active={slot.dayOfWeek === dayIndex}
                             onPress={() => updateSlot(index, 'dayOfWeek', dayIndex)}
-                          >
-                            <Text
-                              className={`text-xs font-medium ${slot.dayOfWeek === dayIndex
-                                ? 'text-white'
-                                : 'text-gray-700'
-                                }`}
-                            >
-                              {DAYS_SHORT[dayIndex]}
-                            </Text>
-                          </TouchableOpacity>
+                          />
                         ))}
                       </View>
                     </ScrollView>
 
-                    {/* Selector de hora inicio */}
-                    <Text className="text-xs text-gray-500 mb-2">Desde</Text>
-                    <ScrollView
-                      horizontal
-                      showsHorizontalScrollIndicator={false}
-                      className="mb-4"
-                    >
-                      <View className="flex-row gap-2">
+                    <Text style={{ fontSize: 12, color: ui.colors.textSecondary, marginBottom: 8 }}>Desde</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 14 }}>
+                      <View style={{ flexDirection: 'row' }}>
                         {HOURS.filter((h) => h < slot.endHour).map((hour) => (
-                          <TouchableOpacity
+                          <Chip
                             key={hour}
-                            className={`px-3 py-2 rounded-lg ${slot.startHour === hour
-                              ? 'bg-blue-600'
-                              : 'bg-white'
-                              }`}
+                            label={formatHour(hour)}
+                            active={slot.startHour === hour}
                             onPress={() => updateSlot(index, 'startHour', hour)}
-                          >
-                            <Text
-                              className={`text-xs font-medium ${slot.startHour === hour
-                                ? 'text-white'
-                                : 'text-gray-700'
-                                }`}
-                            >
-                              {formatHour(hour)}
-                            </Text>
-                          </TouchableOpacity>
+                          />
                         ))}
                       </View>
                     </ScrollView>
 
-                    {/* Selector de hora fin */}
-                    <Text className="text-xs text-gray-500 mb-2">Hasta</Text>
-                    <ScrollView
-                      horizontal
-                      showsHorizontalScrollIndicator={false}
-                    >
-                      <View className="flex-row gap-2">
+                    <Text style={{ fontSize: 12, color: ui.colors.textSecondary, marginBottom: 8 }}>Hasta</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                      <View style={{ flexDirection: 'row' }}>
                         {HOURS.filter((h) => h > slot.startHour).map((hour) => (
-                          <TouchableOpacity
+                          <Chip
                             key={hour}
-                            className={`px-3 py-2 rounded-lg ${slot.endHour === hour
-                              ? 'bg-blue-600'
-                              : 'bg-white'
-                              }`}
+                            label={formatHour(hour)}
+                            active={slot.endHour === hour}
                             onPress={() => updateSlot(index, 'endHour', hour)}
-                          >
-                            <Text
-                              className={`text-xs font-medium ${slot.endHour === hour
-                                ? 'text-white'
-                                : 'text-gray-700'
-                                }`}
-                            >
-                              {formatHour(hour)}
-                            </Text>
-                          </TouchableOpacity>
+                          />
                         ))}
                       </View>
                     </ScrollView>
                   </View>
                 )}
-              </View>
+              </AppCard>
             );
-          })}
+          })
+        )}
 
-          {/* Botón agregar horario */}
+        {availabilities.length > 0 && (
           <TouchableOpacity
-            className="bg-gray-50 rounded-xl px-4 py-3.5 flex-row items-center justify-center mb-8"
             onPress={addSlot}
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'center',
+              paddingVertical: 14,
+              marginTop: 8,
+              borderRadius: ui.radius.md,
+              borderWidth: 1,
+              borderColor: ui.colors.primary,
+              borderStyle: 'dashed',
+            }}
           >
-            <View className="w-8 h-8 rounded-full bg-blue-50 items-center justify-center mr-2.5">
-              <Ionicons name="add" size={20} color="#3B5BDB" />
-            </View>
-            <Text className="text-sm font-semibold text-blue-600">
-              Agregar horario
-            </Text>
+            <Ionicons name="add-circle-outline" size={22} color={ui.colors.primary} style={{ marginRight: 8 }} />
+            <Text style={{ color: ui.colors.primary, fontWeight: '700' }}>Agregar horario</Text>
           </TouchableOpacity>
-        </View>
+        )}
       </ScrollView>
-    </View>
+    </Screen>
   );
 }

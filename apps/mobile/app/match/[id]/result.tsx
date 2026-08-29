@@ -1,83 +1,76 @@
-import { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, Alert } from 'react-native';
+import { Alert, ScrollView, Text, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
+import { mapMatch } from '@/lib/mappers';
+import { ui } from '@/theme/tokens';
+import { Screen, StackHeader, MatchResultComposer } from '@/components/padely';
+import { useAuth } from '@/contexts/AuthContext';
+import type { PlayerMatchRating, SetScore } from '@/lib/types';
 
 export default function SubmitResultScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const [teamAScore, setTeamAScore] = useState('');
-  const [teamBScore, setTeamBScore] = useState('');
+  const { user } = useAuth();
+
+  const { data: matchRaw } = useQuery({
+    queryKey: ['match', id],
+    queryFn: async () => {
+      const res = await api.get(`/matches/${id}`);
+      return res.data;
+    },
+  });
+  const match = matchRaw ? mapMatch(matchRaw) : null;
 
   const submitMutation = useMutation({
-    mutationFn: async (data: { teamAScore: number; teamBScore: number }) => {
-      const res = await api.post(`/matches/${id}/result`, data);
+    mutationFn: async ({ sets, playerRatings }: { sets: SetScore[]; playerRatings: PlayerMatchRating[] }) => {
+      const res = await api.post(`/matches/${id}/result`, {
+        sets,
+        playerRatings: playerRatings.length ? playerRatings : undefined,
+      });
       return res.data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['match', id] });
-      Alert.alert('Éxito', 'Resultado cargado correctamente', [
-        {
-          text: 'OK',
-          onPress: () => router.back(),
-        },
-      ]);
+      queryClient.invalidateQueries({ queryKey: ['my-matches'] });
+      Alert.alert(
+        'Resultado propuesto',
+        'Los demás jugadores tienen 48 horas para confirmar. Si no hay acuerdo, el partido cierra sin puntos y podrás dejar reseñas a tus rivales.',
+        [{ text: 'OK', onPress: () => router.replace(`/match/${id}` as any) }],
+      );
     },
     onError: (error: any) => {
-      Alert.alert('Error', error.response?.data?.message || 'Error al cargar resultado');
+      const msg = error?.response?.data?.message;
+      Alert.alert(
+        'Error',
+        Array.isArray(msg) ? msg.join('\n') : msg || error.message || 'Error al cargar resultado',
+      );
     },
   });
 
-  const handleSubmit = () => {
-    const scoreA = parseInt(teamAScore);
-    const scoreB = parseInt(teamBScore);
-
-    if (isNaN(scoreA) || isNaN(scoreB)) {
-      Alert.alert('Error', 'Ingresa puntajes válidos');
-      return;
-    }
-
-    submitMutation.mutate({ teamAScore: scoreA, teamBScore: scoreB });
-  };
-
   return (
-    <View className="flex-1 bg-gray-50 px-4 py-6">
-      <Text className="text-2xl font-bold mb-6">Cargar Resultado</Text>
-
-      <View className="bg-white rounded-lg p-4 mb-4">
-        <Text className="font-semibold mb-2">Equipo A</Text>
-        <TextInput
-          className="border border-gray-300 rounded-lg px-4 py-3 text-2xl text-center"
-          placeholder="0"
-          value={teamAScore}
-          onChangeText={setTeamAScore}
-          keyboardType="numeric"
-        />
-      </View>
-
-      <View className="bg-white rounded-lg p-4 mb-6">
-        <Text className="font-semibold mb-2">Equipo B</Text>
-        <TextInput
-          className="border border-gray-300 rounded-lg px-4 py-3 text-2xl text-center"
-          placeholder="0"
-          value={teamBScore}
-          onChangeText={setTeamBScore}
-          keyboardType="numeric"
-        />
-      </View>
-
-      <TouchableOpacity
-        className="bg-amber-500 rounded-lg py-3 px-6"
-        onPress={handleSubmit}
-        disabled={submitMutation.isPending}
-      >
-        <Text className="text-white text-center font-semibold text-lg">
-          {submitMutation.isPending ? 'Cargando...' : 'Cargar Resultado'}
-        </Text>
-      </TouchableOpacity>
-    </View>
+    <Screen>
+      <StackHeader title="Cargar resultado" />
+      <ScrollView contentContainerStyle={{ padding: ui.spacing.lg, paddingBottom: 40 }}>
+        {match ? (
+          <MatchResultComposer
+            players={match.players.map((p) => ({ id: p.id, name: p.name, photo: p.photo }))}
+            currentUserId={user?.id}
+            initialSets={match.result?.sets}
+            title={match.result?.score ? 'Actualizar resultado' : 'Completar resultado'}
+            subtitle="Cargá el marcador final y, si querés, dejá reseñas opcionales a los jugadores que elijas."
+            submitLabel={match.result?.score ? 'Guardar cambios' : 'Proponer resultado'}
+            submitVariant="primary"
+            loading={submitMutation.isPending}
+            onSubmit={(payload) => submitMutation.mutate(payload)}
+          />
+        ) : (
+          <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: 40 }}>
+            <Text style={{ color: ui.colors.textMuted }}>Cargando partido...</Text>
+          </View>
+        )}
+      </ScrollView>
+    </Screen>
   );
 }
-

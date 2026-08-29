@@ -1,51 +1,57 @@
-import { useState, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   ScrollView,
-  TextInput,
   Alert,
   ActivityIndicator,
   Platform,
-  Modal,
+  TextInput,
 } from 'react-native';
-import { useRouter, Stack } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
+import { useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
-import * as Location from 'expo-location';
 import { useAuth } from '@/contexts/AuthContext';
 import { api } from '@/lib/api';
+import { requestPlayerCoordinates } from '@/lib/geolocation';
+import { pickAndUploadProfilePhoto, showProfilePhotoOptions } from '@/lib/profile-photo';
+import { ui } from '@/theme/tokens';
+import { Screen, StackHeader, AppCard, InputField, PrimaryButton, Avatar, SectionHeader, ProfilePhotoViewer } from '@/components/padely';
 
 const GENDER_OPTIONS = ['Masculino', 'Femenino', 'Otro'] as const;
 
-function getInitials(name: string): string {
-  return name
-    .split(' ')
-    .map((n) => n[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2);
+function profileErrorMessage(error: unknown): string {
+  const message = (error as { response?: { data?: { message?: string | string[] } } })?.response?.data
+    ?.message;
+  if (Array.isArray(message)) return message.join('\n');
+  if (typeof message === 'string') return message;
+  return 'No se pudo actualizar el perfil';
 }
 
 export default function EditProfileScreen() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { user, updateUser } = useAuth();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [photoUri, setPhotoUri] = useState<string | null>(null);
 
-  // Campos del perfil
   const [name, setName] = useState('');
+  const [nickname, setNickname] = useState(user?.nickname || '');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [gender, setGender] = useState('');
   const [birthDate, setBirthDate] = useState<Date | null>(null);
   const [description, setDescription] = useState('');
   const [location, setLocation] = useState('');
+  const [latitude, setLatitude] = useState<number | null>(null);
+  const [longitude, setLongitude] = useState<number | null>(null);
   const [loadingLocation, setLoadingLocation] = useState(false);
-
-  // Preferencias
+  const [showPhotoViewer, setShowPhotoViewer] = useState(false);
   const [preferences, setPreferences] = useState({
     preferredHand: '',
     courtPosition: '',
@@ -55,23 +61,46 @@ export default function EditProfileScreen() {
 
   const [showGenderPicker, setShowGenderPicker] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
-  const [showLocationModal, setShowLocationModal] = useState(false);
 
-  useEffect(() => {
-    loadProfile();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      loadProfile();
+    }, []),
+  );
+
+  const handlePickPhoto = () => {
+    showProfilePhotoOptions({
+      hasPhoto: !!(photoUri || user?.photo),
+      onView: photoUri || user?.photo ? () => setShowPhotoViewer(true) : undefined,
+      onPick: async (source) => {
+        setUploadingPhoto(true);
+        try {
+          const photoUrl = await pickAndUploadProfilePhoto(source);
+          if (!photoUrl) return;
+          setPhotoUri(photoUrl);
+          await updateUser({ photo: photoUrl });
+          await queryClient.invalidateQueries({ queryKey: ['profile-me'] });
+          Alert.alert('Listo', 'Foto actualizada');
+        } finally {
+          setUploadingPhoto(false);
+        }
+      },
+    });
+  };
 
   const loadProfile = async () => {
     try {
       const response = await api.get('/users/profile');
       const data = response.data;
       setName(data.name || '');
+      setNickname(data.nickname || user?.nickname || '');
       setEmail(data.email || '');
       setPhone(data.phone || '');
       setGender(data.gender || '');
       setBirthDate(data.birthDate ? new Date(data.birthDate) : null);
       setDescription(data.description || '');
       setLocation(data.location || '');
+      setPhotoUri(data.photo || null);
       setPreferences({
         preferredHand: data.preferences?.preferredHand || '',
         courtPosition: data.preferences?.courtPosition || '',
@@ -88,68 +117,28 @@ export default function EditProfileScreen() {
   const formatDateForDisplay = (date: Date) => {
     const day = date.getDate().toString().padStart(2, '0');
     const month = (date.getMonth() + 1).toString().padStart(2, '0');
-    const year = date.getFullYear();
-    return `${day}/${month}/${year}`;
+    return `${day}/${month}/${date.getFullYear()}`;
   };
 
-  const formatDateForAPI = (date: Date): string => {
+  const formatDateForAPI = (date: Date) => {
     const day = date.getDate().toString().padStart(2, '0');
     const month = (date.getMonth() + 1).toString().padStart(2, '0');
-    const year = date.getFullYear();
-    return `${year}-${month}-${day}`;
+    return `${date.getFullYear()}-${month}-${day}`;
   };
 
   const onDateChange = (_event: DateTimePickerEvent, selectedDate?: Date) => {
-    if (Platform.OS === 'android') {
-      setShowDatePicker(false);
-    }
-    if (selectedDate) {
-      setBirthDate(selectedDate);
-    }
+    if (Platform.OS === 'android') setShowDatePicker(false);
+    if (selectedDate) setBirthDate(selectedDate);
   };
 
   const handleRequestLocation = async () => {
-    const { status: existingStatus } = await Location.getForegroundPermissionsAsync();
-    if (existingStatus === 'granted') {
-      await fetchLocation();
-    } else {
-      setShowLocationModal(true);
-    }
-  };
-
-  const handleLocationPermissionAccepted = async () => {
-    setShowLocationModal(false);
-    const { status } = await Location.requestForegroundPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permiso denegado', 'No se pudo acceder a tu ubicación. Podés habilitarlo desde los ajustes del dispositivo.');
-      return;
-    }
-    await fetchLocation();
-  };
-
-  const fetchLocation = async () => {
     setLoadingLocation(true);
     try {
-      const currentLocation = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
-      });
-
-      const [reverseGeocode] = await Location.reverseGeocodeAsync({
-        latitude: currentLocation.coords.latitude,
-        longitude: currentLocation.coords.longitude,
-      });
-
-      if (reverseGeocode) {
-        const parts = [
-          reverseGeocode.city,
-          reverseGeocode.region,
-          reverseGeocode.country,
-        ].filter(Boolean);
-        setLocation(parts.join(', '));
-      }
-    } catch (error) {
-      console.error('Error getting location:', error);
-      Alert.alert('Error', 'No se pudo obtener la ubicación');
+      const coords = await requestPlayerCoordinates({ withLabel: true, showAlerts: true });
+      if (!coords) return;
+      setLatitude(coords.latitude);
+      setLongitude(coords.longitude);
+      if (coords.label) setLocation(coords.label);
     } finally {
       setLoadingLocation(false);
     }
@@ -160,168 +149,166 @@ export default function EditProfileScreen() {
       Alert.alert('Error', 'El nombre es obligatorio');
       return;
     }
-
+    const normalizedNickname = nickname.trim().toLowerCase();
+    if (!normalizedNickname) {
+      Alert.alert('Error', 'Elegí un nombre de usuario');
+      return;
+    }
+    if (!/^[a-z0-9_]{3,20}$/.test(normalizedNickname)) {
+      Alert.alert('Error', 'El usuario debe tener entre 3 y 20 caracteres (letras, números o _)');
+      return;
+    }
     setSaving(true);
     try {
-      const profileData: any = {
+      const profileData: Record<string, unknown> = {
         name: name.trim(),
+        nickname: normalizedNickname,
         phone: phone.trim() || null,
         gender: gender || null,
         description: description.trim() || null,
         location: location.trim() || null,
       };
-
-      if (birthDate) {
-        profileData.birthDate = formatDateForAPI(birthDate);
+      if (birthDate) profileData.birthDate = formatDateForAPI(birthDate);
+      if (latitude != null && longitude != null) {
+        profileData.latitude = latitude;
+        profileData.longitude = longitude;
       }
-
       const response = await api.patch('/users/profile', profileData);
-      updateUser({
+      await updateUser({
         name: response.data.name,
+        nickname: response.data.nickname,
         phone: response.data.phone,
         gender: response.data.gender,
         birthDate: response.data.birthDate,
         description: response.data.description,
         location: response.data.location,
+        photo: response.data.photo,
       });
+      await queryClient.invalidateQueries({ queryKey: ['profile-me'] });
       Alert.alert('Listo', 'Perfil actualizado correctamente');
       router.back();
     } catch (error) {
-      console.error('Error saving profile:', error);
-      Alert.alert('Error', 'No se pudo actualizar el perfil');
+      Alert.alert('Error', profileErrorMessage(error));
     } finally {
       setSaving(false);
     }
   };
 
-  if (loading) {
-    return (
-      <View className="flex-1 bg-white items-center justify-center">
-        <ActivityIndicator size="large" color="#3B5BDB" />
-      </View>
-    );
-  }
-
-  const preferencesSubtitle = [
-    preferences.preferredHand,
-    preferences.courtPosition,
-    preferences.matchType,
-  ]
+  const preferencesSubtitle = [preferences.preferredHand, preferences.courtPosition, preferences.matchType]
     .filter(Boolean)
     .join(', ');
 
-  return (
-    <View className="flex-1 bg-white">
-      <Stack.Screen
-        options={{
-          headerRight: () => (
-            <TouchableOpacity onPress={handleSave} disabled={saving} style={{ marginRight: 4 }}>
-              {saving ? (
-                <ActivityIndicator size="small" color="#ffffff" />
-              ) : (
-                <Text className="text-white text-base font-semibold">
-                  Guardar
-                </Text>
-              )}
-            </TouchableOpacity>
-          ),
-        }}
-      />
+  const saveButton = (
+    <TouchableOpacity onPress={handleSave} disabled={saving || loading} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+      {saving ? (
+        <ActivityIndicator size="small" color={ui.colors.primary} />
+      ) : (
+        <Text style={{ color: ui.colors.primary, fontWeight: '700', fontSize: 15 }}>Guardar</Text>
+      )}
+    </TouchableOpacity>
+  );
 
-      <ScrollView className="flex-1 pt-4" showsVerticalScrollIndicator={false}>
-        {/* Avatar */}
-        <View className="items-center mb-2">
-          <View className="w-20 h-20 rounded-full bg-gray-800 items-center justify-center">
-            <Text className="text-white text-2xl font-bold">
-              {getInitials(name || 'U')}
-            </Text>
-          </View>
-          <TouchableOpacity className="mt-2 mb-4">
-            <Text className="text-blue-500 text-sm font-medium">
-              Cambiar foto de perfil
+  if (loading) {
+    return (
+      <Screen>
+        <StackHeader title="Editar perfil" />
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+          <ActivityIndicator size="large" color={ui.colors.primary} />
+        </View>
+      </Screen>
+    );
+  }
+
+  return (
+    <Screen>
+      <StackHeader title="Editar perfil" rightAction={saveButton} />
+      <ScrollView contentContainerStyle={{ padding: ui.spacing.lg, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+        <View style={{ alignItems: 'center', marginBottom: ui.spacing.lg }}>
+          <TouchableOpacity
+            onPress={handlePickPhoto}
+            disabled={uploadingPhoto}
+            activeOpacity={0.9}
+          >
+            <View style={{ position: 'relative' }}>
+              <Avatar name={name || 'U'} photo={photoUri || user?.photo} size="xl" />
+              {uploadingPhoto && (
+                <View
+                  style={{
+                    position: 'absolute',
+                    inset: 0,
+                    width: 80,
+                    height: 80,
+                    borderRadius: 40,
+                    backgroundColor: 'rgba(0,0,0,0.4)',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <ActivityIndicator color="#fff" />
+                </View>
+              )}
+            </View>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={handlePickPhoto} disabled={uploadingPhoto} style={{ marginTop: 12 }}>
+            <Text style={{ color: ui.colors.primary, fontWeight: '600', fontSize: 14 }}>
+              {uploadingPhoto ? 'Subiendo...' : 'Cambiar foto de perfil'}
             </Text>
           </TouchableOpacity>
+          {photoUri || user?.photo ? (
+            <Text style={{ color: ui.colors.textMuted, fontSize: 11, marginTop: 8 }}>
+              Tocá la foto para verla en grande
+            </Text>
+          ) : null}
         </View>
 
-        {/* ═══ Información personal ═══ */}
-        <View className="px-5">
-          <Text className="text-lg font-bold text-gray-900 mb-4">
-            Información personal
+        <SectionHeader title="Información personal" dark />
+        <AppCard>
+          <InputField label="Nombre y apellidos" value={name} onChangeText={setName} placeholder="Tu nombre completo" />
+          <InputField
+            label="Nombre de usuario"
+            value={nickname}
+            onChangeText={(text) =>
+              setNickname(text.replace(/^@+/, '').toLowerCase().replace(/[^a-z0-9_]/g, ''))
+            }
+            placeholder="ej: franconawel"
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          <Text style={{ fontSize: 12, color: ui.colors.textMuted, marginTop: -4, marginBottom: ui.spacing.md }}>
+            Así te van a encontrar otros jugadores (@{nickname.trim() || 'tuusuario'}).
           </Text>
-
-          {/* Nombre y apellidos */}
-          <View className="bg-gray-50 rounded-xl px-4 pt-2.5 pb-3 mb-3">
-            <Text className="text-xs text-gray-500 mb-1">
-              Nombre y apellidos
-            </Text>
-            <TextInput
-              className="text-base text-gray-900 p-0"
-              value={name}
-              onChangeText={setName}
-              placeholder="Tu nombre completo"
-              placeholderTextColor="#9ca3af"
-              autoCapitalize="words"
-            />
+          <View style={{ marginBottom: ui.spacing.md }}>
+            <Text style={{ fontSize: 14, fontWeight: '600', color: ui.colors.textSecondary, marginBottom: 6 }}>Email</Text>
+            <Text style={{ fontSize: 15, color: ui.colors.textMuted }}>{email}</Text>
           </View>
+          <InputField label="Teléfono" value={phone} onChangeText={setPhone} placeholder="+54 11 ..." keyboardType="phone-pad" />
 
-          {/* Email (solo lectura) */}
-          <View className="bg-gray-100 rounded-xl px-4 pt-2.5 pb-3 mb-3">
-            <Text className="text-xs text-gray-500 mb-1">Email</Text>
-            <Text className="text-base text-gray-500">{email}</Text>
-          </View>
-
-          {/* Teléfono */}
-          <View className="flex-row gap-3 mb-3">
-            <View className="bg-gray-50 rounded-xl px-4 pt-2.5 pb-3 flex-row items-end" style={{ width: 120 }}>
-              <Text className="text-base text-gray-900">AR  +54</Text>
-              <Ionicons name="chevron-down" size={16} color="#6b7280" style={{ marginLeft: 4, marginBottom: 2 }} />
-            </View>
-            <View className="bg-gray-50 rounded-xl px-4 pt-2.5 pb-3 flex-1">
-              <Text className="text-xs text-gray-500 mb-1">Teléfono</Text>
-              <TextInput
-                className="text-base text-gray-900 p-0"
-                value={phone}
-                onChangeText={setPhone}
-                placeholder="Tu teléfono"
-                placeholderTextColor="#9ca3af"
-                keyboardType="phone-pad"
-              />
-            </View>
-          </View>
-
-          {/* Género */}
-          <TouchableOpacity
-            className="bg-gray-50 rounded-xl px-4 pt-2.5 pb-3 mb-3 flex-row items-center justify-between"
-            onPress={() => setShowGenderPicker(!showGenderPicker)}
-          >
-            <View>
-              <Text className="text-xs text-gray-500 mb-1">Género</Text>
-              <Text className={`text-base ${gender ? 'text-gray-900' : 'text-gray-400'}`}>
+          <TouchableOpacity onPress={() => setShowGenderPicker(!showGenderPicker)} style={{ marginBottom: ui.spacing.md }}>
+            <Text style={{ fontSize: 14, fontWeight: '600', color: ui.colors.textSecondary, marginBottom: 6 }}>Género</Text>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Text style={{ fontSize: 15, color: gender ? ui.colors.textPrimary : ui.colors.textMuted }}>
                 {gender || 'Seleccionar'}
               </Text>
+              <Ionicons name="chevron-down" size={20} color={ui.colors.textMuted} />
             </View>
-            <Ionicons name="chevron-down" size={20} color="#6b7280" />
           </TouchableOpacity>
-
-          {/* Opciones de género */}
           {showGenderPicker && (
-            <View className="bg-white rounded-xl border border-gray-200 mb-3 overflow-hidden">
+            <View style={{ marginBottom: ui.spacing.md, borderRadius: ui.radius.md, overflow: 'hidden', borderWidth: 1, borderColor: ui.colors.border }}>
               {GENDER_OPTIONS.map((option) => (
                 <TouchableOpacity
                   key={option}
-                  className={`px-4 py-3 border-b border-gray-100 ${gender === option ? 'bg-blue-50' : ''
-                    }`}
                   onPress={() => {
                     setGender(option);
                     setShowGenderPicker(false);
                   }}
+                  style={{
+                    padding: 14,
+                    backgroundColor: gender === option ? 'rgba(20,184,166,0.1)' : ui.colors.card,
+                    borderBottomWidth: 1,
+                    borderBottomColor: ui.colors.border,
+                  }}
                 >
-                  <Text
-                    className={`text-base ${gender === option
-                      ? 'text-blue-500 font-medium'
-                      : 'text-gray-700'
-                      }`}
-                  >
+                  <Text style={{ color: gender === option ? ui.colors.primary : ui.colors.textPrimary, fontWeight: gender === option ? '700' : '400' }}>
                     {option}
                   </Text>
                 </TouchableOpacity>
@@ -329,24 +316,17 @@ export default function EditProfileScreen() {
             </View>
           )}
 
-          {/* Fecha de nacimiento */}
-          <TouchableOpacity
-            className="bg-gray-50 rounded-xl px-4 pt-2.5 pb-3 mb-3 flex-row items-center justify-between"
-            onPress={() => setShowDatePicker(true)}
-          >
-            <View className="flex-1">
-              <Text className="text-xs text-gray-500 mb-1">
-                Fecha de nacimiento
-              </Text>
-              <Text className={`text-base ${birthDate ? 'text-gray-900' : 'text-gray-400'}`}>
+          <TouchableOpacity onPress={() => setShowDatePicker(true)} style={{ marginBottom: ui.spacing.md }}>
+            <Text style={{ fontSize: 14, fontWeight: '600', color: ui.colors.textSecondary, marginBottom: 6 }}>Fecha de nacimiento</Text>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Text style={{ fontSize: 15, color: birthDate ? ui.colors.textPrimary : ui.colors.textMuted }}>
                 {birthDate ? formatDateForDisplay(birthDate) : 'DD/MM/AAAA'}
               </Text>
+              <Ionicons name="calendar-outline" size={20} color={ui.colors.textMuted} />
             </View>
-            <Ionicons name="calendar-outline" size={20} color="#6b7280" />
           </TouchableOpacity>
-
           {showDatePicker && (
-            <View className="mb-3">
+            <View style={{ marginBottom: ui.spacing.md }}>
               <DateTimePicker
                 value={birthDate || new Date(2000, 0, 1)}
                 mode="date"
@@ -357,166 +337,97 @@ export default function EditProfileScreen() {
                 locale="es"
               />
               {Platform.OS === 'ios' && (
-                <TouchableOpacity
-                  className="bg-blue-500 rounded-lg py-2 mt-2 items-center"
-                  onPress={() => setShowDatePicker(false)}
-                >
-                  <Text className="text-white font-semibold">Confirmar</Text>
-                </TouchableOpacity>
+                <PrimaryButton label="Confirmar fecha" onPress={() => setShowDatePicker(false)} fullWidth size="sm" style={{ marginTop: 8 }} />
               )}
             </View>
           )}
 
-          {/* Descripción */}
-          <View className="bg-gray-50 rounded-xl px-4 pt-2.5 pb-3 mb-1">
-            <Text className="text-xs text-gray-500 mb-1">Descripción</Text>
-            <TextInput
-              className="text-base text-gray-900 p-0"
-              value={description}
-              onChangeText={(text) => {
-                if (text.length <= 160) setDescription(text);
-              }}
-              placeholder="Escribe algo sobre ti..."
-              placeholderTextColor="#9ca3af"
-              multiline
-              numberOfLines={3}
-              style={{ minHeight: 60, textAlignVertical: 'top' }}
-            />
-          </View>
-          <Text className="text-xs text-gray-400 mb-4 px-1">
-            {160 - description.length} caracteres
+          <Text style={{ fontSize: 14, fontWeight: '600', color: ui.colors.textSecondary, marginBottom: 6 }}>Descripción</Text>
+          <TextInput
+            value={description}
+            onChangeText={(text) => text.length <= 160 && setDescription(text)}
+            placeholder="Escribí algo sobre vos..."
+            placeholderTextColor={ui.colors.textMuted}
+            multiline
+            numberOfLines={3}
+            style={{
+              minHeight: 80,
+              textAlignVertical: 'top',
+              backgroundColor: ui.colors.cardMuted,
+              borderRadius: ui.radius.md,
+              padding: 12,
+              fontSize: 15,
+              color: ui.colors.textPrimary,
+              marginBottom: 4,
+            }}
+          />
+          <Text style={{ fontSize: 11, color: ui.colors.textMuted, marginBottom: ui.spacing.md }}>
+            {160 - description.length} caracteres restantes
           </Text>
 
-          {/* ¿Dónde juegas? */}
-          <View className="bg-gray-50 rounded-xl px-4 pt-2.5 pb-3 mb-3">
-            <Text className="text-xs text-gray-500 mb-1">¿Dónde juegas?</Text>
-            <View className="flex-row items-center">
-              <View className="flex-1">
-                <TextInput
-                  className="text-base text-gray-900 p-0"
-                  value={location}
-                  onChangeText={setLocation}
-                  placeholder="Ciudad, zona..."
-                  placeholderTextColor="#9ca3af"
-                />
+          <InputField
+            label="¿Dónde jugás?"
+            value={location}
+            onChangeText={setLocation}
+            placeholder="Ciudad, zona..."
+            rightIcon={
+              loadingLocation ? (
+                <ActivityIndicator size="small" color={ui.colors.primary} />
+              ) : (
+                <TouchableOpacity onPress={handleRequestLocation}>
+                  <Ionicons name="navigate-outline" size={22} color={ui.colors.primary} />
+                </TouchableOpacity>
+              )
+            }
+          />
+          <TouchableOpacity onPress={handleRequestLocation} disabled={loadingLocation} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+            <Ionicons name="locate-outline" size={16} color={ui.colors.primary} />
+            <Text style={{ color: ui.colors.primary, fontSize: 13, marginLeft: 6 }}>Usar mi ubicación actual</Text>
+          </TouchableOpacity>
+        </AppCard>
+
+        <SectionHeader title="Preferencias de jugador" dark />
+        <TouchableOpacity onPress={() => router.push('/edit-preferences' as any)} activeOpacity={0.85}>
+          <AppCard>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(20,184,166,0.12)', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                <Ionicons name="tennisball" size={22} color={ui.colors.primary} />
               </View>
-              <TouchableOpacity
-                onPress={handleRequestLocation}
-                disabled={loadingLocation}
-                className="ml-2"
-              >
-                {loadingLocation ? (
-                  <ActivityIndicator size="small" color="#3B5BDB" />
-                ) : (
-                  <Ionicons name="navigate-outline" size={20} color="#3B5BDB" />
-                )}
-              </TouchableOpacity>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontWeight: '700', color: ui.colors.textPrimary }}>Editar preferencias</Text>
+                <Text style={{ fontSize: 12, color: ui.colors.textSecondary, marginTop: 4 }} numberOfLines={1}>
+                  {preferencesSubtitle || 'Mano, posición, tipo de partido...'}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={ui.colors.textMuted} />
             </View>
-          </View>
-          <TouchableOpacity
-            className="flex-row items-center mb-8 px-1"
-            onPress={handleRequestLocation}
-            disabled={loadingLocation}
-          >
-            <Ionicons name="locate-outline" size={16} color="#3B5BDB" />
-            <Text className="text-blue-500 text-sm ml-1.5">
-              Usar mi ubicación actual
-            </Text>
-          </TouchableOpacity>
-        </View>
+          </AppCard>
+        </TouchableOpacity>
 
-        {/* ═══ Preferencias de jugador ═══ */}
-        <View className="px-5 mb-8">
-          <Text className="text-lg font-bold text-gray-900 mb-4">
-            Preferencias de jugador
-          </Text>
-
-          <TouchableOpacity
-            className="bg-gray-50 rounded-xl px-4 py-4 flex-row items-center"
-            onPress={() => router.push('/edit-preferences' as any)}
-          >
-            <View className="w-10 h-10 rounded-full bg-gray-100 items-center justify-center mr-3">
-              <Ionicons name="tennisball-outline" size={22} color="#6b7280" />
+        <SectionHeader title="Seguridad" dark />
+        <TouchableOpacity onPress={() => router.push('/change-password' as any)} activeOpacity={0.85}>
+          <AppCard>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <View>
+                <Text style={{ fontSize: 12, color: ui.colors.textSecondary }}>Contraseña</Text>
+                <Text style={{ fontSize: 16, color: ui.colors.textPrimary, letterSpacing: 2, marginTop: 4 }}>••••••••••</Text>
+              </View>
+              <Ionicons name="create-outline" size={22} color={ui.colors.textMuted} />
             </View>
-            <View className="flex-1">
-              <Text className="text-base font-semibold text-gray-900">
-                Editar tus preferencias
-              </Text>
-              <Text className="text-sm text-gray-500 mt-0.5" numberOfLines={1}>
-                {preferencesSubtitle || 'Mejor mano, lado de la pista, tipo de pa...'}
-              </Text>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
-          </TouchableOpacity>
-        </View>
+          </AppCard>
+        </TouchableOpacity>
 
-        {/* ═══ Tu contraseña ═══ */}
-        <View className="px-5 mb-10">
-          <Text className="text-lg font-bold text-gray-900 mb-4">
-            Tu contraseña
-          </Text>
-
-          <View className="bg-gray-50 rounded-xl px-4 py-4 flex-row items-center justify-between">
-            <View>
-              <Text className="text-xs text-gray-500 mb-1">Contraseña</Text>
-              <Text className="text-base text-gray-900 tracking-widest">
-                ••••••••••
-              </Text>
-            </View>
-            <TouchableOpacity>
-              <Ionicons name="create-outline" size={20} color="#6b7280" />
-            </TouchableOpacity>
-          </View>
+        <View style={{ marginTop: ui.spacing.lg }}>
+          <PrimaryButton label="Guardar cambios" onPress={handleSave} loading={saving} fullWidth size="lg" />
         </View>
       </ScrollView>
 
-      {/* Modal de permiso de ubicación */}
-      <Modal
-        visible={showLocationModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowLocationModal(false)}
-      >
-        <View
-          className="flex-1 justify-center items-center"
-          style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
-        >
-          <View className="bg-white rounded-2xl mx-6 p-6" style={{ width: '85%' }}>
-            <View className="items-center mb-4">
-              <View className="w-16 h-16 rounded-full bg-blue-50 items-center justify-center mb-3">
-                <Ionicons name="location" size={32} color="#3B5BDB" />
-              </View>
-              <Text className="text-lg font-bold text-gray-900 text-center">
-                Permitir acceso a la ubicación
-              </Text>
-            </View>
-
-            <Text className="text-sm text-gray-600 text-center mb-6 leading-5">
-              Necesitamos acceder a tu ubicación para detectar automáticamente
-              dónde jugás y mostrarte clubes y jugadores cercanos.
-            </Text>
-
-            <TouchableOpacity
-              className="bg-blue-600 rounded-xl py-3.5 mb-3 items-center"
-              onPress={handleLocationPermissionAccepted}
-            >
-              <Text className="text-white font-semibold text-base">
-                Permitir ubicación
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              className="py-3 items-center"
-              onPress={() => setShowLocationModal(false)}
-            >
-              <Text className="text-gray-500 font-medium text-base">
-                Ahora no
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-    </View>
+      <ProfilePhotoViewer
+        visible={showPhotoViewer}
+        photo={photoUri || user?.photo}
+        name={name || user?.name || 'Perfil'}
+        onClose={() => setShowPhotoViewer(false)}
+      />
+    </Screen>
   );
 }
-
