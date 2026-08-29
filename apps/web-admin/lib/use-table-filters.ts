@@ -15,8 +15,8 @@ export function useTableFilters<T extends Record<string, string>>(
     return () => clearTimeout(timer);
   }, [filters, debounceMs]);
 
-  const setFilter = (key: keyof T, value: string) => {
-    setFilters((prev) => ({ ...prev, [key]: value }));
+  const setFilter = (key: string, value: string) => {
+    setFilters((prev) => ({ ...prev, [key]: value } as T));
   };
 
   const resetFilters = () => {
