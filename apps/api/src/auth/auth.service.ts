@@ -17,9 +17,11 @@ import {
 } from '../common/utils';
 import { FejubaService } from '../integrations/fejuba/fejuba.service';
 import { AuthRepository } from './auth.repository';
+import { OAuth2Client } from 'google-auth-library';
 import {
   ChangePasswordDto,
   ForgotPasswordDto,
+  GoogleAuthDto,
   LoginDto,
   RegisterDto,
   ResetPasswordDto,
@@ -134,10 +136,71 @@ export class AuthService {
     return `jug${Date.now().toString(36)}`.slice(0, 20);
   }
 
+  async loginWithGoogle(dto: GoogleAuthDto) {
+    const payload = await this.verifyGoogleIdToken(dto.idToken);
+    const googleId = payload.sub;
+    const email = payload.email?.trim().toLowerCase();
+    const name = payload.name?.trim();
+    const photo = payload.picture?.trim();
+
+    if (!googleId || !email) {
+      throw new UnauthorizedException('No se pudo verificar la cuenta de Google');
+    }
+
+    let user = await this.authRepository.findByGoogleId(googleId);
+    let isNewUser = false;
+
+    if (!user) {
+      const existing = await this.authRepository.findByEmail(email);
+      if (existing) {
+        if (existing.google_id && existing.google_id !== googleId) {
+          throw new ConflictException('Este email ya está vinculado a otra cuenta de Google');
+        }
+        await this.authRepository.linkGoogleAccount(existing.id, googleId);
+        user = await this.authRepository.findById(existing.id);
+      } else {
+        const displayName = name || this.fallbackNameFromEmail(email);
+        user = await this.authRepository.createUser({
+          email,
+          passwordHash: null,
+          name: displayName,
+          role: 'PLAYER',
+          googleId,
+        });
+        const nickname = await this.generateUniqueNickname(email);
+        await this.authRepository.createPlayerForUser(user.id, {
+          nickname,
+          startInPlacement: true,
+        });
+        isNewUser = true;
+      }
+    }
+
+    if (!user) {
+      throw new UnauthorizedException('No se pudo iniciar sesión con Google');
+    }
+
+    if (photo) {
+      await this.authRepository.updatePlayerPhotoIfEmpty(user.id, photo);
+    }
+
+    const fullUser = await this.authRepository.findMe(user.id);
+    const token = this.generateToken(user.id, user.email);
+    return {
+      access_token: token,
+      user: this.serializeAuthUser(fullUser ?? user),
+      isNewUser,
+    };
+  }
+
   async login(dto: LoginDto) {
     const user = await this.authRepository.findByEmail(dto.email);
     if (!user) {
       throw new UnauthorizedException('Credenciales inválidas');
+    }
+
+    if (!user.password_hash) {
+      throw new UnauthorizedException('Esta cuenta usa Google. Iniciá sesión con Google.');
     }
 
     const isPasswordValid = await bcrypt.compare(dto.password, user.password_hash);
@@ -165,6 +228,10 @@ export class AuthService {
     const user = await this.authRepository.findById(userId);
     if (!user) {
       throw new UnauthorizedException('Usuario no encontrado');
+    }
+
+    if (!user.password_hash) {
+      throw new BadRequestException('Esta cuenta usa Google. No podés cambiar la contraseña.');
     }
 
     const isPasswordValid = await bcrypt.compare(dto.currentPassword, user.password_hash);
@@ -232,6 +299,46 @@ export class AuthService {
 
   private hashResetCode(code: string): string {
     return createHash('sha256').update(code).digest('hex');
+  }
+
+  private getGoogleClientIds(): string[] {
+    return [
+      process.env.GOOGLE_CLIENT_ID,
+      process.env.GOOGLE_IOS_CLIENT_ID,
+      process.env.GOOGLE_ANDROID_CLIENT_ID,
+    ].filter((value): value is string => Boolean(value?.trim()));
+  }
+
+  private async verifyGoogleIdToken(idToken: string) {
+    const clientIds = this.getGoogleClientIds();
+    if (clientIds.length === 0) {
+      throw new BadRequestException('Google Sign-In no está configurado en el servidor');
+    }
+
+    const client = new OAuth2Client(clientIds[0]);
+    try {
+      const ticket = await client.verifyIdToken({
+        idToken,
+        audience: clientIds,
+      });
+      const payload = ticket.getPayload();
+      if (!payload) {
+        throw new UnauthorizedException('Token de Google inválido');
+      }
+      if (payload.email_verified === false) {
+        throw new UnauthorizedException('El email de Google no está verificado');
+      }
+      return payload;
+    } catch (error) {
+      if (
+        error instanceof UnauthorizedException ||
+        error instanceof BadRequestException
+      ) {
+        throw error;
+      }
+      this.logger.warn(`Google token verification failed: ${(error as Error).message}`);
+      throw new UnauthorizedException('Token de Google inválido o expirado');
+    }
   }
 
   private generateToken(userId: string, email: string): string {

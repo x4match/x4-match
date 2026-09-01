@@ -6,6 +6,7 @@ import {
   ChangePasswordDto,
   FejubaLookupDto,
   ForgotPasswordDto,
+  GoogleAuthDto,
   LoginDto,
   RegisterDto,
   ResetPasswordDto,
@@ -29,6 +30,12 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   login(@Body() dto: LoginDto) {
     return this.authService.login(dto);
+  }
+
+  @Post('google')
+  @HttpCode(HttpStatus.OK)
+  loginWithGoogle(@Body() dto: GoogleAuthDto) {
+    return this.authService.loginWithGoogle(dto);
   }
 
   @Post('forgot-password')

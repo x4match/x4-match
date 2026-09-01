@@ -14,10 +14,20 @@ export class AuthRepository {
 
   async findByEmail(email: string) {
     const result = await this.db.query(
-      `SELECT id, email, password_hash, name, role
+      `SELECT id, email, password_hash, name, role, google_id
        FROM users
        WHERE lower(email) = lower($1)`,
       [email],
+    );
+    return result.rows[0] ?? null;
+  }
+
+  async findByGoogleId(googleId: string) {
+    const result = await this.db.query(
+      `SELECT id, email, password_hash, name, role, google_id
+       FROM users
+       WHERE google_id = $1`,
+      [googleId],
     );
     return result.rows[0] ?? null;
   }
@@ -70,17 +80,37 @@ export class AuthRepository {
 
   async createUser(input: {
     email: string;
-    passwordHash: string;
+    passwordHash: string | null;
     name: string;
     role: 'PLAYER' | 'CLUB_ADMIN' | 'ORGANIZER';
+    googleId?: string | null;
   }) {
     const result = await this.db.query(
-      `INSERT INTO users (email, password_hash, name, role)
-       VALUES ($1, $2, $3, $4::user_role)
-       RETURNING id, email, name, role`,
-      [input.email, input.passwordHash, input.name, input.role],
+      `INSERT INTO users (email, password_hash, name, role, google_id)
+       VALUES ($1, $2, $3, $4::user_role, $5)
+       RETURNING id, email, name, role, google_id`,
+      [input.email, input.passwordHash, input.name, input.role, input.googleId ?? null],
     );
     return result.rows[0];
+  }
+
+  async linkGoogleAccount(userId: string, googleId: string) {
+    await this.db.query(
+      `UPDATE users
+       SET google_id = $2, updated_at = NOW()
+       WHERE id = $1`,
+      [userId, googleId],
+    );
+  }
+
+  async updatePlayerPhotoIfEmpty(userId: string, photoUrl: string) {
+    await this.db.query(
+      `UPDATE players
+       SET photo_url = $2
+       WHERE user_id = $1
+         AND (photo_url IS NULL OR btrim(photo_url) = '')`,
+      [userId, photoUrl],
+    );
   }
 
   async createPlayerForUser(
