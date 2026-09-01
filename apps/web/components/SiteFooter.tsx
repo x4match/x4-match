@@ -6,6 +6,7 @@ const LEGAL = [
   { href: '/terminos-clubes', label: 'Términos clubes' },
   { href: '/privacidad', label: 'Privacidad' },
   { href: '/cookies', label: 'Cookies' },
+  { href: '/eliminar-cuenta', label: 'Eliminar cuenta' },
 ];
 
 export function SiteFooter() {

@@ -283,4 +283,45 @@ export const cookiesPolicy: LegalDocument = {
   ],
 };
 
-export const LEGAL_PAGES = [termsPlayers, termsClubs, privacyPolicy, cookiesPolicy] as const;
+export const accountDeletion: LegalDocument = {
+  slug: 'eliminar-cuenta',
+  title: 'Eliminación de cuenta — x4 match',
+  updated,
+  summary:
+    'Cómo solicitar la eliminación de tu cuenta y qué datos se borran o conservan en la app x4 match.',
+  sections: [
+    {
+      title: '1. Cómo solicitar la eliminación',
+      paragraphs: [
+        'Podés pedir la eliminación de tu cuenta de x4 match en cualquier momento enviando un email a legal@x4match.com desde la dirección asociada a tu cuenta.',
+        'En el mensaje indicá: (a) que querés eliminar tu cuenta, (b) el email con el que te registraste y (c) tu nombre completo tal como figura en el perfil.',
+        'Por seguridad, podemos pedirte información adicional para verificar que sos el titular de la cuenta antes de procesar la solicitud.',
+        'Procesamos las solicitudes en un plazo de hasta 30 días hábiles y te confirmamos por email cuando la eliminación se haya completado.',
+      ],
+    },
+    {
+      title: '2. Datos que se eliminan',
+      paragraphs: [
+        'Al eliminar tu cuenta, borramos o anonimizamos tu perfil (nombre, email, teléfono, foto, preferencias de juego, ubicación guardada y credenciales de acceso).',
+        'También eliminamos tu lista de amigos, conversaciones privadas, notificaciones y tokens de sesión activos.',
+        'Si tenías una cuenta de club (gerente), se desvincula tu acceso; los datos operativos del club pueden conservarse según el contrato con la sede.',
+      ],
+    },
+    {
+      title: '3. Datos que podemos conservar',
+      paragraphs: [
+        'Podemos conservar de forma anonimizada o agregada información necesaria para estadísticas, rankings históricos o integridad de torneos ya disputados.',
+        'Conservamos registros de facturación, pagos y comunicaciones cuando la ley lo exija (por ejemplo, obligaciones fiscales o reclamos).',
+        'Los backups de seguridad pueden retener datos eliminados por un período limitado hasta su rotación automática.',
+      ],
+    },
+    {
+      title: '4. Alternativa: desactivar sin eliminar',
+      paragraphs: [
+        'Si solo querés dejar de usar la app temporalmente, podés cerrar sesión desde Perfil → Cerrar sesión. Tu cuenta seguirá existiendo hasta que solicites su eliminación.',
+      ],
+    },
+  ],
+};
+
+export const LEGAL_PAGES = [termsPlayers, termsClubs, privacyPolicy, cookiesPolicy, accountDeletion] as const;

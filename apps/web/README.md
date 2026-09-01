@@ -21,6 +21,7 @@ Abre [http://localhost:3000](http://localhost:3000).
 | `/terminos-clubes` | Términos y condiciones — clubes (SaaS) |
 | `/privacidad` | Política de privacidad |
 | `/cookies` | Política de cookies |
+| `/eliminar-cuenta` | Solicitud de eliminación de cuenta (Google Play) |
 
 ## Variables
 
