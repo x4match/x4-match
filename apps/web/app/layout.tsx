@@ -1,9 +1,30 @@
 import type { Metadata } from 'next';
+import { Anton, DM_Sans, IBM_Plex_Mono } from 'next/font/google';
+import { AppHeader } from '@/components/AppHeader';
 import { CookieBanner } from '@/components/CookieBanner';
 import { SiteFooter } from '@/components/SiteFooter';
-import { SiteHeader } from '@/components/SiteHeader';
 import { SITE } from '@/content/site';
 import './globals.css';
+
+const anton = Anton({
+  weight: '400',
+  subsets: ['latin'],
+  variable: '--font-anton',
+  display: 'swap',
+});
+
+const dmSans = DM_Sans({
+  subsets: ['latin'],
+  variable: '--font-dm-sans',
+  display: 'swap',
+});
+
+const ibmPlexMono = IBM_Plex_Mono({
+  weight: ['400', '500'],
+  subsets: ['latin'],
+  variable: '--font-ibm-plex-mono',
+  display: 'swap',
+});
 
 export const metadata: Metadata = {
   title: {
@@ -24,9 +45,9 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="es-AR" suppressHydrationWarning>
+    <html lang="es-AR" suppressHydrationWarning className={`${anton.variable} ${dmSans.variable} ${ibmPlexMono.variable}`}>
       <body suppressHydrationWarning>
-        <SiteHeader />
+        <AppHeader />
         <main>{children}</main>
         <SiteFooter />
         <CookieBanner />

@@ -1,6 +1,6 @@
 import type { LegalDocument } from '@/lib/legal-types';
 
-const updated = '29 de agosto de 2026';
+const updated = '4 de septiembre de 2026';
 
 export const termsPlayers: LegalDocument = {
   slug: 'terminos',
@@ -12,7 +12,7 @@ export const termsPlayers: LegalDocument = {
     {
       title: '1. Identificación',
       paragraphs: [
-        `${'x4 match'} (en adelante, la "Plataforma") es un servicio tecnológico operado por x4 match S.A.S., con domicilio en Ciudad Autónoma de Buenos Aires, Argentina. Contacto: legal@x4match.com.`,
+        `${'x4 match'} (en adelante, la "Plataforma") es un servicio tecnológico operado por x4 match S.A.S. (o la sociedad / persona humana que figure como responsable fiscal mientras se completa la constitución societaria), con domicilio en Ciudad Autónoma de Buenos Aires, Argentina. CUIT: pendiente de publicación. Contacto: legal@x4match.com.`,
         'Al registrarte o usar la app, aceptás estos Términos y Condiciones en su totalidad.',
       ],
     },
@@ -109,8 +109,8 @@ export const termsClubs: LegalDocument = {
     {
       title: '3. Precio y facturación',
       paragraphs: [
-        'Los precios publicados en la web o propuesta comercial son en pesos argentinos más IVA cuando corresponda.',
-        'La facturación es mensual o anual según el plan elegido. El medio de pago será transferencia, débito o Mercado Pago de x4 match, según acuerdo.',
+        'Los precios publicados en la web o propuesta comercial son en pesos argentinos más IVA cuando el emisor sea Responsable Inscripto. En etapa puente (monotributo) el precio puede publicarse como importe final.',
+        'La facturación es mensual o anual según el plan elegido. El medio de pago será transferencia, débito o Mercado Pago de x4 match (cuenta de la sociedad / responsable fiscal), según acuerdo. El cobro de la suscripción del Software no se realiza mediante compras dentro de la aplicación iOS de la App Store.',
         'x4 match puede actualizar precios con aviso de 30 días para el período siguiente.',
       ],
     },
@@ -177,7 +177,7 @@ export const privacyPolicy: LegalDocument = {
     {
       title: '1. Responsable del tratamiento',
       paragraphs: [
-        'El responsable del tratamiento de datos personales es x4 match S.A.S. (CUIT pendiente de publicación), con domicilio en Ciudad Autónoma de Buenos Aires, Argentina.',
+        'El responsable del tratamiento de datos personales es x4 match S.A.S. (CUIT pendiente de publicación), o la persona humana/sociedad que opere la Plataforma durante la constitución societaria, con domicilio en Ciudad Autónoma de Buenos Aires, Argentina.',
         'Contacto para ejercer derechos: legal@x4match.com.',
       ],
     },
