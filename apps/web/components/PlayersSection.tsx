@@ -62,11 +62,6 @@ export function PlayersSection() {
             </article>
           ))}
         </div>
-
-        <p className="players-note">
-          Próximamente en App Store y Google Play. Pedí acceso anticipado a{' '}
-          <a href={`mailto:${SITE.emails.hola}`}>{SITE.emails.hola}</a>.
-        </p>
       </div>
 
       <Image

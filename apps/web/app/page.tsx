@@ -21,32 +21,7 @@ export default function HomePage() {
   return (
     <>
       <Hero />
-
       <PlayersSection />
-
-      <section id="clubes" className="section" style={{ background: 'var(--surface)' }}>
-        <div className="container">
-          <h2 className="section-title">Para clubes</h2>
-          <p className="section-subtitle">
-            Panel de gestión, trial de 90 días y cobros con tu propia cuenta de Mercado Pago.
-          </p>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16 }}>
-            {CLUB_FEATURES.map(({ icon: Icon, title, text }) => (
-              <div key={title} className="card" style={{ background: 'var(--surface2)' }}>
-                <Icon size={22} color="var(--primary)" style={{ marginBottom: 12 }} />
-                <h3 style={{ margin: '0 0 8px', fontSize: 18 }}>{title}</h3>
-                <p style={{ margin: 0, color: 'var(--muted)', fontSize: 15 }}>{text}</p>
-              </div>
-            ))}
-          </div>
-          <div style={{ marginTop: 28 }}>
-            <Link className="btn btn-primary" href={SITE.links.clubPanel}>
-              Entrar al panel club
-            </Link>
-          </div>
-        </div>
-      </section>
-
       <PlansSection />
     </>
   );

@@ -16,7 +16,7 @@ export const SITE = {
     note: 'SAS en constitución / alta AFIP. Hasta entonces puede operar un responsable fiscal puente (documentado).',
   },
   links: {
-    clubPanel: process.env.NEXT_PUBLIC_CLUB_URL || 'http://localhost:3001',
+    clubPanel: 'https://club.x4match.com',
     appStore: '#',
     playStore: '#',
   },
