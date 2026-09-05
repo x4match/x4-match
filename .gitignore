@@ -2,20 +2,44 @@
 node_modules/
 .pnp
 .pnp.js
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
 
 # Testing
 coverage/
+.nyc_output/
 
-# Production
+# Builds / caches
 build/
 dist/
+out/
 .next/
-*.log
+.turbo/
+.vercel/
+*.tsbuildinfo
 
-# Environment
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment / secrets
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
+!.env.*.example
+*.pem
+*.key
+*.p8
+*.p12
+*.mobileprovision
+*.jks
+*.keystore
 
 # IDE
 .vscode/
@@ -23,24 +47,29 @@ dist/
 *.swp
 *.swo
 *~
+*.iml
 
 # OS
 .DS_Store
 Thumbs.db
 
-# Expo
+# Expo / React Native
 .expo/
 .expo-shared/
 web-build/
+.kotlin/
+*.jsbundle
+.metro-health-check*
 
-# Prisma
+# Prisma local
 *.db
 *.db-journal
 
-# Docker
+# Docker local overrides
 docker-compose.override.yml
 
-
-apps/api/.env
-
-infra/
+# Infra: permitir scripts, bloquear secretos locales
+infra/**/.env
+infra/**/.env.*
+!infra/**/.env.example
+!infra/**/env.example

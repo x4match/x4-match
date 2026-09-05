@@ -1,0 +1,6 @@
+# Sustituí API_DOMAIN al instalar, o exportá la var antes de arrancar Caddy.
+# Ej: export API_DOMAIN=api.tudominio.com
+{$API_DOMAIN} {
+	encode gzip
+	reverse_proxy 127.0.0.1:5000
+}

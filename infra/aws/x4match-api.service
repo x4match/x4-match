@@ -1,0 +1,18 @@
+[Unit]
+Description=x4 match API
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/opt/x4match
+Environment=NODE_ENV=production
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+EnvironmentFile=-/opt/x4match/apps/api/.env
+ExecStart=/usr/bin/pnpm --filter api start:prod
+Restart=always
+RestartSec=5
+MemoryMax=700M
+
+[Install]
+WantedBy=multi-user.target
