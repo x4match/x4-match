@@ -20,7 +20,7 @@ jobs:
   deploy:
     name: Deploy on EC2
     # Runner instalado en la misma EC2 (evita abrir SSH a internet).
-    runs-on: [self-hosted, linux, x64, ec2]
+    runs-on: self-hosted
     environment: production
     steps:
       - name: Deploy
