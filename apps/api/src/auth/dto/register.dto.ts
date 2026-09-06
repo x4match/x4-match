@@ -13,9 +13,15 @@ export class RegisterDto {
   @IsEmail()
   email: string;
 
+  @ValidateIf((o: RegisterDto) => !o.identityToken)
   @IsString()
   @MinLength(6)
-  password: string;
+  password?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(20)
+  identityToken?: string;
 
   @IsOptional()
   @IsString()

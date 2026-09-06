@@ -3,6 +3,7 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { AuthService } from './auth.service';
 import {
+  AppleAuthDto,
   ChangePasswordDto,
   FejubaLookupDto,
   ForgotPasswordDto,
@@ -36,6 +37,12 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   loginWithGoogle(@Body() dto: GoogleAuthDto) {
     return this.authService.loginWithGoogle(dto);
+  }
+
+  @Post('apple')
+  @HttpCode(HttpStatus.OK)
+  loginWithApple(@Body() dto: AppleAuthDto) {
+    return this.authService.loginWithApple(dto);
   }
 
   @Post('forgot-password')

@@ -92,12 +92,18 @@ export class ClubsController {
     @Query('error') error: string | undefined,
     @Res() res: Response,
   ) {
-    const redirectUrl = await this.clubPaymentConfigService.handleOAuthCallback(
+    const result = await this.clubPaymentConfigService.handleOAuthCallback(
       code,
       state,
       error,
     );
-    return res.redirect(redirectUrl);
+    // Web: redirect HTTP. Mobile: HTML puente (Safari no abre bien x4match:// vía 302).
+    if (result.returnTo === 'web') {
+      return res.redirect(result.url);
+    }
+    const html = this.clubPaymentConfigService.buildOAuthBridgeHtml(result);
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    return res.status(200).send(html);
   }
 
   @Get(':id/payments/status')

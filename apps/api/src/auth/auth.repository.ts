@@ -14,7 +14,7 @@ export class AuthRepository {
 
   async findByEmail(email: string) {
     const result = await this.db.query(
-      `SELECT id, email, password_hash, name, role, google_id
+      `SELECT id, email, password_hash, name, role, google_id, apple_id
        FROM users
        WHERE lower(email) = lower($1)`,
       [email],
@@ -24,7 +24,7 @@ export class AuthRepository {
 
   async findByGoogleId(googleId: string) {
     const result = await this.db.query(
-      `SELECT id, email, password_hash, name, role, google_id
+      `SELECT id, email, password_hash, name, role, google_id, apple_id
        FROM users
        WHERE google_id = $1`,
       [googleId],
@@ -42,9 +42,19 @@ export class AuthRepository {
     return result.rows[0] ?? null;
   }
 
+  async findByAppleId(appleId: string) {
+    const result = await this.db.query(
+      `SELECT id, email, password_hash, name, role, google_id, apple_id
+       FROM users
+       WHERE apple_id = $1`,
+      [appleId],
+    );
+    return result.rows[0] ?? null;
+  }
+
   async findById(userId: string) {
     const result = await this.db.query(
-      `SELECT id, email, password_hash, name, role
+      `SELECT id, email, password_hash, name, role, google_id, apple_id
        FROM users
        WHERE id = $1`,
       [userId],
@@ -84,12 +94,20 @@ export class AuthRepository {
     name: string;
     role: 'PLAYER' | 'CLUB_ADMIN' | 'ORGANIZER';
     googleId?: string | null;
+    appleId?: string | null;
   }) {
     const result = await this.db.query(
-      `INSERT INTO users (email, password_hash, name, role, google_id)
-       VALUES ($1, $2, $3, $4::user_role, $5)
-       RETURNING id, email, name, role, google_id`,
-      [input.email, input.passwordHash, input.name, input.role, input.googleId ?? null],
+      `INSERT INTO users (email, password_hash, name, role, google_id, apple_id)
+       VALUES ($1, $2, $3, $4::user_role, $5, $6)
+       RETURNING id, email, name, role, google_id, apple_id`,
+      [
+        input.email,
+        input.passwordHash,
+        input.name,
+        input.role,
+        input.googleId ?? null,
+        input.appleId ?? null,
+      ],
     );
     return result.rows[0];
   }
@@ -100,6 +118,15 @@ export class AuthRepository {
        SET google_id = $2, updated_at = NOW()
        WHERE id = $1`,
       [userId, googleId],
+    );
+  }
+
+  async linkAppleAccount(userId: string, appleId: string) {
+    await this.db.query(
+      `UPDATE users
+       SET apple_id = $2, updated_at = NOW()
+       WHERE id = $1`,
+      [userId, appleId],
     );
   }
 

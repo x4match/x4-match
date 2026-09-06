@@ -55,7 +55,7 @@ export class ClubPaymentConfigService {
   }
 
   private mobileDeepLinkBase(): string {
-    return (process.env.MOBILE_APP_SCHEME || 'playtomic').replace(/:\/\/?$/, '');
+    return (process.env.MOBILE_APP_SCHEME || 'x4match').replace(/:\/\/?$/, '');
   }
 
   private webClubBase(): string {
@@ -183,39 +183,119 @@ export class ClubPaymentConfigService {
     };
   }
 
+  /**
+   * Destino post-OAuth. Mobile usa deep link (scheme x4match); Safari a veces
+   * no abre custom schemes vía Location redirect — el controller sirve HTML puente.
+   */
   async handleOAuthCallback(
     code: string | undefined,
     state: string | undefined,
     error?: string,
-  ): Promise<string> {
-    let returnTo: string | undefined;
+  ): Promise<{
+    returnTo: 'web' | 'mobile';
+    url: string;
+    ok: boolean;
+    title: string;
+    detail: string;
+  }> {
+    let returnToRaw: string | undefined;
     try {
       if (state) {
-        returnTo = this.verifyOAuthState(state).returnTo;
+        returnToRaw = this.verifyOAuthState(state).returnTo;
       }
     } catch {
-      returnTo = undefined;
+      returnToRaw = undefined;
     }
+    const returnTo: 'web' | 'mobile' = returnToRaw === 'web' ? 'web' : 'mobile';
     const base = this.oauthReturnBase(returnTo);
 
     if (error) {
-      return `${base}?status=error&message=${encodeURIComponent(error)}`;
+      return {
+        returnTo,
+        url: `${base}?status=error&message=${encodeURIComponent(error)}`,
+        ok: false,
+        title: 'No se pudo conectar',
+        detail: error,
+      };
     }
     if (!code || !state) {
-      return `${base}?status=error&message=${encodeURIComponent('Faltan parámetros de Mercado Pago')}`;
+      const detail = 'Faltan parámetros de Mercado Pago';
+      return {
+        returnTo,
+        url: `${base}?status=error&message=${encodeURIComponent(detail)}`,
+        ok: false,
+        title: 'No se pudo conectar',
+        detail,
+      };
     }
 
     try {
       const { clubId, returnTo: verifiedReturnTo } = this.verifyOAuthState(state);
       const tokens = await this.exchangeAuthorizationCode(code);
       await this.saveTokens(clubId, tokens);
-      const redirectBase = this.oauthReturnBase(verifiedReturnTo);
-      return `${redirectBase}?clubId=${encodeURIComponent(clubId)}&status=connected`;
+      const resolvedReturnTo: 'web' | 'mobile' = verifiedReturnTo === 'web' ? 'web' : 'mobile';
+      const redirectBase = this.oauthReturnBase(resolvedReturnTo);
+      return {
+        returnTo: resolvedReturnTo,
+        url: `${redirectBase}?clubId=${encodeURIComponent(clubId)}&status=connected`,
+        ok: true,
+        title: 'Mercado Pago conectado',
+        detail:
+          'Ya podés volver a la app x4 match. Si Safari no abre sola, tocá el botón de abajo o cerrá esta ventana y entrá a Pagos en la app.',
+      };
     } catch (err) {
       const message = err instanceof Error ? err.message : 'No se pudo conectar Mercado Pago';
       this.logger.warn(`OAuth MP falló: ${message}`);
-      return `${base}?status=error&message=${encodeURIComponent(message)}`;
+      return {
+        returnTo,
+        url: `${base}?status=error&message=${encodeURIComponent(message)}`,
+        ok: false,
+        title: 'No se pudo conectar',
+        detail: message,
+      };
     }
+  }
+
+  /** Página intermedia para iOS Safari (custom URL schemes no abren bien con 302). */
+  buildOAuthBridgeHtml(result: {
+    url: string;
+    ok: boolean;
+    title: string;
+    detail: string;
+  }): string {
+    const safeUrl = result.url.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+    const jsUrl = JSON.stringify(result.url);
+    const color = result.ok ? '#16a34a' : '#dc2626';
+    return `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${result.title}</title>
+  <style>
+    body { font-family: -apple-system, system-ui, sans-serif; margin: 0; padding: 2rem 1.25rem;
+      background: #0a0a0a; color: #fafafa; text-align: center; }
+    h1 { font-size: 1.25rem; color: ${color}; }
+    p { color: #a3a3a3; line-height: 1.5; max-width: 22rem; margin: 0.75rem auto 1.5rem; }
+    a.btn { display: inline-block; background: #f5c518; color: #0a0a0a; font-weight: 700;
+      text-decoration: none; padding: 0.85rem 1.25rem; border-radius: 999px; }
+  </style>
+</head>
+<body>
+  <h1>${result.title}</h1>
+  <p>${result.detail}</p>
+  <p><a class="btn" id="open" href="${safeUrl}">Volver a x4 match</a></p>
+  <script>
+    (function () {
+      var target = ${jsUrl};
+      try { window.location.replace(target); } catch (e) {}
+      setTimeout(function () {
+        try { window.location.href = target; } catch (e2) {}
+      }, 400);
+    })();
+  </script>
+</body>
+</html>`;
   }
 
   private async exchangeAuthorizationCode(code: string): Promise<{

@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
-import { createHash, randomInt } from 'crypto';
+import { createHash, createPublicKey, randomInt } from 'crypto';
 import {
   normalizeCategoryStatus,
   PLACEMENT_MATCHES_REQUIRED,
@@ -18,7 +18,9 @@ import {
 import { FejubaService } from '../integrations/fejuba/fejuba.service';
 import { AuthRepository } from './auth.repository';
 import { OAuth2Client } from 'google-auth-library';
+import jwt from 'jsonwebtoken';
 import {
+  AppleAuthDto,
   ChangePasswordDto,
   ForgotPasswordDto,
   GoogleAuthDto,
@@ -47,8 +49,37 @@ export class AuthService {
 
   async register(dto: RegisterDto) {
     const role = dto.role || 'PLAYER';
-    const hashedPassword = await bcrypt.hash(dto.password, 10);
-    const existingUser = await this.authRepository.findByEmail(dto.email);
+    let appleId: string | null = null;
+    let email = dto.email.trim().toLowerCase();
+    let passwordHash: string | null = null;
+
+    if (dto.identityToken) {
+      const payload = await this.verifyAppleIdentityToken(dto.identityToken);
+      appleId = payload.sub ?? null;
+      const appleEmail = payload.email?.trim().toLowerCase();
+      if (!appleId) {
+        throw new UnauthorizedException('No se pudo verificar la cuenta de Apple');
+      }
+      if (appleEmail) {
+        email = appleEmail;
+      }
+      if (!email) {
+        throw new UnauthorizedException(
+          'Apple no envió un email. Probá de nuevo o registrate con correo.',
+        );
+      }
+      const existingApple = await this.authRepository.findByAppleId(appleId);
+      if (existingApple) {
+        throw new ConflictException('Esta cuenta de Apple ya está registrada. Iniciá sesión.');
+      }
+    } else {
+      if (!dto.password || dto.password.length < 6) {
+        throw new BadRequestException('La contraseña debe tener al menos 6 caracteres');
+      }
+      passwordHash = await bcrypt.hash(dto.password, 10);
+    }
+
+    const existingUser = await this.authRepository.findByEmail(email);
     if (existingUser) {
       throw new ConflictException('El email ya está registrado');
     }
@@ -65,7 +96,7 @@ export class AuthService {
       role === 'PLAYER' && dto.nickname ? dto.nickname.trim() : null;
     if (role === 'PLAYER') {
       if (!nickname) {
-        nickname = await this.generateUniqueNickname(dto.email);
+        nickname = await this.generateUniqueNickname(email);
       } else {
         const existingNickname = await this.authRepository.findByNickname(nickname);
         if (existingNickname) {
@@ -77,14 +108,15 @@ export class AuthService {
     const displayName =
       dto.name?.trim() ||
       (role === 'PLAYER'
-        ? this.fallbackNameFromEmail(dto.email)
-        : dto.email.split('@')[0] || 'Usuario');
+        ? this.fallbackNameFromEmail(email)
+        : email.split('@')[0] || 'Usuario');
 
     const user = await this.authRepository.createUser({
-      email: dto.email,
-      passwordHash: hashedPassword,
+      email,
+      passwordHash,
       name: displayName,
       role,
+      appleId,
     });
 
     const isFederated = Boolean(dto.fejubaId || dto.fejubaCategory);
@@ -193,6 +225,52 @@ export class AuthService {
     };
   }
 
+  async loginWithApple(dto: AppleAuthDto) {
+    const payload = await this.verifyAppleIdentityToken(dto.identityToken);
+    const appleId = payload.sub;
+    const email = payload.email?.trim().toLowerCase();
+    const name = dto.fullName?.trim();
+
+    if (!appleId) {
+      throw new UnauthorizedException('No se pudo verificar la cuenta de Apple');
+    }
+
+    let user = await this.authRepository.findByAppleId(appleId);
+
+    if (!user) {
+      if (!email) {
+        throw new UnauthorizedException(
+          'Apple no envió un email. Probá de nuevo o usá otro método de ingreso.',
+        );
+      }
+      const existing = await this.authRepository.findByEmail(email);
+      if (existing) {
+        if (existing.apple_id && existing.apple_id !== appleId) {
+          throw new ConflictException('Este email ya está vinculado a otra cuenta de Apple');
+        }
+        await this.authRepository.linkAppleAccount(existing.id, appleId);
+        user = await this.authRepository.findById(existing.id);
+      } else {
+        return {
+          needsRegistration: true,
+          email,
+          fullName: name || undefined,
+        };
+      }
+    }
+
+    if (!user) {
+      throw new UnauthorizedException('No se pudo iniciar sesión con Apple');
+    }
+
+    const fullUser = await this.authRepository.findMe(user.id);
+    const token = this.generateToken(user.id, user.email);
+    return {
+      access_token: token,
+      user: this.serializeAuthUser(fullUser ?? user),
+    };
+  }
+
   async login(dto: LoginDto) {
     const user = await this.authRepository.findByEmail(dto.email);
     if (!user) {
@@ -200,7 +278,7 @@ export class AuthService {
     }
 
     if (!user.password_hash) {
-      throw new UnauthorizedException('Esta cuenta usa Google. Iniciá sesión con Google.');
+      throw new UnauthorizedException(this.passwordlessLoginMessage(user));
     }
 
     const isPasswordValid = await bcrypt.compare(dto.password, user.password_hash);
@@ -231,7 +309,9 @@ export class AuthService {
     }
 
     if (!user.password_hash) {
-      throw new BadRequestException('Esta cuenta usa Google. No podés cambiar la contraseña.');
+      throw new BadRequestException(
+        'Esta cuenta entra con Apple o Google. No podés cambiar la contraseña.',
+      );
     }
 
     const isPasswordValid = await bcrypt.compare(dto.currentPassword, user.password_hash);
@@ -307,6 +387,64 @@ export class AuthService {
       process.env.GOOGLE_IOS_CLIENT_ID,
       process.env.GOOGLE_ANDROID_CLIENT_ID,
     ].filter((value): value is string => Boolean(value?.trim()));
+  }
+
+  private passwordlessLoginMessage(user: { apple_id?: string | null; google_id?: string | null }) {
+    if (user.apple_id) {
+      return 'Esta cuenta usa Apple. Iniciá sesión con Apple.';
+    }
+    if (user.google_id) {
+      return 'Esta cuenta usa Google. Iniciá sesión con Google.';
+    }
+    return 'Esta cuenta no tiene contraseña. Usá Apple o Google.';
+  }
+
+  private appleAudience(): string {
+    return process.env.APPLE_BUNDLE_ID?.trim() || 'com.x4match.app';
+  }
+
+  private async verifyAppleIdentityToken(identityToken: string) {
+    try {
+      const decoded = jwt.decode(identityToken, { complete: true });
+      if (!decoded || typeof decoded === 'string' || !decoded.header.kid) {
+        throw new UnauthorizedException('Token de Apple inválido');
+      }
+
+      const pem = await this.getApplePublicKey(decoded.header.kid);
+      const payload = jwt.verify(identityToken, pem, {
+        algorithms: ['RS256'],
+        issuer: 'https://appleid.apple.com',
+        audience: this.appleAudience(),
+      }) as jwt.JwtPayload;
+
+      if (!payload?.sub) {
+        throw new UnauthorizedException('Token de Apple inválido');
+      }
+      return payload;
+    } catch (error) {
+      if (error instanceof UnauthorizedException || error instanceof BadRequestException) {
+        throw error;
+      }
+      this.logger.warn(`Apple token verification failed: ${(error as Error).message}`);
+      throw new UnauthorizedException('Token de Apple inválido o expirado');
+    }
+  }
+
+  private async getApplePublicKey(kid: string): Promise<string> {
+    const res = await fetch('https://appleid.apple.com/auth/keys');
+    if (!res.ok) {
+      throw new UnauthorizedException('No se pudo validar el token de Apple');
+    }
+    const { keys } = (await res.json()) as {
+      keys?: Array<{ kid: string; kty: string; alg?: string; n: string; e: string }>;
+    };
+    const jwk = keys?.find((key) => key.kid === kid);
+    if (!jwk) {
+      throw new UnauthorizedException('Token de Apple inválido');
+    }
+    return createPublicKey({ key: jwk, format: 'jwk' })
+      .export({ type: 'spki', format: 'pem' })
+      .toString();
   }
 
   private async verifyGoogleIdToken(idToken: string) {

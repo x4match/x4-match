@@ -1,17 +1,23 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
+
+type PushPlatform = 'ios' | 'android';
+
+type NotificationPayload = {
+  userId: string;
+  type: string;
+  title: string;
+  body: string;
+  data?: Record<string, unknown>;
+};
 
 @Injectable()
 export class NotificationsService {
+  private readonly logger = new Logger(NotificationsService.name);
+
   constructor(private readonly db: DatabaseService) {}
 
-  async create(params: {
-    userId: string;
-    type: string;
-    title: string;
-    body: string;
-    data?: Record<string, unknown>;
-  }) {
+  async create(params: NotificationPayload) {
     const result = await this.db.query(
       `INSERT INTO notifications (user_id, type, title, body, data)
        VALUES ($1, $2, $3, $4, $5::jsonb)
@@ -24,7 +30,18 @@ export class NotificationsService {
         JSON.stringify(params.data ?? {}),
       ],
     );
+    void this.sendPushToUser(params).catch((error: unknown) => {
+      this.logger.warn(`Push no enviado: ${(error as Error).message}`);
+    });
     return result.rows[0];
+  }
+
+  async createMany(items: NotificationPayload[]) {
+    const created = [];
+    for (const item of items) {
+      created.push(await this.create(item));
+    }
+    return created;
   }
 
   async listForUser(userId: string) {
@@ -65,5 +82,80 @@ export class NotificationsService {
       userId,
     ]);
     return { ok: true };
+  }
+
+  async registerPushToken(userId: string, token: string, platform: PushPlatform) {
+    await this.db.query(
+      `INSERT INTO user_push_tokens (user_id, token, platform)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (token) DO UPDATE
+         SET user_id = EXCLUDED.user_id,
+             platform = EXCLUDED.platform,
+             updated_at = NOW()`,
+      [userId, token.trim(), platform],
+    );
+    return { ok: true };
+  }
+
+  async unregisterPushToken(userId: string, token?: string) {
+    if (token?.trim()) {
+      await this.db.query(
+        `DELETE FROM user_push_tokens WHERE user_id = $1 AND token = $2`,
+        [userId, token.trim()],
+      );
+    } else {
+      await this.db.query(`DELETE FROM user_push_tokens WHERE user_id = $1`, [userId]);
+    }
+    return { ok: true };
+  }
+
+  private async sendPushToUser(params: NotificationPayload) {
+    const tokens = await this.db.query(
+      `SELECT token FROM user_push_tokens WHERE user_id = $1`,
+      [params.userId],
+    );
+    if (tokens.rows.length === 0) return;
+
+    const messages = tokens.rows.map((row) => ({
+      to: row.token,
+      title: params.title,
+      body: params.body,
+      sound: 'default',
+      data: {
+        ...(params.data ?? {}),
+        type: params.type,
+      },
+    }));
+
+    const res = await fetch('https://exp.host/--/api/v2/push/send', {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Accept-Encoding': 'gzip, deflate',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(messages),
+    });
+
+    if (!res.ok) {
+      this.logger.warn(`Expo push HTTP ${res.status}`);
+      return;
+    }
+
+    const payload = (await res.json()) as {
+      data?: Array<{ status?: string; details?: { error?: string } }>;
+    };
+    const staleTokens: string[] = [];
+    payload.data?.forEach((ticket, index) => {
+      if (ticket.status === 'error' && ticket.details?.error === 'DeviceNotRegistered') {
+        const token = tokens.rows[index]?.token;
+        if (token) staleTokens.push(token);
+      }
+    });
+    if (staleTokens.length > 0) {
+      await this.db.query(`DELETE FROM user_push_tokens WHERE token = ANY($1::text[])`, [
+        staleTokens,
+      ]);
+    }
   }
 }

@@ -29,5 +29,3 @@ pnpm-debug.log*
 # Prisma local (SQLite si se usa)
 *.db
 *.db-journal
-
-.env
