@@ -24,6 +24,17 @@ describe('placement.util', () => {
     ).toBe('5ta');
   });
 
+  it('con FEJUBA muestra la categoría oficial aunque el rating arranque en skill 0', () => {
+    expect(
+      resolveVisibleLevelCategory({
+        rating: PLACEMENT_INITIAL_RATING,
+        categoryStatus: 'confirmed',
+        declaredCategory: '6ta',
+        lockDeclaredCategory: true,
+      }),
+    ).toBe('6ta');
+  });
+
   it('confirma la categoría desde el rating al salir de nivelación', () => {
     expect(
       resolveVisibleLevelCategory({

@@ -41,6 +41,7 @@ export class PlayersService {
         rating,
         categoryStatus,
         declaredCategory,
+        lockDeclaredCategory: Boolean(extras.fejubaId || extras.fejubaCategory),
       }),
       declaredCategory,
       categoryStatus,

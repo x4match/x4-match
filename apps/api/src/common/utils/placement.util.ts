@@ -12,15 +12,20 @@ export function normalizeCategoryStatus(
 
 /**
  * Durante nivelación se muestra la categoría declarada (aspiracional).
- * Al confirmar, la categoría viene del rating Elo.
+ * Con FEJUBA, la categoría oficial queda fija aunque el rating arranque en skill 0.
+ * Al confirmar sin FEJUBA, la categoría viene del rating Elo.
  */
 export function resolveVisibleLevelCategory(input: {
   rating: number;
   categoryStatus?: string | null;
   declaredCategory?: string | null;
+  lockDeclaredCategory?: boolean;
 }): string {
   const status = normalizeCategoryStatus(input.categoryStatus);
-  if (status === 'provisional' && input.declaredCategory) {
+  if (
+    input.declaredCategory &&
+    (status === 'provisional' || input.lockDeclaredCategory === true)
+  ) {
     return input.declaredCategory;
   }
   return getLevelCategory(input.rating);

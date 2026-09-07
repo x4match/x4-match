@@ -187,6 +187,10 @@ export class CompetitiveScoringService {
       rating,
       categoryStatus: playerRow.category_status,
       declaredCategory: typeof extras.declaredCategory === 'string' ? extras.declaredCategory : null,
+      lockDeclaredCategory: Boolean(
+        (typeof extras.fejubaId === 'string' && extras.fejubaId) ||
+          (typeof extras.fejubaCategory === 'string' && extras.fejubaCategory),
+      ),
     });
 
     return {

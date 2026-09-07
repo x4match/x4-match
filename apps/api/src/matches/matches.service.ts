@@ -212,6 +212,7 @@ export class MatchesService {
       rating: placement.rating,
       categoryStatus: placement.categoryStatus,
       declaredCategory: placement.declaredCategory,
+      lockDeclaredCategory: placement.lockDeclaredCategory,
     });
   }
 

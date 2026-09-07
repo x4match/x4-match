@@ -323,6 +323,10 @@ export class MatchesRepository {
             rating,
             categoryStatus: p.category_status,
             declaredCategory,
+            lockDeclaredCategory: Boolean(
+              (typeof extras.fejubaId === 'string' && extras.fejubaId) ||
+                (typeof extras.fejubaCategory === 'string' && extras.fejubaCategory),
+            ),
           }),
           declaredCategory,
           categoryStatus: p.category_status ?? undefined,
@@ -541,6 +545,10 @@ export class MatchesRepository {
       categoryStatus: (row.category_status as string) ?? 'confirmed',
       declaredCategory:
         typeof extras.declaredCategory === 'string' ? extras.declaredCategory : null,
+      lockDeclaredCategory: Boolean(
+        (typeof extras.fejubaId === 'string' && extras.fejubaId) ||
+          (typeof extras.fejubaCategory === 'string' && extras.fejubaCategory),
+      ),
     };
   }
 

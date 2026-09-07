@@ -1,8 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
 import {
-  DEFAULT_PLAYER_RATING,
-  getInitialRatingForCategory,
   PLACEMENT_INITIAL_RATING,
   PLACEMENT_MATCHES_REQUIRED,
   type PlayerCategory,
@@ -166,18 +164,14 @@ export class AuthRepository {
     }
     const extras =
       Object.keys(extrasPayload).length > 0 ? JSON.stringify(extrasPayload) : null;
-    // Federados (FEJUBA): categoría confirmada, sin nivelación.
-    // No federados: nivelación provisional (5 partidos competitivos).
+    // Federados (FEJUBA): categoría confirmada, sin partidos de nivelación.
+    // No federados: nivelación provisional (5 partidos).
+    // En ambos casos el skill visible arranca en 0 (rating de placement).
     const isFederated = Boolean(options?.fejubaId || options?.fejubaCategory);
     const startsInPlacement = !isFederated && options?.startInPlacement === true;
     const categoryStatus = startsInPlacement ? 'provisional' : 'confirmed';
     const placementMatchesPlayed = startsInPlacement ? 0 : PLACEMENT_MATCHES_REQUIRED;
-    // Con categoría: piso de la banda (0% de progreso). Sin categoría en nivelación: skill 0.
-    const rating = declaredCategory
-      ? getInitialRatingForCategory(declaredCategory)
-      : startsInPlacement
-        ? PLACEMENT_INITIAL_RATING
-        : DEFAULT_PLAYER_RATING;
+    const rating = PLACEMENT_INITIAL_RATING;
 
     await this.db.query(
       `INSERT INTO players (

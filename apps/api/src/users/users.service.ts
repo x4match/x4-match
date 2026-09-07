@@ -11,8 +11,6 @@ import {
   PLACEMENT_MATCHES_REQUIRED,
   getMonthKey,
   resolveVisibleLevelCategory,
-  getInitialRatingForCategory,
-  type PlayerCategory,
 } from '../common/utils';
 import { ratingToSkillScore, resolvePlayerRating } from '../common/utils/player-rating.util';
 import { deleteCloudinaryAsset, uploadImageBuffer } from '../common/cloudinary/cloudinary.util';
@@ -164,6 +162,7 @@ export class UsersService {
         rating: currentRating,
         categoryStatus,
         declaredCategory,
+        lockDeclaredCategory: Boolean(extras.fejubaId || extras.fejubaCategory),
       }),
       declaredCategory,
       categoryStatus,
@@ -438,7 +437,6 @@ export class UsersService {
     }
 
     const extras = this.parseExtras(prow);
-    let seedRating: number | null = null;
     let nickname: string | null | undefined;
     if (dto.nickname !== undefined) {
       const normalized = dto.nickname?.trim().toLowerCase();
@@ -466,13 +464,8 @@ export class UsersService {
       } else if (dto.declaredCategory == null) {
         delete extras.declaredCategory;
       } else {
+        // Solo guarda la categoría aspiracional; el rating no se resiembra.
         extras.declaredCategory = dto.declaredCategory;
-        const status = normalizeCategoryStatus(prow.category_status);
-        const played = Number(prow.placement_matches_played ?? 0);
-        // Al declarar categoría al inicio: piso de la banda (0 puntos de progreso).
-        if (status === 'provisional' && played === 0) {
-          seedRating = getInitialRatingForCategory(dto.declaredCategory as PlayerCategory);
-        }
       }
     }
 
@@ -519,7 +512,7 @@ export class UsersService {
         hasCoords ? dto.latitude : null,
         hasCoords ? dto.longitude : null,
         zoneHint,
-        seedRating,
+        null,
         nickname,
       ],
     );

@@ -128,7 +128,7 @@ export class AuthService {
       dni,
       fejubaId: dto.fejubaId ?? null,
       fejubaCategory: dto.fejubaCategory ?? dto.declaredCategory ?? null,
-      // Solo nivelan quienes no tienen categoría federada.
+      // FEJUBA: sin nivelación. Resto: nivelan desde skill 0.
       startInPlacement: role === 'PLAYER' && !isFederated,
     });
 
@@ -543,6 +543,7 @@ export class AuthService {
         rating,
         categoryStatus,
         declaredCategory,
+        lockDeclaredCategory: Boolean(extras.fejubaId || extras.fejubaCategory),
       }),
       declaredCategory,
       categoryStatus,
