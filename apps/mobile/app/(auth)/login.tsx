@@ -13,6 +13,11 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '@/contexts/AuthContext';
 import { isClub } from '@/lib/roles';
 import { api } from '@/lib/api';
+import {
+  GoogleSignInCancelledError,
+  getGoogleIdToken,
+  googleSignInUserMessage,
+} from '@/lib/google-auth';
 import { ui } from '@/theme/tokens';
 import { Screen, InputField, PrimaryButton, FadeInUp, PressableScale } from '@/components/padely';
 
@@ -20,6 +25,7 @@ export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
   const { login } = useAuth();
   const router = useRouter();
@@ -46,6 +52,34 @@ export default function LoginScreen() {
       Alert.alert('Error', typeof message === 'string' ? message : JSON.stringify(message));
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    setGoogleLoading(true);
+    try {
+      const idToken = await getGoogleIdToken();
+      const response = await api.post('/auth/google', { idToken });
+      await login(response.data.access_token, response.data.user);
+      const role = response.data.user?.role;
+      router.replace(
+        response.data.isNewUser
+          ? '/onboarding'
+          : isClub(role)
+            ? '/(tabs)/gerente'
+            : '/(tabs)/home',
+      );
+    } catch (error: unknown) {
+      if (error instanceof GoogleSignInCancelledError) return;
+      const apiMessage = (error as { response?: { data?: { message?: unknown } } })?.response
+        ?.data?.message;
+      const message =
+        typeof apiMessage === 'string'
+          ? apiMessage
+          : googleSignInUserMessage(error);
+      if (message) Alert.alert('Error', message);
+    } finally {
+      setGoogleLoading(false);
     }
   };
 
@@ -127,8 +161,34 @@ export default function LoginScreen() {
                 label="Iniciar sesión"
                 onPress={handleLogin}
                 loading={loading}
+                disabled={googleLoading}
                 fullWidth
                 size="lg"
+              />
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 12,
+                  marginTop: 20,
+                  marginBottom: 16,
+                }}
+              >
+                <View style={{ flex: 1, height: 1, backgroundColor: ui.colors.border }} />
+                <Text style={{ color: ui.colors.textMuted, fontSize: 13 }}>o</Text>
+                <View style={{ flex: 1, height: 1, backgroundColor: ui.colors.border }} />
+              </View>
+              <PrimaryButton
+                label="Continuar con Google"
+                onPress={handleGoogleLogin}
+                loading={googleLoading}
+                disabled={loading}
+                fullWidth
+                size="lg"
+                variant="dark"
+                icon={
+                  <Text style={{ color: '#4285F4', fontSize: 18, fontWeight: '800' }}>G</Text>
+                }
               />
             </FadeInUp>
 

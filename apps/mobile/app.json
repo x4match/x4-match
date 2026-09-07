@@ -21,7 +21,7 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.padelpro.app",
+      "bundleIdentifier": "com.x4match.app",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "x4 match usa tu ubicación para mostrarte partidos y jugadores cerca tuyo.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "x4 match usa tu ubicación para mostrarte partidos y jugadores cerca tuyo."
@@ -32,7 +32,7 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#000000"
       },
-      "package": "com.padelpro.app",
+      "package": "x4.match",
       "usesCleartextTraffic": true,
       "permissions": [
         "ACCESS_COARSE_LOCATION",
@@ -45,6 +45,7 @@
       "expo-secure-store",
       "@react-native-community/datetimepicker",
       "expo-font",
+      "@react-native-google-signin/google-signin",
       [
         "expo-location",
         {

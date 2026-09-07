@@ -7,6 +7,7 @@ import { AuthProvider } from '@/contexts/AuthContext';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import { ToastProvider } from '@/components/ui/Toast';
 import { applyGeistTextDefaults } from '@/lib/apply-geist';
+import { configureGoogleSignIn } from '@/lib/google-auth';
 import { queryClient } from '@/lib/query-client';
 import { ui } from '@/theme/tokens';
 import '../global.css';
@@ -40,6 +41,10 @@ export default function RootLayout() {
       await SplashScreen.hideAsync();
     }
   }, [fontsLoaded]);
+
+  useEffect(() => {
+    configureGoogleSignIn();
+  }, []);
 
   useEffect(() => {
     if (fontsLoaded) {

@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import * as SecureStore from 'expo-secure-store';
 import { api } from '@/lib/api';
+import { signOutGoogle } from '@/lib/google-auth';
 import { queryClient } from '@/lib/query-client';
 import { resolveSkillScore } from '@/lib/skill';
 
@@ -98,6 +99,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = async () => {
     try {
+      await signOutGoogle();
       await SecureStore.deleteItemAsync('auth_token');
       await SecureStore.deleteItemAsync('auth_user');
       setToken(null);
