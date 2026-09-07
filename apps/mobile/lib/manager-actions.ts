@@ -1,8 +1,10 @@
-import type { Router } from 'expo-router';
+import type { useRouter } from 'expo-router';
 import type { BriefingAction } from '@/lib/club-manager';
 
+type AppRouter = ReturnType<typeof useRouter>;
+
 type RunManagerActionOptions = {
-  router: Router;
+  router: AppRouter;
   clubId: string | null;
   clubName?: string;
   enableAutoFill?: () => void;

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -9,12 +9,24 @@ import {
   Platform,
   Modal,
   Pressable,
+  Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '@/contexts/AuthContext';
 import { api } from '@/lib/api';
+import { AppleSignInButton } from '@/components/auth/AppleSignInButton';
+import {
+  getAppleSignInErrorMessage,
+  getPendingAppleSignup,
+  isApplePlatform,
+  isAppleSignInAvailable,
+  setPendingAppleSignup,
+  signInWithApple,
+} from '@/lib/apple-auth';
+import { isClub } from '@/lib/roles';
+import { describeAxiosError, devLog, devWarn } from '@/lib/debug';
 import { ui } from '@/theme/tokens';
 import { Screen, AppCard, InputField, PrimaryButton, FadeInUp, PressableScale } from '@/components/padely';
 import type { PlayerCategory, UserRole } from '@/lib/types';
@@ -38,11 +50,24 @@ export default function RegisterScreen() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [appleLoading, setAppleLoading] = useState(false);
+  const [appleEnabled, setAppleEnabled] = useState(false);
+  const [appleSignup, setAppleSignup] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [fejubaMatches, setFejubaMatches] = useState<FejubaMatch[]>([]);
   const [showMatchPicker, setShowMatchPicker] = useState(false);
 
   const normalizedDni = useMemo(() => dni.replace(/\D/g, ''), [dni]);
+  const showApple = isApplePlatform() && appleEnabled;
+
+  useEffect(() => {
+    void isAppleSignInAvailable().then(setAppleEnabled);
+    const pending = getPendingAppleSignup();
+    if (!pending) return;
+    setAppleSignup(true);
+    if (pending.email) setEmail(pending.email);
+    if (pending.fullName) setName(pending.fullName);
+  }, []);
 
   const validate = () => {
     const next: Record<string, string> = {};
@@ -52,29 +77,46 @@ export default function RegisterScreen() {
     }
     if (!email) next.email = 'El email es requerido';
     else if (!/\S+@\S+\.\S+/.test(email)) next.email = 'Email inválido';
-    if (!password || password.length < 6) next.password = 'Mínimo 6 caracteres';
-    if (password !== confirmPassword) next.confirmPassword = 'Las contraseñas no coinciden';
+    if (!appleSignup) {
+      if (!password || password.length < 6) next.password = 'Mínimo 6 caracteres';
+      if (password !== confirmPassword) next.confirmPassword = 'Las contraseñas no coinciden';
+    }
     setErrors(next);
     return Object.keys(next).length === 0;
   };
 
   const registerAccount = async (match: FejubaMatch | null) => {
     setLoading(true);
+    devLog('register', 'POST /auth/register', {
+      role,
+      email: email.trim(),
+      dni: role === 'PLAYER' ? normalizedDni : undefined,
+      fejubaId: match?.fejubaId ?? null,
+    });
     try {
+      const pending = appleSignup ? getPendingAppleSignup() : null;
+      if (appleSignup && !pending?.identityToken) {
+        Alert.alert('Error', 'Se perdió la sesión de Apple. Volvé a tocar Continuar con Apple.');
+        return;
+      }
       const response = await api.post('/auth/register', {
         email: email.trim(),
-        password,
+        ...(pending?.identityToken
+          ? { identityToken: pending.identityToken }
+          : { password }),
         role,
         name:
           role === 'CLUB_ADMIN'
-            ? name.trim()
-            : match?.fullName || undefined,
+            ? name.trim() || pending?.fullName
+            : match?.fullName || pending?.fullName || undefined,
         dni: role === 'PLAYER' ? normalizedDni : undefined,
         declaredCategory: role === 'PLAYER' ? match?.category || undefined : undefined,
         gender: role === 'PLAYER' ? match?.genderHint || undefined : undefined,
         fejubaId: match?.fejubaId,
         fejubaCategory: match?.rawCategory || match?.category || undefined,
       });
+      devLog('register', 'cuenta creada', { userId: response.data?.user?.id });
+      setPendingAppleSignup(null);
       await login(response.data.access_token, {
         ...response.data.user,
         fejubaFound: Boolean(match),
@@ -83,8 +125,9 @@ export default function RegisterScreen() {
         role === 'CLUB_ADMIN' ? '/(tabs)/profile' : '/onboarding',
       );
     } catch (error: any) {
-      const message = error.response?.data?.message || 'Error al crear cuenta';
-      Alert.alert('Error', typeof message === 'string' ? message : JSON.stringify(message));
+      const message = describeAxiosError(error);
+      devWarn('register', 'falló POST /auth/register', message);
+      Alert.alert('Error', message);
     } finally {
       setLoading(false);
     }
@@ -99,6 +142,7 @@ export default function RegisterScreen() {
     }
 
     setLoading(true);
+    devLog('register', 'GET /auth/fejuba-lookup', { dni: normalizedDni });
     try {
       const lookup = await api.get('/auth/fejuba-lookup', {
         params: { dni: normalizedDni },
@@ -106,6 +150,7 @@ export default function RegisterScreen() {
       const matches: FejubaMatch[] = Array.isArray(lookup.data?.matches)
         ? lookup.data.matches
         : [];
+      devLog('register', 'fejuba-lookup ok', { count: matches.length });
 
       if (matches.length === 0) {
         await registerAccount(null);
@@ -122,7 +167,10 @@ export default function RegisterScreen() {
       setLoading(false);
     } catch (error: any) {
       // Si el lookup falla, seguimos con registro manual en onboarding.
-      console.warn('[register] category lookup failed', error?.message);
+      devWarn('register', 'fejuba-lookup falló, sigo con registro', {
+        message: error?.message,
+        code: error?.code,
+      });
       await registerAccount(null);
     }
   };
@@ -132,6 +180,41 @@ export default function RegisterScreen() {
     await registerAccount(match);
   };
 
+  const handleApple = async () => {
+    if (!isApplePlatform()) return;
+    setAppleLoading(true);
+    try {
+      const { identityToken, fullName } = await signInWithApple();
+      const response = await api.post('/auth/apple', { identityToken, fullName });
+      if (response.data?.needsRegistration) {
+        setPendingAppleSignup({
+          identityToken,
+          email: response.data.email,
+          fullName: response.data.fullName || fullName,
+        });
+        setAppleSignup(true);
+        setEmail(response.data.email || '');
+        if (response.data.fullName || fullName) {
+          setName(response.data.fullName || fullName || '');
+        }
+        setStep('form');
+        return;
+      }
+      await login(response.data.access_token, response.data.user);
+      const nextRole = response.data.user?.role;
+      router.replace(isClub(nextRole) ? '/(tabs)/gerente' : '/(tabs)/home');
+    } catch (error: any) {
+      const apiMessage = error.response?.data?.message;
+      const message =
+        typeof apiMessage === 'string' ? apiMessage : getAppleSignInErrorMessage(error);
+      if (message !== 'Inicio de sesión cancelado') {
+        Alert.alert('Error', message);
+      }
+    } finally {
+      setAppleLoading(false);
+    }
+  };
+
   if (step === 'role') {
     return (
       <Screen>
@@ -139,20 +222,16 @@ export default function RegisterScreen() {
           <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: ui.spacing.lg }}>
             <FadeInUp index={0}>
               <View style={{ alignItems: 'center', marginBottom: 32 }}>
-                <LinearGradient
-                  colors={[ui.colors.primary, ui.colors.accent]}
+                <Image
+                  source={require('../../assets/x4match.png')}
+                  accessibilityLabel="x4 match"
                   style={{
-                    width: 72,
-                    height: 72,
-                    borderRadius: 22,
-                    alignItems: 'center',
-                    justifyContent: 'center',
+                    width: 96,
+                    height: 96,
+                    borderRadius: 24,
                     marginBottom: 16,
-                    ...ui.shadow.glow,
                   }}
-                >
-                  <Ionicons name="tennisball" size={34} color="#0A0A0A" />
-                </LinearGradient>
+                />
                 <Text style={[ui.typography.h1, { color: ui.colors.textPrimary }]}>Crear cuenta</Text>
                 <Text style={[ui.typography.bodySm, { color: ui.colors.textSecondary, marginTop: 4 }]}>
                   Elegí cómo querés usar x4 match
@@ -234,8 +313,38 @@ export default function RegisterScreen() {
             </AppCard>
 
             <View style={{ marginTop: 24 }}>
-              <PrimaryButton label="Continuar" onPress={() => setStep('form')} fullWidth size="lg" />
+              <PrimaryButton
+                label="Continuar"
+                onPress={() => setStep('form')}
+                disabled={appleLoading}
+                fullWidth
+                size="lg"
+              />
             </View>
+
+            {showApple ? (
+              <>
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 12,
+                    marginTop: 20,
+                    marginBottom: 16,
+                  }}
+                >
+                  <View style={{ flex: 1, height: 1, backgroundColor: ui.colors.border }} />
+                  <Text style={{ color: ui.colors.textMuted, fontSize: 13 }}>o</Text>
+                  <View style={{ flex: 1, height: 1, backgroundColor: ui.colors.border }} />
+                </View>
+                <AppleSignInButton
+                  variant="sign-up"
+                  loading={appleLoading}
+                  disabled={appleLoading}
+                  onPress={() => void handleApple()}
+                />
+              </>
+            ) : null}
 
             <PressableScale
               onPress={() => router.push('/(auth)/login')}
@@ -274,9 +383,13 @@ export default function RegisterScreen() {
             {role === 'PLAYER' ? 'Creá tu cuenta' : 'Datos del club'}
           </Text>
           <Text style={{ color: ui.colors.textSecondary, marginBottom: 24 }}>
-            {role === 'PLAYER'
-              ? 'Con tu DNI buscamos tu categoría federada si estás registrado.'
-              : 'Completá tus datos para continuar'}
+            {appleSignup
+              ? role === 'PLAYER'
+                ? 'Entrás con Apple. Completá tu DNI para buscar tu categoría federada.'
+                : 'Entrás con Apple. Completá los datos del club para continuar.'
+              : role === 'PLAYER'
+                ? 'Con tu DNI buscamos tu categoría federada si estás registrado.'
+                : 'Completá tus datos para continuar'}
           </Text>
 
           {role === 'CLUB_ADMIN' ? (
@@ -304,26 +417,32 @@ export default function RegisterScreen() {
             value={email}
             onChangeText={setEmail}
             error={errors.email}
+            hint={appleSignup ? 'Lo provee Apple. No hace falta contraseña.' : undefined}
             keyboardType="email-address"
             autoCapitalize="none"
+            editable={!appleSignup}
             leftIcon={<Ionicons name="mail-outline" size={20} color={ui.colors.textMuted} />}
           />
-          <InputField
-            label="Contraseña"
-            value={password}
-            onChangeText={setPassword}
-            error={errors.password}
-            secureTextEntry
-            leftIcon={<Ionicons name="lock-closed-outline" size={20} color={ui.colors.textMuted} />}
-          />
-          <InputField
-            label="Confirmar contraseña"
-            value={confirmPassword}
-            onChangeText={setConfirmPassword}
-            error={errors.confirmPassword}
-            secureTextEntry
-            leftIcon={<Ionicons name="lock-closed-outline" size={20} color={ui.colors.textMuted} />}
-          />
+          {appleSignup ? null : (
+            <>
+              <InputField
+                label="Contraseña"
+                value={password}
+                onChangeText={setPassword}
+                error={errors.password}
+                secureTextEntry
+                leftIcon={<Ionicons name="lock-closed-outline" size={20} color={ui.colors.textMuted} />}
+              />
+              <InputField
+                label="Confirmar contraseña"
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                error={errors.confirmPassword}
+                secureTextEntry
+                leftIcon={<Ionicons name="lock-closed-outline" size={20} color={ui.colors.textMuted} />}
+              />
+            </>
+          )}
 
           <PrimaryButton
             label={role === 'PLAYER' ? 'Continuar' : 'Crear cuenta'}

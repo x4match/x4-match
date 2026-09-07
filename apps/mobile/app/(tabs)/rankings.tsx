@@ -44,7 +44,7 @@ export default function TournamentsTabScreen() {
   const tournamentList: Tournament[] = (tournaments || []).map(mapTournament);
   const circuitList: Circuit[] = (circuits || [])
     .map(safeMapCircuit)
-    .filter((c): c is Circuit => c != null && Boolean(c.id));
+    .filter((c: Circuit | null): c is Circuit => c != null && Boolean(c.id));
 
   return (
     <Screen>

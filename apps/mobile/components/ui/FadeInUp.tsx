@@ -1,5 +1,5 @@
 import { ReactNode, useEffect, useRef } from 'react';
-import { Animated, StyleProp, View, ViewStyle } from 'react-native';
+import { Animated, Platform, StyleProp, View, ViewStyle } from 'react-native';
 import { useReduceMotion } from '@/lib/reduce-motion';
 import { ui } from '@/theme/tokens';
 
@@ -10,8 +10,12 @@ type FadeInUpProps = {
   delay?: number;
 };
 
+// En Android+Fabric, animar opacity+transform al montar tabs pesados dispara
+// IllegalStateException addViewAt. Preferimos montaje estático ahí.
+const skipEntranceAnimation = Platform.OS === 'android';
+
 export function FadeInUp({ children, index = 0, style, delay = 0 }: FadeInUpProps) {
-  const reduceMotion = useReduceMotion();
+  const reduceMotion = useReduceMotion() || skipEntranceAnimation;
   const progress = useRef(new Animated.Value(reduceMotion ? 1 : 0)).current;
 
   useEffect(() => {
@@ -44,7 +48,7 @@ export function FadeInUp({ children, index = 0, style, delay = 0 }: FadeInUpProp
 }
 
 export function FadeInView({ children, style, delay = 0 }: Omit<FadeInUpProps, 'index'>) {
-  const reduceMotion = useReduceMotion();
+  const reduceMotion = useReduceMotion() || skipEntranceAnimation;
   const opacity = useRef(new Animated.Value(reduceMotion ? 1 : 0)).current;
 
   useEffect(() => {

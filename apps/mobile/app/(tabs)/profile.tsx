@@ -111,7 +111,7 @@ function MenuRow({
 }
 
 export default function ProfileScreen() {
-  const { user, logout, updateUser } = useAuth();
+  const { user, token, logout, updateUser } = useAuth();
   const { preference, cyclePreference } = useTheme();
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -128,6 +128,7 @@ export default function ProfileScreen() {
   const isClubAccount = useMemo(() => isClub(user?.role), [user?.role]);
   const canOrganize = useMemo(() => canOrganizeEvents(user?.role) && !isClub(user?.role), [user?.role]);
   const isPlayerAccount = useMemo(() => isPlayer(user?.role), [user?.role]);
+  const authed = Boolean(token);
 
   const { data: me, refetch, isRefetching } = useQuery({
     queryKey: ['profile-me'],
@@ -142,6 +143,7 @@ export default function ProfileScreen() {
       }
       return authRes.data;
     },
+    enabled: authed,
   });
 
   const mainClubId = resolveMainClubId(me?.mainClubId ?? user?.mainClubId);
@@ -152,7 +154,7 @@ export default function ProfileScreen() {
       const res = await api.get(`/clubs/${mainClubId}`);
       return res.data as ProfileClub;
     },
-    enabled: isPlayerAccount && !!mainClubId,
+    enabled: authed && isPlayerAccount && !!mainClubId,
   });
 
   const mainClub: ProfileClub | null = me?.mainClub ?? mainClubFetched ?? null;
@@ -170,7 +172,7 @@ export default function ProfileScreen() {
       const res = await api.get('/clubs');
       return res.data as ProfileClub[];
     },
-    enabled: isPlayerAccount && (showClubPicker || !mainClubId),
+    enabled: authed && isPlayerAccount && (showClubPicker || !mainClubId),
   });
 
   const filteredClubs = useMemo(() => {
@@ -209,7 +211,7 @@ export default function ProfileScreen() {
       const res = await api.get('/badges/me');
       return res.data as BadgesSummary;
     },
-    enabled: isPlayer(user?.role),
+    enabled: authed && isPlayer(user?.role),
   });
 
   const { data: followCounts, refetch: refetchFollowCounts, isRefetching: isRefetchingFollows } = useQuery({
@@ -218,7 +220,7 @@ export default function ProfileScreen() {
       const res = await api.get('/follows/me/counts');
       return res.data as { followers: number; following: number };
     },
-    enabled: isPlayer(user?.role),
+    enabled: authed && isPlayer(user?.role),
   });
 
   const { data: matchHistoryRaw, refetch: refetchHistory, isRefetching: isRefetchingHistory } = useQuery({
@@ -227,7 +229,7 @@ export default function ProfileScreen() {
       const res = await api.get('/users/match-history', { params: { limit: 15 } });
       return res.data;
     },
-    enabled: isPlayer(user?.role),
+    enabled: authed && isPlayer(user?.role),
   });
 
   const matchHistory = matchHistoryRaw ? mapPlayerMatchHistory(matchHistoryRaw) : null;

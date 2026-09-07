@@ -78,10 +78,11 @@ type ClubOption = { id: string; name: string; city?: string; zone?: string; logo
 export default function HomeScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { user, updateUser } = useAuth();
+  const { user, token, updateUser } = useAuth();
   const isClubAccount = isClub(user?.role);
   const isEventOrganizerAccount = canOrganizeEvents(user?.role);
   const isPlayerAccount = isPlayer(user?.role);
+  const authed = Boolean(token);
 
   const { data: playerProfile, refetch: refetchPlayerProfile } = useQuery({
     queryKey: ['home-player-profile'],
@@ -95,7 +96,7 @@ export default function HomeScreen() {
         declaredCategory?: string;
       };
     },
-    enabled: isPlayerAccount,
+    enabled: authed && isPlayerAccount,
   });
 
   const playerMainClubId = (() => {
@@ -161,7 +162,7 @@ export default function HomeScreen() {
         category: res.data?.category,
       };
     },
-    enabled: !isClubAccount,
+    enabled: authed && !isClubAccount,
   });
 
   const { data: nearbyPlayers, refetch: refetchNearby, isLoading: loadingNearby } = useQuery({
@@ -174,7 +175,7 @@ export default function HomeScreen() {
       });
       return res.data;
     },
-    enabled: isPlayerAccount && locationReady,
+    enabled: authed && isPlayerAccount && locationReady,
   });
 
   const { data: homeClubs, refetch: refetchHomeClubs, isLoading: loadingHomeClubs } = useQuery({
@@ -183,7 +184,7 @@ export default function HomeScreen() {
       const res = await api.get('/clubs');
       return res.data as ClubOption[];
     },
-    enabled: isEventOrganizerAccount && !isClubAccount,
+    enabled: authed && isEventOrganizerAccount && !isClubAccount,
   });
 
   const { data: tournaments, refetch: refetchTournaments } = useQuery({
@@ -192,7 +193,7 @@ export default function HomeScreen() {
       const res = await api.get('/tournaments');
       return res.data;
     },
-    enabled: !isClubAccount,
+    enabled: authed && !isClubAccount,
   });
 
   const { data: myMatches, refetch: refetchMatches } = useQuery({
@@ -201,7 +202,7 @@ export default function HomeScreen() {
       const res = await api.get('/matches/me');
       return res.data;
     },
-    enabled: isPlayerAccount,
+    enabled: authed && isPlayerAccount,
   });
 
   const { data: playerMe, refetch: refetchPlayerMe } = useQuery({
@@ -210,7 +211,7 @@ export default function HomeScreen() {
       const res = await api.get('/players/me');
       return res.data;
     },
-    enabled: isPlayerAccount,
+    enabled: authed && isPlayerAccount,
   });
 
   const { data: playerMainClubFetched, refetch: refetchPlayerMainClub } = useQuery({
@@ -219,7 +220,7 @@ export default function HomeScreen() {
       const res = await api.get(`/clubs/${playerMainClubId}`);
       return res.data as ClubOption;
     },
-    enabled: isPlayerAccount && !!playerMainClubId,
+    enabled: authed && isPlayerAccount && !!playerMainClubId,
   });
 
   const playerMainClub = playerProfile?.mainClub ?? playerMainClubFetched ?? null;
@@ -230,7 +231,7 @@ export default function HomeScreen() {
       const res = await api.get('/clubs');
       return res.data as ClubOption[];
     },
-    enabled: isPlayerAccount && !playerMainClubId,
+    enabled: authed && isPlayerAccount && !playerMainClubId,
   });
 
   const { data: playerClubLeaderboard, refetch: refetchPlayerClubLeaderboard } = useQuery({
@@ -239,7 +240,7 @@ export default function HomeScreen() {
       const res = await api.get(`/clubs/${playerMainClubId}/leaderboard`);
       return res.data as ClubLeaderboardEntry[];
     },
-    enabled: isPlayerAccount && !!playerMainClubId,
+    enabled: authed && isPlayerAccount && !!playerMainClubId,
   });
 
   const { data: playerClubPoints, refetch: refetchPlayerClubPoints } = useRedeemablePoints(
@@ -253,7 +254,7 @@ export default function HomeScreen() {
       const res = await api.get('/circuits');
       return res.data;
     },
-    enabled: isPlayerAccount,
+    enabled: authed && isPlayerAccount,
   });
 
   const { data: clubs } = useQuery({
@@ -262,7 +263,7 @@ export default function HomeScreen() {
       const res = await api.get('/clubs/mine');
       return res.data;
     },
-    enabled: isClubAccount,
+    enabled: authed && isClubAccount,
   });
 
   const mainClubId = isClubAccount ? clubs?.[0]?.id : undefined;
@@ -273,7 +274,7 @@ export default function HomeScreen() {
       const res = await api.get(`/clubs/${mainClubId}/dashboard`);
       return res.data as ClubDashboard;
     },
-    enabled: isClubAccount && !!mainClubId,
+    enabled: authed && isClubAccount && !!mainClubId,
   });
 
   const { data: clubCourtSlots, refetch: refetchClubSlots, isLoading: loadingClubSlots } = useQuery({
@@ -282,7 +283,7 @@ export default function HomeScreen() {
       const res = await api.get(`/clubs/${mainClubId}/court-slots`);
       return res.data as CourtSlotRow[];
     },
-    enabled: isClubAccount && !!mainClubId,
+    enabled: authed && isClubAccount && !!mainClubId,
   });
 
   const { data: clubMatchesRaw, refetch: refetchClubMatches, isLoading: loadingClubMatches } = useQuery({
@@ -291,7 +292,7 @@ export default function HomeScreen() {
       const res = await api.get(`/clubs/${mainClubId}/matches`);
       return res.data;
     },
-    enabled: isClubAccount && !!mainClubId,
+    enabled: authed && isClubAccount && !!mainClubId,
   });
 
   const playerCircuitList: Circuit[] = ((circuits as any[]) || [])
@@ -308,7 +309,7 @@ export default function HomeScreen() {
       const res = await api.get(`/circuits/${featuredCircuit?.id}`);
       return res.data;
     },
-    enabled: isPlayerAccount && !!featuredCircuit?.id,
+    enabled: authed && isPlayerAccount && !!featuredCircuit?.id,
   });
 
   const featuredCircuitDetail = featuredCircuitRaw ? safeMapCircuit(featuredCircuitRaw) : null;

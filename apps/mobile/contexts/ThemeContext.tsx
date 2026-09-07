@@ -48,6 +48,8 @@ function ThemeTree({ children }: { children: ReactNode }) {
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const systemScheme = useColorScheme();
+  const systemMode: ThemeMode | null | undefined =
+    systemScheme === 'light' || systemScheme === 'dark' ? systemScheme : null;
   const [preference, setPreferenceState] = useState<ThemePreference>('dark');
 
   useEffect(() => {
@@ -68,8 +70,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const resolved = useMemo(
-    () => resolveMode(preference, systemScheme),
-    [preference, systemScheme],
+    () => resolveMode(preference, systemMode),
+    [preference, systemMode],
   );
 
   useEffect(() => {

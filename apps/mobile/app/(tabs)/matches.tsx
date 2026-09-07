@@ -105,14 +105,16 @@ export default function MatchesScreen() {
   const tournamentList: Tournament[] = useMemo(() => {
     const mapped = (tournaments || []).map(mapTournament);
     if (!isPlayer(user?.role)) return mapped;
-    return mapped.filter((t) => playerFitsTournamentCategory(playerCategory, t.category));
+    return mapped.filter((t: Tournament) =>
+      playerFitsTournamentCategory(playerCategory, t.category),
+    );
   }, [tournaments, user?.role, playerCategory]);
 
   const circuitList: Circuit[] = useMemo(
     () =>
       (circuits || [])
         .map(safeMapCircuit)
-        .filter((c): c is Circuit => c != null && Boolean(c.id)),
+        .filter((c: Circuit | null): c is Circuit => c != null && Boolean(c.id)),
     [circuits],
   );
 

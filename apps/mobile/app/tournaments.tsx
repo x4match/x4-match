@@ -40,7 +40,7 @@ export default function TournamentsScreen() {
   const list: Tournament[] = useMemo(() => {
     return (tournaments || [])
       .map(mapTournament)
-      .filter((t) => playerFitsTournamentCategory(playerCategory, t.category));
+      .filter((t: Tournament) => playerFitsTournamentCategory(playerCategory, t.category));
   }, [tournaments, playerCategory]);
 
   return (

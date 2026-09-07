@@ -22,7 +22,8 @@ import { formatSkillRange, resolveSkillScore } from '@/lib/skill';
 import { isClub } from '@/lib/roles';
 import { markDepositPaid } from '@/lib/shop-api';
 import { buildMatchShareMessage, invitePlayersToMatch } from '@/lib/match-share';
-import type { InvitedPlayer, PlayerMatchRating, SetScore } from '@/lib/types';
+import type { InvitedPlayer } from '@/components/padely';
+import type { PlayerMatchRating, SetScore } from '@/lib/types';
 import { ui } from '@/theme/tokens';
 import {
   Screen,

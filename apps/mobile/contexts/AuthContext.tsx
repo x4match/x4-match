@@ -1,8 +1,13 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import * as SecureStore from 'expo-secure-store';
 import { api } from '@/lib/api';
+import { signOutFromGoogle } from '@/lib/google-auth';
 import { queryClient } from '@/lib/query-client';
 import { resolveSkillScore } from '@/lib/skill';
+import {
+  registerForPushNotifications,
+  unregisterPushNotifications,
+} from '@/lib/push-notifications';
 
 interface User {
   id: string;
@@ -59,6 +64,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loadAuth();
   }, []);
 
+  useEffect(() => {
+    if (!token) return;
+    void registerForPushNotifications();
+  }, [token]);
+
   const normalizeUser = (rawUser: User): User => ({
     ...rawUser,
     skillScore: resolveSkillScore(rawUser.skillScore, rawUser.rating),
@@ -70,9 +80,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const storedUser = await SecureStore.getItemAsync('auth_user');
 
       if (storedToken && storedUser) {
+        // Header primero: evita 401 si Home monta en el mismo tick que setUser.
+        api.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
         setToken(storedToken);
         setUser(normalizeUser(JSON.parse(storedUser)));
-        api.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
       }
     } catch (error) {
       console.error('Error loading auth:', error);
@@ -86,11 +97,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const normalizedUser = normalizeUser(newUser);
       await SecureStore.setItemAsync('auth_token', newToken);
       await SecureStore.setItemAsync('auth_user', JSON.stringify(normalizedUser));
-      // Evita mostrar clubs/canchas cacheados de otra sesión
+      // Header antes de clear/setState: clear() puede refetch queries montadas.
+      api.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
       queryClient.clear();
       setToken(newToken);
       setUser(normalizedUser);
-      api.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
     } catch (error) {
       console.error('Error saving auth:', error);
     }
@@ -98,11 +109,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = async () => {
     try {
+      await unregisterPushNotifications();
+      delete api.defaults.headers.common['Authorization'];
       await SecureStore.deleteItemAsync('auth_token');
       await SecureStore.deleteItemAsync('auth_user');
+      await signOutFromGoogle();
       setToken(null);
       setUser(null);
-      delete api.defaults.headers.common['Authorization'];
       queryClient.clear();
     } catch (error) {
       console.error('Error logging out:', error);

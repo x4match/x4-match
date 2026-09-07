@@ -1,30 +1,20 @@
 {
   "expo": {
     "name": "x4 match",
-    "slug": "padelpro",
-    "platforms": [
-      "ios",
-      "android"
-    ],
+    "slug": "x4match",
+    "platforms": ["ios", "android"],
     "version": "1.0.0",
-    "sdkVersion": "54.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
-    "splash": {
-      "image": "./assets/splash.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#000000"
-    },
-    "assetBundlePatterns": [
-      "**/*"
-    ],
+    "assetBundlePatterns": ["**/*"],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.padelpro.app",
+      "bundleIdentifier": "com.x4match.app",
+      "usesAppleSignIn": true,
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "x4 match usa tu ubicación para mostrarte partidos y jugadores cerca tuyo.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "x4 match usa tu ubicación para mostrarte partidos y jugadores cerca tuyo."
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -32,38 +22,58 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#000000"
       },
-      "package": "com.padelpro.app",
-      "usesCleartextTraffic": true,
-      "permissions": [
-        "ACCESS_COARSE_LOCATION",
-        "ACCESS_FINE_LOCATION"
-      ]
+      "package": "x4.match",
+      "permissions": ["ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION"]
     },
-    "scheme": "playtomic",
+    "scheme": "x4match",
     "plugins": [
       "expo-router",
+      "expo-dev-client",
       "expo-secure-store",
       "@react-native-community/datetimepicker",
       "expo-font",
       [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#000000"
+        }
+      ],
+      [
         "expo-location",
         {
           "locationWhenInUsePermission": "x4 match usa tu ubicación para mostrarte partidos y jugadores cerca tuyo."
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ],
+      "expo-apple-authentication",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#000000",
+          "defaultChannel": "default"
         }
       ]
     ],
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "3e49019e-101b-498b-87df-e4c91e98959c"
+        "projectId": "818cbd00-ecdf-430f-92cb-06b429a4e462"
       }
     },
     "owner": "fosorio",
-    "runtimeVersion": {
-      "policy": "appVersion"
-    },
+    "runtimeVersion": "1.2.0",
     "updates": {
-      "url": "https://u.expo.dev/3e49019e-101b-498b-87df-e4c91e98959c"
+      "url": "https://u.expo.dev/818cbd00-ecdf-430f-92cb-06b429a4e462"
     }
   }
 }

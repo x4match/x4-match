@@ -1,6 +1,10 @@
 import axios from 'axios';
+import type { InternalAxiosRequestConfig } from 'axios';
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
+import { devLog, devWarn, redactForLog } from '@/lib/debug';
+
+type TimedRequestConfig = InternalAxiosRequestConfig & { __startedAt?: number };
 
 function stripTrailingSlash(url: string): string {
   return url.replace(/\/$/, '');
@@ -53,32 +57,73 @@ function resolveDevApiUrl(raw: string): string {
   return url;
 }
 
-const API_URL = __DEV__
+export const API_URL = __DEV__
   ? resolveDevApiUrl(process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5000')
   : stripTrailingSlash(process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5000');
 
+const REQUEST_TIMEOUT_MS = 20_000;
+
 export const api = axios.create({
   baseURL: API_URL,
+  timeout: REQUEST_TIMEOUT_MS,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
+if (__DEV__) {
+  devLog('api', `baseURL=${API_URL} (env=${process.env.EXPO_PUBLIC_API_URL || 'unset'})`);
+}
+
 api.interceptors.request.use((config) => {
+  const timed = config as TimedRequestConfig;
+  timed.__startedAt = Date.now();
   if (config.data instanceof FormData) {
     if (config.headers) {
       delete config.headers['Content-Type'];
     }
   }
+  if (__DEV__) {
+    const method = (config.method || 'get').toUpperCase();
+    devLog('api', `→ ${method} ${config.baseURL ?? API_URL}${config.url ?? ''}`, {
+      params: config.params,
+      data: redactForLog(config.data),
+    });
+  }
   return config;
 });
 
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    if (__DEV__) {
+      const started = (response.config as TimedRequestConfig).__startedAt;
+      const ms = started ? Date.now() - started : undefined;
+      const method = (response.config.method || 'get').toUpperCase();
+      devLog(
+        'api',
+        `← ${response.status} ${method} ${response.config.url ?? ''} ${ms != null ? `${ms}ms` : ''}`,
+      );
+    }
+    return response;
+  },
   (error) => {
-    if (error.response?.status === 401) {
-      // Token expirado o inválido
-      // El AuthContext manejará el logout
+    if (__DEV__) {
+      const cfg = error.config as TimedRequestConfig | undefined;
+      const started = cfg?.__startedAt;
+      const ms = started ? Date.now() - started : undefined;
+      const method = (cfg?.method || 'get').toUpperCase();
+      const url = cfg?.url ?? '';
+      if (error.response) {
+        devWarn(
+          'api',
+          `← ${error.response.status} ${method} ${url} ${ms != null ? `${ms}ms` : ''}`,
+          redactForLog(error.response.data),
+        );
+      } else {
+        devWarn('api', `✕ ${method} ${url} ${error.code || 'NO_RESPONSE'} ${ms != null ? `${ms}ms` : ''}`, {
+          message: error.message,
+        });
+      }
     }
     return Promise.reject(error);
   }

@@ -169,7 +169,10 @@ export default function ClubDetailScreen() {
     enabled: !!id && tab === 'rewards',
   });
 
-  const { data: myPoints } = useRedeemablePoints(id, !!user && isPlayerAccount);
+  const { data: myPoints, refetch: refetchPoints } = useRedeemablePoints(
+    typeof id === 'string' ? id : undefined,
+    !!user && isPlayerAccount,
+  );
 
   const { data: courtSlots, refetch: refetchSlots, isLoading: loadingSlots } = useQuery({
     queryKey: ['club-public-court-slots', id],

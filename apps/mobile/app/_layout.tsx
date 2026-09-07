@@ -1,4 +1,5 @@
-import { useEffect, useCallback } from 'react';
+import 'react-native-gesture-handler';
+import { useEffect, useState } from 'react';
 import { Stack } from 'expo-router';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { useFonts, Geist_400Regular, Geist_500Medium, Geist_600SemiBold, Geist_700Bold, Geist_800ExtraBold } from '@expo-google-fonts/geist';
@@ -7,6 +8,7 @@ import { AuthProvider } from '@/contexts/AuthContext';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import { ToastProvider } from '@/components/ui/Toast';
 import { applyGeistTextDefaults } from '@/lib/apply-geist';
+import { configureGoogleSignIn } from '@/lib/google-auth';
 import { queryClient } from '@/lib/query-client';
 import { ui } from '@/theme/tokens';
 import '../global.css';
@@ -27,26 +29,43 @@ export const Colors = {
 };
 
 export default function RootLayout() {
-  const [fontsLoaded] = useFonts({
+  const [fontsLoaded, fontError] = useFonts({
     Geist_400Regular,
     Geist_500Medium,
     Geist_600SemiBold,
     Geist_700Bold,
     Geist_800ExtraBold,
   });
+  const [splashTimedOut, setSplashTimedOut] = useState(false);
 
-  const onLayoutRootView = useCallback(async () => {
-    if (fontsLoaded) {
-      await SplashScreen.hideAsync();
-    }
-  }, [fontsLoaded]);
+  const ready = fontsLoaded || fontError || splashTimedOut;
 
   useEffect(() => {
+    configureGoogleSignIn();
+  }, []);
+
+  useEffect(() => {
+    if (!ready) return;
+
     if (fontsLoaded) {
       applyGeistTextDefaults();
     }
-    onLayoutRootView();
-  }, [fontsLoaded, onLayoutRootView]);
+
+    void SplashScreen.hideAsync();
+  }, [ready, fontsLoaded]);
+
+  // Evita pantalla en blanco si las fuentes tardan o fallan en Expo Go.
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      setSplashTimedOut(true);
+      void SplashScreen.hideAsync();
+    }, 4000);
+    return () => clearTimeout(timeout);
+  }, []);
+
+  if (!ready) {
+    return null;
+  }
 
   return (
     <QueryClientProvider client={queryClient}>

@@ -296,24 +296,6 @@ export default function ClubPaymentsScreen() {
               onMockConnect={() => mockConnectMutation.mutate()}
               mockLoading={mockConnectMutation.isPending}
             />
-
-            <AppCard style={{ marginTop: 8 }}>
-              <Text style={{ fontWeight: '700', color: ui.colors.textPrimary, marginBottom: 8 }}>
-                ¿Cómo funciona?
-              </Text>
-              {[
-                'El jugador paga la seña con Mercado Pago del club.',
-                'x4 match solo registra el estado (cobrado / pendiente).',
-                'La suscripción de x4 match se cobra aparte, nunca mezclada.',
-              ].map((line) => (
-                <View key={line} style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
-                  <Ionicons name="checkmark-circle" size={16} color={ui.colors.primary} style={{ marginTop: 2 }} />
-                  <Text style={{ flex: 1, fontSize: 13, color: ui.colors.textSecondary, lineHeight: 18 }}>
-                    {line}
-                  </Text>
-                </View>
-              ))}
-            </AppCard>
           </>
         )}
       </ScrollView>

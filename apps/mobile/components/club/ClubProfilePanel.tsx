@@ -1,5 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
-import { View, Text, ScrollView, Alert, RefreshControl, TouchableOpacity, ActivityIndicator, Image } from 'react-native';
+import {
+  View,
+  Text,
+  ScrollView,
+  Alert,
+  RefreshControl,
+  TouchableOpacity,
+  ActivityIndicator,
+  Image,
+  Linking,
+} from 'react-native';
 import { useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
@@ -76,14 +86,40 @@ const CLUB_TABS: { key: ClubTab; label: string }[] = [
   { key: 'billing', label: 'Factura' },
 ];
 
+/** Comercial: Pilot/Club → GROWTH; Club Pro → PRO. BASIC = legacy. */
 const PLANS = [
-  { id: 'BASIC', label: 'Básico', price: 'Gratis', desc: 'Gestión esencial del club', multiplier: 'x1' },
-  { id: 'GROWTH', label: 'Growth', price: 'Consultar', desc: 'Multiplicador en horarios promo', multiplier: 'x1.5' },
-  { id: 'PRO', label: 'Pro', price: 'Consultar', desc: 'Máximo alcance y promos', multiplier: 'x2' },
+  {
+    id: 'BASIC',
+    label: 'Básico (legacy)',
+    price: '—',
+    desc: 'Plan técnico legacy. El comercial Pilot/Club usa Growth.',
+    multiplier: 'x1',
+    commercial: false,
+  },
+  {
+    id: 'GROWTH',
+    label: 'Club',
+    price: '$49.900 + IVA / mes',
+    desc: 'Plan comercial post-trial. Hasta 6 canchas, 5 torneos, promos x1.5.',
+    multiplier: 'x1.5',
+    commercial: true,
+  },
+  {
+    id: 'PRO',
+    label: 'Club Pro',
+    price: 'Próximamente',
+    desc: 'Multi-sede, circuitos, export y promos x2.',
+    multiplier: 'x2',
+    commercial: true,
+  },
 ] as const;
 
+const BILLING_CONTACT_URL = 'https://x4match.com/#planes';
+const BILLING_CONTACT_MAIL =
+  'mailto:clubes@x4match.com?subject=Plan%20Club%20x4%20match';
+
 function planLabel(plan?: string) {
-  return PLANS.find((p) => p.id === plan)?.label ?? 'Básico';
+  return PLANS.find((p) => p.id === plan)?.label ?? 'Club';
 }
 
 function ClubTabBar({ active, onChange }: { active: ClubTab; onChange: (t: ClubTab) => void }) {
@@ -341,19 +377,6 @@ export function ClubProfilePanel({ onLogout }: ClubProfilePanelProps) {
       Alert.alert('Listo', 'Datos del club actualizados');
     },
     onError: (err: any) => Alert.alert('Error', err.response?.data?.message || 'No se pudo guardar'),
-  });
-
-  const updatePlan = useMutation({
-    mutationFn: async (subscriptionPlan: string) => {
-      if (!activeClubId) return;
-      await api.patch(`/clubs/${activeClubId}`, { subscriptionPlan });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['club-profile-clubs'] });
-      queryClient.invalidateQueries({ queryKey: ['club-profile-detail', activeClubId] });
-      Alert.alert('Listo', 'Plan de suscripción actualizado');
-    },
-    onError: (err: any) => Alert.alert('Error', err.response?.data?.message || 'No se pudo cambiar el plan'),
   });
 
   const createVenue = useMutation({
@@ -738,9 +761,20 @@ export function ClubProfilePanel({ onLogout }: ClubProfilePanelProps) {
 
       {tab === 'subscription' && (
         <>
-          <SectionHeader title="Suscripción" subtitle={`Plan actual: ${planLabel(currentPlan)}`} />
-          {PLANS.map((plan) => {
-            const selected = currentPlan === plan.id;
+          <SectionHeader
+            title="Suscripción"
+            subtitle={`Plan actual: ${planLabel(currentPlan)} · Pilot 90 días gratis, después Club`}
+          />
+          <AppCard style={{ marginBottom: 12 }}>
+            <Text style={{ fontSize: 13, color: ui.colors.textSecondary, lineHeight: 20 }}>
+              El plan Club se paga fuera de la app (web, link Mercado Pago o transferencia). No hay
+              checkout de suscripción en iOS. Las señas de jugadores van a la Mercado Pago del club.
+            </Text>
+          </AppCard>
+          {PLANS.filter((plan) => plan.commercial).map((plan) => {
+            const selected =
+              currentPlan === plan.id ||
+              (plan.id === 'GROWTH' && (!currentPlan || currentPlan === 'BASIC'));
             return (
               <AppCard
                 key={plan.id}
@@ -751,32 +785,39 @@ export function ClubProfilePanel({ onLogout }: ClubProfilePanelProps) {
                 }}
               >
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
-                  <Text style={{ fontWeight: '800', fontSize: 17, color: ui.colors.textPrimary }}>{plan.label}</Text>
+                  <Text style={{ fontWeight: '800', fontSize: 17, color: ui.colors.textPrimary }}>
+                    {plan.label}
+                  </Text>
                   <Text style={{ fontWeight: '700', color: ui.colors.primary }}>{plan.multiplier}</Text>
                 </View>
-                <Text style={{ fontSize: 13, color: ui.colors.textSecondary, marginBottom: 8 }}>{plan.desc}</Text>
-                <Text style={{ fontSize: 12, color: ui.colors.textMuted, marginBottom: 12 }}>{plan.price}</Text>
-                {!selected && (
-                  <PrimaryButton
-                    label={`Cambiar a ${plan.label}`}
-                    size="sm"
-                    variant="outline"
-                    fullWidth
-                    loading={updatePlan.isPending}
-                    onPress={() =>
-                      Alert.alert('Cambiar plan', `¿Confirmás el plan ${plan.label}?`, [
-                        { text: 'Cancelar', style: 'cancel' },
-                        { text: 'Confirmar', onPress: () => updatePlan.mutate(plan.id) },
-                      ])
-                    }
-                  />
-                )}
-                {selected && (
-                  <Text style={{ fontSize: 12, fontWeight: '700', color: ui.colors.primary }}>Plan activo</Text>
-                )}
+                <Text style={{ fontSize: 13, color: ui.colors.textSecondary, marginBottom: 8 }}>
+                  {plan.desc}
+                </Text>
+                <Text style={{ fontSize: 12, color: ui.colors.textMuted, marginBottom: 12 }}>
+                  {plan.price}
+                </Text>
+                {selected ? (
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: ui.colors.primary }}>
+                    Plan activo / incluido en trial
+                  </Text>
+                ) : null}
               </AppCard>
             );
           })}
+          <PrimaryButton
+            label="Ver planes en la web"
+            size="sm"
+            fullWidth
+            onPress={() => Linking.openURL(BILLING_CONTACT_URL)}
+            style={{ marginBottom: 8 }}
+          />
+          <PrimaryButton
+            label="Contactar por email"
+            size="sm"
+            variant="outline"
+            fullWidth
+            onPress={() => Linking.openURL(BILLING_CONTACT_MAIL)}
+          />
         </>
       )}
 

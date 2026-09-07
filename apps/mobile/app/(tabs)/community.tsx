@@ -266,7 +266,7 @@ export default function CommunityScreen() {
   const masterTournaments = tournamentList.filter(isMasterTournament);
   const circuitList: Circuit[] = (circuitsRaw || [])
     .map(safeMapCircuit)
-    .filter((c): c is Circuit => c != null && Boolean(c.id));
+    .filter((c: Circuit | null): c is Circuit => c != null && Boolean(c.id));
 
   const shareRanking = async () => {
     if (!ranking?.length || !activeClub) {
