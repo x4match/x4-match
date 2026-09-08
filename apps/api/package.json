@@ -23,6 +23,7 @@
     "db:migrate:executed": "dotenv -e .env -- ts-node --transpile-only ./src/database/umzug/run-migrations.ts executed",
     "db:migrate:create": "dotenv -e .env -- ts-node --transpile-only ./src/database/umzug/run-migrations.ts create",
     "db:seed": "dotenv -e .env -- ts-node --transpile-only ./src/database/seed/run-seed.ts",
+    "db:seed:app-review": "dotenv -e .env -- ts-node --transpile-only ./src/database/seed/seed-app-review.ts",
     "db:seed:open-matches": "dotenv -e .env -- ts-node --transpile-only ./src/database/seed/seed-open-matches.ts",
     "db:setup": "pnpm db:migrate && pnpm db:seed"
   },

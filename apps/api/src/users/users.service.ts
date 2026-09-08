@@ -591,6 +591,40 @@ export class UsersService {
 
     return { photo: upload.secure_url };
   }
+
+  async deleteAccount(userId: string) {
+    const existing = await this.db.query(`SELECT id FROM users WHERE id = $1`, [userId]);
+    if (!existing.rows[0]) {
+      throw new NotFoundException('Usuario no encontrado');
+    }
+
+    const photo = await this.db.query(`SELECT photo_url FROM players WHERE user_id = $1`, [
+      userId,
+    ]);
+    const previousPhotoUrl = photo.rows[0]?.photo_url as string | undefined;
+
+    try {
+      await this.db.query(`UPDATE matches SET created_by_user_id = NULL WHERE created_by_user_id = $1`, [
+        userId,
+      ]);
+    } catch {
+      // Si la columna sigue siendo NOT NULL (migración 054 pendiente), el DELETE CASCADE se encarga.
+    }
+
+    try {
+      await this.db.query(`DELETE FROM users WHERE id = $1`, [userId]);
+    } catch {
+      throw new BadRequestException(
+        'No se pudo eliminar la cuenta. Escribí a legal@x4match.com desde tu email registrado.',
+      );
+    }
+
+    if (previousPhotoUrl) {
+      await deleteCloudinaryAsset(previousPhotoUrl).catch(() => undefined);
+    }
+
+    return { ok: true };
+  }
 }
 
 function mapPosition(

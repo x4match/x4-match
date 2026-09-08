@@ -2,7 +2,10 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
+  HttpCode,
+  HttpStatus,
   Patch,
   Post,
   Query,
@@ -75,5 +78,11 @@ export class UsersController {
       throw new BadRequestException('Archivo requerido');
     }
     return this.usersService.uploadAvatar(user.sub, file);
+  }
+
+  @Delete('me')
+  @HttpCode(HttpStatus.OK)
+  deleteAccount(@CurrentUser() user: { sub: string }) {
+    return this.usersService.deleteAccount(user.sub);
   }
 }
