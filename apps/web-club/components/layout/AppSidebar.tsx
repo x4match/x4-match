@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
   AlertTriangle,
+  BarChart3,
   CalendarClock,
   CreditCard,
   LayoutDashboard,
@@ -13,6 +14,7 @@ import {
   Receipt,
   Settings,
   ShoppingBag,
+  Store,
   Sun,
   Trophy,
   Users,
@@ -36,11 +38,13 @@ import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 const NAV = [
   { href: '/panel', label: 'Gerente', icon: LayoutDashboard },
   { href: '/gestion', label: 'Gestión', icon: CalendarClock },
+  { href: '/reportes', label: 'Reportes', icon: BarChart3 },
   { href: '/facturacion', label: 'Facturación', icon: Receipt },
   { href: '/pagos', label: 'Pagos MP', icon: CreditCard },
   { href: '/clientes', label: 'Clientes', icon: Users },
   { href: '/alertas', label: 'Alertas', icon: AlertTriangle },
   { href: '/tienda', label: 'Tienda', icon: ShoppingBag },
+  { href: '/pos', label: 'POS', icon: Store },
   { href: '/ranking', label: 'Ranking', icon: Trophy },
   { href: '/perfil', label: 'Perfil', icon: Settings },
 ];

@@ -45,6 +45,7 @@ import { UpdateCourtScheduleDto } from './dto/update-court-schedule.dto';
 import { UpdateCourtSlotDto } from './dto/update-court-slot.dto';
 import { BlockCourtSlotDto } from './dto/block-court-slot.dto';
 import { UpdateShopStockDto } from './dto/update-shop-stock.dto';
+import { CreatePosSaleDto } from './dto/create-pos-sale.dto';
 import { UpdateClubDto } from './dto/update-club.dto';
 import { UpdateClubPaymentModeDto } from './dto/update-club-payment-mode.dto';
 
@@ -254,6 +255,21 @@ export class ClubsController {
   ) {
     const periodDays = days != null ? parseInt(days, 10) : 30;
     return this.clubManagerService.getManagerReport(
+      id,
+      user.sub,
+      Number.isFinite(periodDays) ? periodDays : 30,
+    );
+  }
+
+  @Get(':id/occupancy-report')
+  @UseGuards(JwtAuthGuard)
+  getOccupancyReport(
+    @Param('id') id: string,
+    @CurrentUser() user: { sub: string },
+    @Query('days') days?: string,
+  ) {
+    const periodDays = days != null ? parseInt(days, 10) : 30;
+    return this.clubManagerService.getOccupancyReport(
       id,
       user.sub,
       Number.isFinite(periodDays) ? periodDays : 30,
@@ -550,6 +566,26 @@ export class ClubsController {
   @UseGuards(JwtAuthGuard)
   listShopSales(@Param('id') id: string, @CurrentUser() user: { sub: string }) {
     return this.clubsService.listShopSales(id, user.sub);
+  }
+
+  @Post(':id/shop/pos/sale')
+  @UseGuards(JwtAuthGuard)
+  createPosSale(
+    @Param('id') id: string,
+    @CurrentUser() user: { sub: string },
+    @Body() dto: CreatePosSaleDto,
+  ) {
+    return this.clubsService.createPosSale(id, user.sub, dto);
+  }
+
+  @Get(':id/shop/pos/day')
+  @UseGuards(JwtAuthGuard)
+  listPosDaySales(
+    @Param('id') id: string,
+    @CurrentUser() user: { sub: string },
+    @Query('date') date?: string,
+  ) {
+    return this.clubsService.listPosDaySales(id, user.sub, date);
   }
 
   @Get(':id/shop/stats')

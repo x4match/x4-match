@@ -31,6 +31,8 @@ import {
 } from '@/components/ui/select';
 import { formatCurrency } from '@/lib/currency';
 import { formatShortDate } from '@/lib/format';
+import { AgendaDayBoard } from '@/components/gestion/AgendaDayBoard';
+import { formatHourLabel, hourToMinutes } from '@/lib/slot-time';
 
 type Court = {
   id: string;
@@ -82,6 +84,7 @@ function GestionInner() {
   const queryClient = useQueryClient();
   const initialTab = params.get('tab') || 'slots';
   const [tab, setTab] = useState(initialTab);
+  const [agendaDate, setAgendaDate] = useState(todayISO());
 
   useEffect(() => {
     if (params.get('tab')) setTab(params.get('tab')!);
@@ -271,8 +274,8 @@ function GestionInner() {
     setCourtId(slot.court_id || '');
     setCourtLabel(slot.court_label);
     setSlotDate(String(slot.slot_date).slice(0, 10));
-    setStartHour(String(slot.start_hour).slice(0, 5));
-    setEndHour(String(slot.end_hour).slice(0, 5));
+    setStartHour(formatHourLabel(hourToMinutes(slot.start_hour) / 60));
+    setEndHour(formatHourLabel(hourToMinutes(slot.end_hour) / 60));
     setSlotPrice(
       String(Math.round(Number(slot.price_per_hour ?? slot.pricePerHour ?? defaultPrice))),
     );
@@ -286,8 +289,8 @@ function GestionInner() {
         courtId: courtId || undefined,
         courtLabel: courtLabel.trim() || 'Cancha 1',
         slotDate,
-        startHour,
-        endHour,
+        startHour: hourToMinutes(startHour) / 60,
+        endHour: hourToMinutes(endHour) / 60,
         pricePerHour: Number.isFinite(parsedPrice) ? parsedPrice : undefined,
       };
       if (editingSlotId) {
@@ -351,6 +354,32 @@ function GestionInner() {
     },
     onError: (err: { response?: { data?: { message?: string } } }) => {
       toast.error(err.response?.data?.message || 'No se pudo desbloquear');
+    },
+  });
+
+  const moveSlot = useMutation({
+    mutationFn: async (payload: {
+      slotId: string;
+      courtId: string;
+      courtLabel: string;
+      slotDate: string;
+      startHour: number;
+      endHour: number;
+    }) => {
+      await api.patch(`/clubs/${activeClubId}/court-slots/${payload.slotId}`, {
+        courtId: payload.courtId,
+        courtLabel: payload.courtLabel,
+        slotDate: payload.slotDate,
+        startHour: payload.startHour,
+        endHour: payload.endHour,
+      });
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['court-slots', activeClubId] });
+      toast.success('Turno movido');
+    },
+    onError: (err: { response?: { data?: { message?: string } } }) => {
+      toast.error(err.response?.data?.message || 'No se pudo mover el turno');
     },
   });
 
@@ -534,13 +563,37 @@ function GestionInner() {
         </TabsList>
 
         <TabsContent value="slots" className="space-y-4 mt-4">
-          <div className="flex justify-end">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div className="space-y-1">
+              <Label>Agenda del día</Label>
+              <Input
+                type="date"
+                value={agendaDate}
+                onChange={(e) => setAgendaDate(e.target.value)}
+                className="w-full rounded-xl sm:w-48"
+              />
+              <p className="text-xs text-muted-foreground">
+                Arrastrá turnos libres o bloqueados a otra cancha/hora. Los reservados no se mueven.
+              </p>
+            </div>
             <Button className="rounded-xl" onClick={openNewSlot}>
               Nuevo turno
             </Button>
           </div>
+
+          <AgendaDayBoard
+            date={agendaDate}
+            courts={(courtsQuery.data || []).map((c) => ({ id: c.id, name: c.name }))}
+            slots={slotsQuery.data || []}
+            moving={moveSlot.isPending}
+            onMove={(payload) => moveSlot.mutate(payload)}
+          />
+
           <div className="space-y-2">
-            {(slotsQuery.data || []).map((slot) => (
+            <p className="text-sm font-medium text-muted-foreground">Lista del día</p>
+            {(slotsQuery.data || [])
+              .filter((s) => String(s.slot_date).slice(0, 10) === agendaDate)
+              .map((slot) => (
               <Card key={slot.id} className="bg-card">
                 <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
                   <div>
@@ -548,11 +601,12 @@ function GestionInner() {
                       {slot.court_label} · {formatShortDate(slot.slot_date)}
                     </p>
                     <p className="text-sm text-muted-foreground">
-                      {String(slot.start_hour).slice(0, 5)} – {String(slot.end_hour).slice(0, 5)} ·{' '}
+                      {formatHourLabel(hourToMinutes(slot.start_hour) / 60)} –{' '}
+                      {formatHourLabel(hourToMinutes(slot.end_hour) / 60)} ·{' '}
                       {formatCurrency(slot.price_per_hour ?? slot.pricePerHour ?? 0)}/h
                     </p>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2">
                     <Badge variant="secondary">{slot.status || 'OPEN'}</Badge>
                     {slot.status === 'OPEN' ? (
                       <Button
@@ -591,8 +645,8 @@ function GestionInner() {
                 </CardContent>
               </Card>
             ))}
-            {!slotsQuery.data?.length ? (
-              <EmptyState title="Sin turnos" description="Publicá el primer horario disponible." />
+            {!(slotsQuery.data || []).some((s) => String(s.slot_date).slice(0, 10) === agendaDate) ? (
+              <EmptyState title="Sin turnos este día" description="Publicá un horario o cambiá la fecha." />
             ) : null}
           </div>
         </TabsContent>

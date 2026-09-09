@@ -103,6 +103,58 @@ export async function listShopSales(clubId: string) {
   return res.data as ShopSaleRow[];
 }
 
+export async function listShopProductsAdmin(clubId: string) {
+  const res = await api.get(`/clubs/${clubId}/shop/products/manage`);
+  return res.data as ShopProduct[];
+}
+
+export type PosDaySale = {
+  id: string;
+  sale_group_id?: string | null;
+  quantity: number;
+  unit_price?: number | string;
+  subtotal: number | string;
+  status: string;
+  payment_method?: string | null;
+  note?: string | null;
+  created_at: string;
+  product_name: string;
+  user_name: string;
+  sold_by_name?: string | null;
+};
+
+export type PosDaySales = {
+  date: string;
+  total: number;
+  byMethod: Record<string, number>;
+  sales: PosDaySale[];
+};
+
+export async function createPosSale(
+  clubId: string,
+  payload: {
+    items: Array<{ productId: string; quantity: number }>;
+    paymentMethod: 'CASH' | 'MP' | 'MANUAL' | 'OTHER';
+    customerUserId?: string;
+    note?: string;
+  },
+) {
+  const res = await api.post(`/clubs/${clubId}/shop/pos/sale`, payload);
+  return res.data as {
+    saleGroupId: string;
+    paymentMethod: string;
+    total: number;
+    items: Array<{ id: string; product_name: string; quantity: number; subtotal: number }>;
+  };
+}
+
+export async function listPosDaySales(clubId: string, date?: string) {
+  const res = await api.get(`/clubs/${clubId}/shop/pos/day`, {
+    params: date ? { date } : undefined,
+  });
+  return res.data as PosDaySales;
+}
+
 export async function uploadShopProductPhoto(
   clubId: string,
   productId: string,
