@@ -64,6 +64,23 @@ export class MatchesRepository {
     );
   }
 
+  async getCourtSlotRow(slotId: string, clubId?: string) {
+    const result = await this.db.query(
+      `SELECT id, club_id, status
+       FROM court_availability_slots
+       WHERE id = $1
+         AND ($2::uuid IS NULL OR club_id = $2)`,
+      [slotId, clubId ?? null],
+    );
+    return result.rows[0] as { id: string; club_id: string; status: string } | undefined;
+  }
+
+  /** Verifica que el turno exista y esté OPEN (aún no se bloquea al armar el partido). */
+  async isCourtSlotOpen(slotId: string, clubId: string): Promise<boolean> {
+    const slot = await this.getCourtSlotRow(slotId, clubId);
+    return !!slot && slot.status === 'OPEN';
+  }
+
   async bookCourtSlot(slotId: string, clubId: string) {
     const result = await this.db.query(
       `UPDATE court_availability_slots
@@ -86,6 +103,71 @@ export class MatchesRepository {
       [slotId],
     );
     return result.rowCount ?? 0;
+  }
+
+  async clearMatchCourt(matchId: string) {
+    await this.db.query(
+      `UPDATE matches
+       SET court_slot_id = NULL,
+           court_booking = CASE WHEN court_booking = 'in_app' THEN 'none' ELSE court_booking END,
+           updated_at = NOW()
+       WHERE id = $1`,
+      [matchId],
+    );
+  }
+
+  /** Quita el turno de otros partidos que competían por el mismo slot. */
+  async clearCompetingMatchCourts(slotId: string, winnerMatchId: string): Promise<string[]> {
+    const result = await this.db.query(
+      `UPDATE matches
+       SET court_slot_id = NULL,
+           court_booking = CASE WHEN court_booking = 'in_app' THEN 'none' ELSE court_booking END,
+           updated_at = NOW()
+       WHERE court_slot_id = $1
+         AND id <> $2
+         AND status NOT IN ('CANCELLED', 'FINISHED')
+       RETURNING id`,
+      [slotId, winnerMatchId],
+    );
+    return result.rows.map((row) => String(row.id));
+  }
+
+  /**
+   * Reserva la cancha solo cuando el partido ya está pagado/confirmado.
+   * Si otro partido llegó primero, limpia el slot de este match.
+   */
+  async bookCourtForConfirmedMatch(matchId: string): Promise<{
+    status: 'booked' | 'already_booked' | 'unavailable' | 'no_slot';
+    displacedMatchIds: string[];
+  }> {
+    const match = await this.getById(matchId);
+    if (!match?.court_slot_id || !match.club_id) {
+      return { status: 'no_slot', displacedMatchIds: [] };
+    }
+
+    const slot = await this.getCourtSlotRow(match.court_slot_id, match.club_id);
+    if (!slot) {
+      await this.clearMatchCourt(matchId);
+      return { status: 'unavailable', displacedMatchIds: [] };
+    }
+
+    if (slot.status === 'BOOKED') {
+      return { status: 'already_booked', displacedMatchIds: [] };
+    }
+
+    if (slot.status !== 'OPEN') {
+      await this.clearMatchCourt(matchId);
+      return { status: 'unavailable', displacedMatchIds: [] };
+    }
+
+    const booked = await this.bookCourtSlot(match.court_slot_id, match.club_id);
+    if (!booked) {
+      await this.clearMatchCourt(matchId);
+      return { status: 'unavailable', displacedMatchIds: [] };
+    }
+
+    const displacedMatchIds = await this.clearCompetingMatchCourts(match.court_slot_id, matchId);
+    return { status: 'booked', displacedMatchIds };
   }
 
   async getUserRole(userId: string): Promise<string | null> {

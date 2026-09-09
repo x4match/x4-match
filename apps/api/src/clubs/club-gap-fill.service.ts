@@ -271,7 +271,7 @@ export class ClubGapFillService {
     return result.rows.filter((s) => valleyKeys.has(`${s.day_of_week}:${s.hour_bucket}`));
   }
 
-  /** Publica un partido abierto y reserva el slot (estilo SmartClub). */
+  /** Publica un partido abierto sin bloquear la cancha hasta el pago completo. */
   private async autoCreateOpenMatch(
     club: ClubRow,
     slot: OpenSlotRow,
@@ -324,14 +324,9 @@ export class ClubGapFillService {
     const matchId = inserted.rows[0]?.id;
     if (!matchId) return null;
 
-    await this.db.query(
-      `UPDATE court_availability_slots
-       SET status = 'BOOKED'
-       WHERE id = $1 AND club_id = $2 AND status = 'OPEN'`,
-      [slot.id, club.id],
+    this.logger.log(
+      `Smart Fill: partido ${matchId} creado para slot ${slot.id} (${club.name}) — cancha OPEN hasta pago completo`,
     );
-
-    this.logger.log(`Smart Fill: partido ${matchId} creado para slot ${slot.id} (${club.name})`);
     return { matchId };
   }
 

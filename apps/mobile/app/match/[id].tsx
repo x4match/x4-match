@@ -780,11 +780,12 @@ export default function MatchDetailScreen() {
             {match.courtBooking === 'in_app' && isParticipant && deposit?.required && !deposit?.paid && (
               <AppCard style={{ marginBottom: ui.spacing.sm, backgroundColor: 'rgba(245,158,11,0.08)' }}>
                 <Text style={{ fontWeight: '700', color: ui.colors.accent, marginBottom: 6 }}>
-                  Confirmar cancha reservada
+                  Reservar cancha con tu seña
                 </Text>
                 <Text style={{ fontSize: 13, color: ui.colors.textSecondary, marginBottom: 12, lineHeight: 19 }}>
-                  Pagá la seña del club para liberar y confirmar el horario de la cancha
-                  {deposit.clubName ? ` en ${deposit.clubName}` : ''}.
+                  La cancha se bloquea recién cuando todos pagan la seña
+                  {deposit.clubName ? ` en ${deposit.clubName}` : ''}. Hasta entonces el turno sigue
+                  disponible.
                 </Text>
                 <PrimaryButton
                   label={`Pagar seña${deposit.amount ? ` (${formatCurrency(deposit.amount, deposit.currency)})` : ''}`}
@@ -917,7 +918,7 @@ export default function MatchDetailScreen() {
                 ) : null}
                 {isParticipant && !deposit.paid ? (
                   <Text style={{ fontSize: 12, color: ui.colors.warning, marginBottom: 8 }}>
-                    Pagá la seña para confirmar cancha y horario
+                    Pagá la seña: la cancha se reserva cuando todos hayan pagado
                   </Text>
                 ) : null}
                 {isClubAccount && !isParticipant ? (

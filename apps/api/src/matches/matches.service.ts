@@ -138,17 +138,19 @@ export class MatchesService {
       throw new BadRequestException('El turno de cancha requiere un club');
     }
 
-    const result = await this.matchesRepository.create(userId, dto);
-    const match = result.rows[0];
-
+    // La cancha NO se bloquea al crear el partido: queda OPEN hasta que el turno
+    // esté pagado por completo (partido CONFIRMED = todas las señas APPROVED).
     if (dto.courtSlotId && dto.clubId) {
-      const booked = await this.matchesRepository.bookCourtSlot(dto.courtSlotId, dto.clubId);
-      if (!booked) {
+      const open = await this.matchesRepository.isCourtSlotOpen(dto.courtSlotId, dto.clubId);
+      if (!open) {
         throw new BadRequestException(
           'Ese turno no está disponible (reservado, bloqueado o en mantenimiento)',
         );
       }
     }
+
+    const result = await this.matchesRepository.create(userId, dto);
+    const match = result.rows[0];
 
     const playerId = await this.matchesRepository.getPlayerIdByUserId(userId);
     if (playerId) {
@@ -552,6 +554,9 @@ export class MatchesService {
       if (match.status === 'FULL' || match.status === 'CONFIRMED') {
         await this.matchesRepository.updateStatus(matchId, 'OPEN');
       }
+      if (match.status === 'CONFIRMED' && match.court_slot_id) {
+        await this.matchesRepository.releaseCourtSlot(match.court_slot_id);
+      }
 
       await this.matchesRepository.notifyUsers(
         [nextOrganizer.user_id],
@@ -584,6 +589,9 @@ export class MatchesService {
 
     if (match.status === 'FULL' || match.status === 'CONFIRMED') {
       await this.matchesRepository.updateStatus(matchId, 'OPEN');
+    }
+    if (match.status === 'CONFIRMED' && match.court_slot_id) {
+      await this.matchesRepository.releaseCourtSlot(match.court_slot_id);
     }
 
     const updated = await this.findOne(matchId, userId);
@@ -688,6 +696,7 @@ export class MatchesService {
 
     if (joinedCount >= match.needed_players && confirmedCount >= match.needed_players) {
       await this.matchesRepository.updateStatus(matchId, 'CONFIRMED');
+      await this.bookCourtAfterFullyPaid(matchId);
     } else if (match.status === 'OPEN' && joinedCount >= match.needed_players) {
       await this.matchesRepository.updateStatus(matchId, 'FULL');
     }
@@ -695,6 +704,46 @@ export class MatchesService {
     const updated = await this.findOne(matchId);
     this.realtimeGateway.emitMatchUpdated(updated);
     return updated;
+  }
+
+  /**
+   * Bloquea la cancha recién cuando el partido está pagado/confirmado por completo.
+   * Si otro partido ganó la carrera, se desvincula el turno de este match.
+   */
+  async bookCourtAfterFullyPaid(
+    matchId: string,
+  ): Promise<'booked' | 'already_booked' | 'unavailable' | 'no_slot'> {
+    const { status, displacedMatchIds } =
+      await this.matchesRepository.bookCourtForConfirmedMatch(matchId);
+
+    if (status === 'booked') {
+      for (const otherId of displacedMatchIds) {
+        const participantIds = await this.matchesRepository.listActiveParticipantUserIds(otherId);
+        await this.matchesRepository.notifyUsers(
+          participantIds,
+          'MATCH_COURT_LOST',
+          'Turno tomado por otro partido',
+          'Otro grupo completó el pago de ese horario antes. Elegí otra cancha o cancelá el partido.',
+          { matchId: otherId },
+        );
+        const detail = await this.matchesRepository.getDetail(otherId);
+        if (detail) this.realtimeGateway.emitMatchUpdated(detail);
+      }
+    }
+
+    if (status === 'unavailable') {
+      await this.matchesRepository.updateStatus(matchId, 'FULL');
+      const participantIds = await this.matchesRepository.listActiveParticipantUserIds(matchId);
+      await this.matchesRepository.notifyUsers(
+        participantIds,
+        'MATCH_COURT_LOST',
+        'Turno no disponible',
+        'Otro partido confirmó ese horario antes. El partido sigue armado; elegí otra cancha o cancelá.',
+        { matchId },
+      );
+    }
+
+    return status;
   }
 
   async updateMatchStatus(matchId: string, dto: UpdateMatchStatusDto) {
