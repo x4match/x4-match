@@ -67,6 +67,19 @@ export class CreateTournamentDto {
   @IsOptional()
   @IsString()
   status?: string;
+
+  /** Vínculo opcional a circuito (etapa WPE). */
+  @IsOptional()
+  @IsUUID()
+  circuitId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  circuitStageId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  circuitCategoryId?: string;
 }
 
 export class CreateTournamentInvitesDto {

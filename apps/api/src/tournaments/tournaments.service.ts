@@ -1,10 +1,13 @@
 import {
   BadRequestException,
   ForbiddenException,
+  Inject,
   Injectable,
   NotFoundException,
+  forwardRef,
 } from '@nestjs/common';
 import { randomBytes } from 'crypto';
+import { CircuitsService } from '../circuits/circuits.service';
 import { DatabaseService } from '../database/database.service';
 import { CreateTournamentPhotoDto } from './dto/create-tournament-photo.dto';
 import {
@@ -29,7 +32,11 @@ type TournamentViewer = {
 
 @Injectable()
 export class TournamentsService {
-  constructor(private readonly db: DatabaseService) {
+  constructor(
+    private readonly db: DatabaseService,
+    @Inject(forwardRef(() => CircuitsService))
+    private readonly circuitsService: CircuitsService,
+  ) {
     cloudinary.config({
       cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
       api_key: process.env.CLOUDINARY_API_KEY,
@@ -72,9 +79,11 @@ export class TournamentsService {
       `INSERT INTO tournaments
         (club_id, name, description, category, format, gender, start_date, max_teams,
          courts_available, price, payment_required, rules, prizes, status, organizer_user_id,
-         modality, invite_token, club_validation_status)
+         modality, invite_token, club_validation_status,
+         circuit_id, circuit_stage_id, circuit_category_id)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::tournament_status,$15,
-               $16::tournament_modality,$17,$18::tournament_club_validation_status)
+               $16::tournament_modality,$17,$18::tournament_club_validation_status,
+               $19,$20,$21)
        RETURNING *`,
       [
         clubId,
@@ -95,6 +104,9 @@ export class TournamentsService {
         modality,
         inviteToken,
         clubValidationStatus,
+        dto.circuitId ?? null,
+        dto.circuitStageId ?? null,
+        dto.circuitCategoryId ?? null,
       ],
     );
     return result.rows[0];
@@ -221,7 +233,15 @@ export class TournamentsService {
       `UPDATE tournaments SET ${fields.join(', ')} WHERE id = $${i}`,
       values,
     );
-    return this.getByIdUnchecked(id);
+    const updated = await this.getByIdUnchecked(id);
+    if (dto.status === 'FINISHED') {
+      try {
+        await this.circuitsService.awardFromTournament(id);
+      } catch {
+        // No bloquear el cierre del torneo si falla el ranking del circuito
+      }
+    }
+    return updated;
   }
 
   async remove(id: string, userId: string) {
