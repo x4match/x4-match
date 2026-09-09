@@ -1,11 +1,14 @@
 import {
   BadRequestException,
+  Inject,
   Injectable,
   Logger,
   NotFoundException,
+  forwardRef,
 } from '@nestjs/common';
 import { PaymentsRepository } from './payments.repository';
 import { MatchesRepository } from '../matches/matches.repository';
+import { MatchesService } from '../matches/matches.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { ClubPaymentConfigService } from '../clubs/club-payment-config.service';
 
@@ -35,6 +38,8 @@ export class PaymentsService {
   constructor(
     private readonly paymentsRepo: PaymentsRepository,
     private readonly matchesRepo: MatchesRepository,
+    @Inject(forwardRef(() => MatchesService))
+    private readonly matchesService: MatchesService,
     private readonly realtimeGateway: RealtimeGateway,
     private readonly clubPaymentConfig: ClubPaymentConfigService,
   ) {}
@@ -456,6 +461,7 @@ export class PaymentsService {
 
     if (joinedCount >= match.needed_players && confirmedCount >= match.needed_players) {
       await this.matchesRepo.updateStatus(matchId, 'CONFIRMED');
+      await this.matchesService.bookCourtAfterFullyPaid(matchId);
     } else if (match.status === 'OPEN' && joinedCount >= match.needed_players) {
       await this.matchesRepo.updateStatus(matchId, 'FULL');
     }
