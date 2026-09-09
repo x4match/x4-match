@@ -842,7 +842,7 @@ export class ClubManagerService {
       `SELECT COUNT(*)::int AS count
        FROM court_availability_slots
        WHERE club_id = $1
-         AND status = 'CANCELLED'
+         AND status IN ('BLOCKED', 'MAINTENANCE')
          AND slot_date >= CURRENT_DATE
          AND slot_date <= CURRENT_DATE + 7`,
       [clubId],

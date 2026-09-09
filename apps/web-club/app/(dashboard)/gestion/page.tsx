@@ -319,6 +319,41 @@ function GestionInner() {
     },
   });
 
+  const blockSlot = useMutation({
+    mutationFn: async ({
+      id,
+      kind,
+    }: {
+      id: string;
+      kind: 'BLOCKED' | 'MAINTENANCE';
+    }) => {
+      await api.post(`/clubs/${activeClubId}/court-slots/${id}/block`, {
+        kind,
+        reason: kind === 'MAINTENANCE' ? 'Mantenimiento' : 'Bloqueo operativo',
+      });
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['court-slots', activeClubId] });
+      toast.success('Turno bloqueado');
+    },
+    onError: (err: { response?: { data?: { message?: string } } }) => {
+      toast.error(err.response?.data?.message || 'No se pudo bloquear');
+    },
+  });
+
+  const unblockSlot = useMutation({
+    mutationFn: async (id: string) => {
+      await api.post(`/clubs/${activeClubId}/court-slots/${id}/unblock`);
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['court-slots', activeClubId] });
+      toast.success('Turno desbloqueado');
+    },
+    onError: (err: { response?: { data?: { message?: string } } }) => {
+      toast.error(err.response?.data?.message || 'No se pudo desbloquear');
+    },
+  });
+
   const saveCourt = useMutation({
     mutationFn: async () => {
       await api.post(`/clubs/${activeClubId}/courts`, { name: newCourtName.trim() });
@@ -519,6 +554,28 @@ function GestionInner() {
                   </div>
                   <div className="flex gap-2">
                     <Badge variant="secondary">{slot.status || 'OPEN'}</Badge>
+                    {slot.status === 'OPEN' ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="rounded-xl"
+                        onClick={() =>
+                          blockSlot.mutate({ id: slot.id, kind: 'MAINTENANCE' })
+                        }
+                      >
+                        Bloquear
+                      </Button>
+                    ) : null}
+                    {slot.status === 'BLOCKED' || slot.status === 'MAINTENANCE' ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="rounded-xl"
+                        onClick={() => unblockSlot.mutate(slot.id)}
+                      >
+                        Desbloquear
+                      </Button>
+                    ) : null}
                     <Button variant="outline" size="sm" className="rounded-xl" onClick={() => openEditSlot(slot)}>
                       Editar
                     </Button>

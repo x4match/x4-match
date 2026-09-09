@@ -691,6 +691,14 @@ export default function ProfileScreen() {
         {isPlayer(user?.role) && (
           <>
             <MenuRow
+              icon="bag-outline"
+              iconBg={ui.colors.accentSoft}
+              iconColor={ui.colors.accent}
+              title="Shop x4"
+              subtitle="Productos de patrocinadores"
+              onPress={() => router.push('/shop' as any)}
+            />
+            <MenuRow
               icon="calendar-outline"
               iconBg={ui.colors.primarySoft}
               iconColor={ui.colors.primary}

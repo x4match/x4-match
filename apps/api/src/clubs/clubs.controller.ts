@@ -43,6 +43,7 @@ import { NotifyClubSegmentDto } from './dto/notify-club-segment.dto';
 import { UpdateCourtDto } from './dto/update-court.dto';
 import { UpdateCourtScheduleDto } from './dto/update-court-schedule.dto';
 import { UpdateCourtSlotDto } from './dto/update-court-slot.dto';
+import { BlockCourtSlotDto } from './dto/block-court-slot.dto';
 import { UpdateShopStockDto } from './dto/update-shop-stock.dto';
 import { UpdateClubDto } from './dto/update-club.dto';
 import { UpdateClubPaymentModeDto } from './dto/update-club-payment-mode.dto';
@@ -710,6 +711,33 @@ export class ClubsController {
     @Body() dto: UpdateCourtSlotDto,
   ) {
     return this.clubsService.updateCourtSlot(user.sub, id, slotId, dto);
+  }
+
+  @Post(':id/court-slots/:slotId/block')
+  @UseGuards(JwtAuthGuard)
+  blockCourtSlot(
+    @Param('id') id: string,
+    @Param('slotId') slotId: string,
+    @CurrentUser() user: { sub: string },
+    @Body() dto: BlockCourtSlotDto,
+  ) {
+    return this.clubsService.blockCourtSlot(
+      user.sub,
+      id,
+      slotId,
+      dto.kind ?? 'MAINTENANCE',
+      dto.reason,
+    );
+  }
+
+  @Post(':id/court-slots/:slotId/unblock')
+  @UseGuards(JwtAuthGuard)
+  unblockCourtSlot(
+    @Param('id') id: string,
+    @Param('slotId') slotId: string,
+    @CurrentUser() user: { sub: string },
+  ) {
+    return this.clubsService.unblockCourtSlot(user.sub, id, slotId);
   }
 
   @Delete(':id/court-slots/:slotId')

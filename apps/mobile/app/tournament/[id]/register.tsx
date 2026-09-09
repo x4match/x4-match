@@ -59,15 +59,20 @@ export default function TournamentRegisterScreen() {
         },
         inviteToken,
       ),
-    onSuccess: () => {
+    onSuccess: (reg: any) => {
       queryClient.invalidateQueries({ queryKey: ['tournament-my-reg', id] });
       queryClient.invalidateQueries({ queryKey: ['tournament-registrations', id] });
       queryClient.invalidateQueries({ queryKey: ['tournament-detail', id] });
       refetchMyReg();
       if (!needsPayment) {
-        Alert.alert('¡Inscripción enviada!', 'Quedó pendiente de aprobación del organizador.', [
-          { text: 'Ver torneo', onPress: () => router.replace(`/tournament/${id}` as any) },
-        ]);
+        const waitlisted = reg?.status === 'WAITLIST';
+        Alert.alert(
+          waitlisted ? 'Lista de espera' : '¡Inscripción enviada!',
+          waitlisted
+            ? 'El torneo está completo. Quedaste en lista de espera.'
+            : 'Quedó pendiente de aprobación del organizador.',
+          [{ text: 'Ver torneo', onPress: () => router.replace(`/tournament/${id}` as any) }],
+        );
       }
     },
     onError: (err: any) => Alert.alert('Error', err.response?.data?.message || 'No se pudo inscribir'),
@@ -130,7 +135,9 @@ export default function TournamentRegisterScreen() {
                   ? 'Aprobada'
                   : myReg!.status === 'REJECTED'
                     ? 'Rechazada'
-                    : 'Pendiente de aprobación'}
+                    : myReg!.status === 'WAITLIST'
+                      ? 'Lista de espera'
+                      : 'Pendiente de aprobación'}
               </Text>
               {needsPayment ? (
                 <Text style={{ color: paid ? ui.colors.success : ui.colors.warning, fontSize: 13, marginTop: 4, fontWeight: '600' }}>

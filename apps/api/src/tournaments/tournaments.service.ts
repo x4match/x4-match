@@ -361,9 +361,13 @@ export class TournamentsService {
       ) {
         throw new BadRequestException('El torneo aún no fue validado por el club');
       }
-      if (tournament.spots_left != null && tournament.spots_left <= 0) {
-        throw new BadRequestException('No quedan cupos disponibles');
-      }
+    }
+
+    const occupied = await this.countOccupiedSpots(tournamentId);
+    const maxTeams = tournament.max_teams != null ? Number(tournament.max_teams) : null;
+    let status: 'PENDING' | 'WAITLIST' = 'PENDING';
+    if (!managerRegistration && maxTeams != null && occupied >= maxTeams) {
+      status = 'WAITLIST';
     }
 
     const price = tournament.price != null ? Number(tournament.price) : 0;
@@ -380,7 +384,7 @@ export class TournamentsService {
         (tournament_id, created_by_user_id, player1_user_id, player2_user_id,
          player1_name, player2_name, player1_email, player2_email, phone, category,
          status, payment_required, payment_status, payment_amount)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'PENDING',$11,$12,$13)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
        RETURNING *`,
       [
         tournamentId,
@@ -393,6 +397,7 @@ export class TournamentsService {
         dto.player2Email ?? null,
         dto.phone ?? null,
         registrationCategory,
+        status,
         paymentRequired,
         paymentRequired ? 'PENDING' : null,
         paymentRequired ? price : null,
@@ -403,6 +408,16 @@ export class TournamentsService {
 
   async approveRegistration(tournamentId: string, regId: string, userId: string) {
     await this.assertCanManageTournament(tournamentId, userId);
+    const tournament = await this.getByIdUnchecked(tournamentId);
+    const current = await this.getRegistrationOrThrow(tournamentId, regId);
+    if (current.status === 'APPROVED') return current;
+
+    const approvedCount = await this.countApprovedSpots(tournamentId);
+    const maxTeams = tournament.max_teams != null ? Number(tournament.max_teams) : null;
+    if (maxTeams != null && approvedCount >= maxTeams) {
+      throw new BadRequestException('No hay cupos libres. Rechazá una pareja o aumentá el máximo.');
+    }
+
     const result = await this.db.query(
       `UPDATE tournament_registrations
        SET status = 'APPROVED', approved_at = NOW(), rejected_at = NULL
@@ -415,6 +430,7 @@ export class TournamentsService {
 
   async rejectRegistration(tournamentId: string, regId: string, userId: string) {
     await this.assertCanManageTournament(tournamentId, userId);
+    const current = await this.getRegistrationOrThrow(tournamentId, regId);
     const result = await this.db.query(
       `UPDATE tournament_registrations
        SET status = 'REJECTED', rejected_at = NOW()
@@ -422,6 +438,9 @@ export class TournamentsService {
       [regId, tournamentId],
     );
     if (!result.rows[0]) throw new NotFoundException('Inscripción no encontrada');
+    if (current.status === 'APPROVED') {
+      await this.promoteNextWaitlisted(tournamentId);
+    }
     return result.rows[0];
   }
 
@@ -435,8 +454,21 @@ export class TournamentsService {
     if (!isOwner && !canManage) {
       throw new ForbiddenException('No podés eliminar esta inscripción');
     }
+    const wasApproved = reg.status === 'APPROVED';
     await this.db.query(`DELETE FROM tournament_registrations WHERE id = $1`, [regId]);
+    if (wasApproved) {
+      await this.promoteNextWaitlisted(tournamentId);
+    }
     return { success: true };
+  }
+
+  async promoteRegistration(tournamentId: string, regId: string, userId: string) {
+    await this.assertCanManageTournament(tournamentId, userId);
+    const reg = await this.getRegistrationOrThrow(tournamentId, regId);
+    if (reg.status !== 'WAITLIST') {
+      throw new BadRequestException('Solo se pueden promover inscripciones en lista de espera');
+    }
+    return this.approveRegistration(tournamentId, regId, userId);
   }
 
   // ---------------------------------------------------------------------------
@@ -733,7 +765,11 @@ export class TournamentsService {
        WHERE id = $1 RETURNING *`,
       [matchId, JSON.stringify({ sets: dto.sets, setsA, setsB }), winnerId],
     );
-    return result.rows[0];
+    const updated = result.rows[0];
+    if (winnerId && updated.next_match_id && updated.next_slot) {
+      await this.advanceWinnerToNextMatch(updated, winnerId);
+    }
+    return updated;
   }
 
   async removeMatch(tournamentId: string, matchId: string, userId: string) {
@@ -758,94 +794,96 @@ export class TournamentsService {
     }
 
     if (dto.reset) {
+      await this.db.query(
+        `UPDATE tournament_matches SET next_match_id = NULL WHERE tournament_id = $1`,
+        [tournamentId],
+      );
       await this.db.query(`DELETE FROM tournament_matches WHERE tournament_id = $1`, [tournamentId]);
     }
 
     const label = (t: any) => `${t.player1_name} / ${t.player2_name}`;
     const mode = dto.mode || 'ROUND_ROBIN';
-    const matches: {
-      a: any;
-      b: any;
-      round: number;
-      roundLabel: string;
-      courtLabel?: string | null;
-    }[] = [];
 
-    if (mode === 'ROUND_ROBIN') {
-      let round = 1;
-      for (let a = 0; a < teams.length; a++) {
-        for (let b = a + 1; b < teams.length; b++) {
-          matches.push({ a: teams[a], b: teams[b], round, roundLabel: `Fecha ${round}` });
-          round++;
-        }
-      }
-    } else if (mode === 'OPEN_COURT') {
-      // Todos contra todos empaquetados en turnos según canchas disponibles
-      const courts = Math.max(1, Number(tournament.courts_available) || 2);
-      const n = teams.length;
-      const withBye = n % 2 === 1 ? [...teams, null] : [...teams];
-      const total = withBye.length;
-      const half = total / 2;
-      const roundCount = total - 1;
-      let arr = [...withBye];
-      let globalRound = 1;
-
-      for (let r = 0; r < roundCount; r++) {
-        const pairs: { a: any; b: any }[] = [];
-        for (let i = 0; i < half; i++) {
-          const a = arr[i];
-          const b = arr[total - 1 - i];
-          if (a && b) pairs.push({ a, b });
-        }
-
-        for (let offset = 0; offset < pairs.length; offset += courts) {
-          const batch = pairs.slice(offset, offset + courts);
-          const needsSub =
-            pairs.length > courts ? `.${Math.floor(offset / courts) + 1}` : '';
-          batch.forEach((p, courtIdx) => {
-            matches.push({
-              a: p.a,
-              b: p.b,
-              round: globalRound,
-              roundLabel: `Turno ${r + 1}${needsSub}`,
-              courtLabel: `Cancha ${courtIdx + 1}`,
-            });
-          });
-          globalRound++;
-        }
-
-        const fixed = arr[0];
-        const rest = arr.slice(1);
-        const last = rest.pop();
-        if (last !== undefined) rest.unshift(last);
-        arr = [fixed, ...rest];
-      }
+    if (mode === 'SINGLE_ELIMINATION') {
+      await this.generateSingleEliminationBracket(tournamentId, teams, label);
     } else {
-      // Eliminación directa (primera ronda)
-      const shuffled = [...teams];
-      for (let i = 0; i < shuffled.length; i += 2) {
-        const a = shuffled[i];
-        const b = shuffled[i + 1];
-        if (b) matches.push({ a, b, round: 1, roundLabel: 'Primera ronda' });
-      }
-    }
+      const matches: {
+        a: any;
+        b: any;
+        round: number;
+        roundLabel: string;
+        courtLabel?: string | null;
+      }[] = [];
 
-    for (const m of matches) {
-      await this.db.query(
-        `INSERT INTO tournament_matches
-          (tournament_id, round, round_label, court_label, team_a_registration_id, team_b_registration_id, team_a_name, team_b_name)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-        [
-          tournamentId,
-          m.round,
-          m.roundLabel,
-          m.courtLabel ?? null,
-          m.a.id,
-          m.b.id,
-          label(m.a),
-          label(m.b),
-        ],
-      );
+      if (mode === 'ROUND_ROBIN') {
+        let round = 1;
+        for (let a = 0; a < teams.length; a++) {
+          for (let b = a + 1; b < teams.length; b++) {
+            matches.push({ a: teams[a], b: teams[b], round, roundLabel: `Fecha ${round}` });
+            round++;
+          }
+        }
+      } else if (mode === 'OPEN_COURT') {
+        const courts = Math.max(1, Number(tournament.courts_available) || 2);
+        const n = teams.length;
+        const withBye = n % 2 === 1 ? [...teams, null] : [...teams];
+        const total = withBye.length;
+        const half = total / 2;
+        const roundCount = total - 1;
+        let arr = [...withBye];
+        let globalRound = 1;
+
+        for (let r = 0; r < roundCount; r++) {
+          const pairs: { a: any; b: any }[] = [];
+          for (let i = 0; i < half; i++) {
+            const a = arr[i];
+            const b = arr[total - 1 - i];
+            if (a && b) pairs.push({ a, b });
+          }
+
+          for (let offset = 0; offset < pairs.length; offset += courts) {
+            const batch = pairs.slice(offset, offset + courts);
+            const needsSub =
+              pairs.length > courts ? `.${Math.floor(offset / courts) + 1}` : '';
+            batch.forEach((p, courtIdx) => {
+              matches.push({
+                a: p.a,
+                b: p.b,
+                round: globalRound,
+                roundLabel: `Turno ${r + 1}${needsSub}`,
+                courtLabel: `Cancha ${courtIdx + 1}`,
+              });
+            });
+            globalRound++;
+          }
+
+          const fixed = arr[0];
+          const rest = arr.slice(1);
+          const last = rest.pop();
+          if (last !== undefined) rest.unshift(last);
+          arr = [fixed, ...rest];
+        }
+      } else {
+        throw new BadRequestException('Modo de fixture no soportado');
+      }
+
+      for (const m of matches) {
+        await this.db.query(
+          `INSERT INTO tournament_matches
+            (tournament_id, round, round_label, court_label, team_a_registration_id, team_b_registration_id, team_a_name, team_b_name)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+          [
+            tournamentId,
+            m.round,
+            m.roundLabel,
+            m.courtLabel ?? null,
+            m.a.id,
+            m.b.id,
+            label(m.a),
+            label(m.b),
+          ],
+        );
+      }
     }
 
     await this.db.query(
@@ -999,22 +1037,29 @@ export class TournamentsService {
         `SELECT
            COUNT(*) FILTER (WHERE status = 'APPROVED')::int AS approved_count,
            COUNT(*) FILTER (WHERE status = 'PENDING')::int AS pending_count,
+           COUNT(*) FILTER (WHERE status = 'WAITLIST')::int AS waitlist_count,
            COUNT(*)::int AS total_count
          FROM tournament_registrations WHERE tournament_id = $1`,
         [id],
       ),
     ]);
 
+    const approvedCount = regCounts.rows[0]?.approved_count ?? 0;
+    const pendingCount = regCounts.rows[0]?.pending_count ?? 0;
+    const waitlistCount = regCounts.rows[0]?.waitlist_count ?? 0;
+    const occupied = approvedCount + pendingCount;
+
     return {
       ...tournament,
       photos: photos.rows,
       dates: dates.rows,
-      approved_count: regCounts.rows[0]?.approved_count ?? 0,
-      pending_count: regCounts.rows[0]?.pending_count ?? 0,
+      approved_count: approvedCount,
+      pending_count: pendingCount,
+      waitlist_count: waitlistCount,
       total_count: regCounts.rows[0]?.total_count ?? 0,
       spots_left:
         tournament.max_teams != null
-          ? Math.max(0, Number(tournament.max_teams) - Number(regCounts.rows[0]?.total_count ?? 0))
+          ? Math.max(0, Number(tournament.max_teams) - occupied)
           : null,
     };
   }
@@ -1318,6 +1363,160 @@ export class TournamentsService {
     const ok = await this.canManageTournament(tournamentId, userId);
     if (!ok) {
       throw new ForbiddenException('Solo el organizador de este torneo puede realizar esta acción');
+    }
+  }
+
+  private async countOccupiedSpots(tournamentId: string): Promise<number> {
+    const result = await this.db.query<{ count: number }>(
+      `SELECT COUNT(*)::int AS count
+       FROM tournament_registrations
+       WHERE tournament_id = $1 AND status IN ('APPROVED', 'PENDING')`,
+      [tournamentId],
+    );
+    return result.rows[0]?.count ?? 0;
+  }
+
+  private async countApprovedSpots(tournamentId: string): Promise<number> {
+    const result = await this.db.query<{ count: number }>(
+      `SELECT COUNT(*)::int AS count
+       FROM tournament_registrations
+       WHERE tournament_id = $1 AND status = 'APPROVED'`,
+      [tournamentId],
+    );
+    return result.rows[0]?.count ?? 0;
+  }
+
+  private async promoteNextWaitlisted(tournamentId: string) {
+    const tournament = await this.getByIdUnchecked(tournamentId);
+    const maxTeams = tournament.max_teams != null ? Number(tournament.max_teams) : null;
+    if (maxTeams == null) return null;
+    const approved = await this.countApprovedSpots(tournamentId);
+    if (approved >= maxTeams) return null;
+
+    const next = await this.db.query(
+      `SELECT id FROM tournament_registrations
+       WHERE tournament_id = $1 AND status = 'WAITLIST'
+       ORDER BY created_at ASC
+       LIMIT 1`,
+      [tournamentId],
+    );
+    if (!next.rows[0]) return null;
+
+    const result = await this.db.query(
+      `UPDATE tournament_registrations
+       SET status = 'PENDING', approved_at = NULL, rejected_at = NULL
+       WHERE id = $1 AND tournament_id = $2
+       RETURNING *`,
+      [next.rows[0].id, tournamentId],
+    );
+    return result.rows[0] ?? null;
+  }
+
+  private eliminationRoundLabel(round: number, totalRounds: number): string {
+    const fromFinal = totalRounds - round;
+    if (fromFinal === 0) return 'Final';
+    if (fromFinal === 1) return 'Semifinal';
+    if (fromFinal === 2) return 'Cuartos';
+    if (round === 1) return 'Primera ronda';
+    return `Ronda ${round}`;
+  }
+
+  private async generateSingleEliminationBracket(
+    tournamentId: string,
+    teams: any[],
+    label: (t: any) => string,
+  ) {
+    let bracketSize = 1;
+    while (bracketSize < teams.length) bracketSize *= 2;
+    const totalRounds = Math.log2(bracketSize);
+    const firstRoundMatches = bracketSize / 2;
+
+    // Crear árbol desde la final hacia atrás; round 1 = primera ronda.
+    const matchIdsByRound: string[][] = Array.from({ length: totalRounds + 1 }, () => []);
+
+    for (let round = totalRounds; round >= 1; round--) {
+      const count = bracketSize / Math.pow(2, round);
+      for (let i = 0; i < count; i++) {
+        const nextRound = round + 1;
+        const nextMatchId =
+          round < totalRounds ? matchIdsByRound[nextRound][Math.floor(i / 2)] : null;
+        const nextSlot = round < totalRounds ? (i % 2 === 0 ? 'A' : 'B') : null;
+        const result = await this.db.query(
+          `INSERT INTO tournament_matches
+            (tournament_id, round, round_label, bracket_position, next_match_id, next_slot,
+             team_a_registration_id, team_b_registration_id, team_a_name, team_b_name, status)
+           VALUES ($1,$2,$3,$4,$5,$6,NULL,NULL,NULL,NULL,'SCHEDULED')
+           RETURNING id`,
+          [
+            tournamentId,
+            round,
+            this.eliminationRoundLabel(round, totalRounds),
+            i,
+            nextMatchId,
+            nextSlot,
+          ],
+        );
+        matchIdsByRound[round].push(result.rows[0].id);
+      }
+    }
+
+    // Sembrar primera ronda: equipos reales + BYEs (null).
+    const slots: (any | null)[] = [...teams];
+    while (slots.length < bracketSize) slots.push(null);
+
+    for (let i = 0; i < firstRoundMatches; i++) {
+      const teamA = slots[i * 2];
+      const teamB = slots[i * 2 + 1];
+      const matchId = matchIdsByRound[1][i];
+
+      if (teamA && teamB) {
+        await this.db.query(
+          `UPDATE tournament_matches
+           SET team_a_registration_id = $2, team_b_registration_id = $3,
+               team_a_name = $4, team_b_name = $5, updated_at = NOW()
+           WHERE id = $1`,
+          [matchId, teamA.id, teamB.id, label(teamA), label(teamB)],
+        );
+      } else if (teamA || teamB) {
+        const winner = teamA || teamB;
+        const result = await this.db.query(
+          `UPDATE tournament_matches
+           SET team_a_registration_id = $2, team_b_registration_id = NULL,
+               team_a_name = $3, team_b_name = 'BYE',
+               status = 'FINISHED', finished_at = NOW(),
+               winner_registration_id = $2,
+               score = $4::jsonb, updated_at = NOW()
+           WHERE id = $1
+           RETURNING *`,
+          [
+            matchId,
+            winner.id,
+            label(winner),
+            JSON.stringify({ sets: [], setsA: 1, setsB: 0, bye: true }),
+          ],
+        );
+        await this.advanceWinnerToNextMatch(result.rows[0], winner.id);
+      }
+    }
+  }
+
+  private async advanceWinnerToNextMatch(match: any, winnerRegistrationId: string) {
+    if (!match.next_match_id || !match.next_slot) return;
+    const winnerName = await this.registrationName(winnerRegistrationId);
+    if (match.next_slot === 'A') {
+      await this.db.query(
+        `UPDATE tournament_matches
+         SET team_a_registration_id = $2, team_a_name = $3, updated_at = NOW()
+         WHERE id = $1`,
+        [match.next_match_id, winnerRegistrationId, winnerName],
+      );
+    } else {
+      await this.db.query(
+        `UPDATE tournament_matches
+         SET team_b_registration_id = $2, team_b_name = $3, updated_at = NOW()
+         WHERE id = $1`,
+        [match.next_match_id, winnerRegistrationId, winnerName],
+      );
     }
   }
 

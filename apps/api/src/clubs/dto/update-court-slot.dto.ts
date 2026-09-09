@@ -1,4 +1,4 @@
-import { IsBoolean, IsNumber, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
+import { IsBoolean, IsIn, IsNumber, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
 
 export class UpdateCourtSlotDto {
   @IsOptional()
@@ -34,4 +34,13 @@ export class UpdateCourtSlotDto {
   @IsNumber()
   @Min(0)
   pricePerHour?: number;
+
+  /** OPEN | BLOCKED | MAINTENANCE — no usar para BOOKED (se reserva vía partidos). */
+  @IsOptional()
+  @IsIn(['OPEN', 'BLOCKED', 'MAINTENANCE'])
+  status?: 'OPEN' | 'BLOCKED' | 'MAINTENANCE';
+
+  @IsOptional()
+  @IsString()
+  blockReason?: string;
 }

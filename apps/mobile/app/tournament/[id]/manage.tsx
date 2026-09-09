@@ -17,6 +17,7 @@ import {
   approveRegistration,
   rejectRegistration,
   removeRegistration,
+  promoteRegistration,
   registerTeam,
   markRegistrationPaid,
   generateFixture,
@@ -352,6 +353,14 @@ export default function TournamentManageScreen() {
     mutationFn: (regId: string) => rejectRegistration(id!, regId),
     onSuccess: invalidate,
   });
+  const promoteMutation = useMutation({
+    mutationFn: (regId: string) => promoteRegistration(id!, regId),
+    onSuccess: () => {
+      invalidate();
+      Alert.alert('Promovida', 'La pareja pasó de lista de espera a aprobada.');
+    },
+    onError: (e: any) => Alert.alert('Error', e.response?.data?.message || 'No se pudo promover'),
+  });
   const removeRegMutation = useMutation({
     mutationFn: (regId: string) => removeRegistration(id!, regId),
     onSuccess: invalidate,
@@ -412,6 +421,7 @@ export default function TournamentManageScreen() {
   }
 
   const pending = (registrations || []).filter((r) => r.status === 'PENDING');
+  const waitlist = (registrations || []).filter((r) => r.status === 'WAITLIST');
   const approved = (registrations || []).filter((r) => r.status === 'APPROVED');
   const flyer = getTournamentFlyer(tournament?.photos);
 
@@ -424,7 +434,7 @@ export default function TournamentManageScreen() {
             [
               { key: 'general' as const, label: 'General' },
               { key: 'dates' as const, label: 'Fechas' },
-              { key: 'teams' as const, label: `Inscriptos${pending.length ? ` (${pending.length})` : ''}` },
+              { key: 'teams' as const, label: `Inscriptos${pending.length || waitlist.length ? ` (${pending.length + waitlist.length})` : ''}` },
               { key: 'matches' as const, label: 'Partidos' },
             ] as const
           ).map(({ key, label }) => (
@@ -898,6 +908,52 @@ export default function TournamentManageScreen() {
                   </AppCard>
                 );
               })
+            )}
+
+            <SectionHeader title="Lista de espera" subtitle={`${waitlist.length}`} dark />
+            {waitlist.length === 0 ? (
+              <AppCard>
+                <Text style={{ color: ui.colors.textMuted, fontSize: 13 }}>
+                  Sin parejas en espera. Cuando se llenen los cupos, las nuevas inscripciones van acá.
+                </Text>
+              </AppCard>
+            ) : (
+              waitlist.map((r) => (
+                <AppCard key={r.id}>
+                  <Text style={{ fontWeight: '700', color: ui.colors.textPrimary }}>
+                    {r.player1_name} / {r.player2_name}
+                  </Text>
+                  {r.category ? (
+                    <Text style={{ color: ui.colors.textSecondary, fontSize: 12, marginTop: 2 }}>
+                      Cat. {r.category}
+                    </Text>
+                  ) : null}
+                  <View style={{ marginTop: 8 }}>
+                    <StatusPill status="WAITLIST" />
+                  </View>
+                  <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
+                    <View style={{ flex: 1 }}>
+                      <PrimaryButton
+                        label="Promover"
+                        size="sm"
+                        fullWidth
+                        loading={promoteMutation.isPending}
+                        onPress={() => promoteMutation.mutate(r.id)}
+                      />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <PrimaryButton
+                        label="Rechazar"
+                        size="sm"
+                        variant="ghost"
+                        fullWidth
+                        loading={rejectMutation.isPending}
+                        onPress={() => rejectMutation.mutate(r.id)}
+                      />
+                    </View>
+                  </View>
+                </AppCard>
+              ))
             )}
 
             <SectionHeader title="Parejas aprobadas" subtitle={`${approved.length}`} dark />
