@@ -142,7 +142,12 @@ export class MatchesService {
     const match = result.rows[0];
 
     if (dto.courtSlotId && dto.clubId) {
-      await this.matchesRepository.bookCourtSlot(dto.courtSlotId, dto.clubId);
+      const booked = await this.matchesRepository.bookCourtSlot(dto.courtSlotId, dto.clubId);
+      if (!booked) {
+        throw new BadRequestException(
+          'Ese turno no está disponible (reservado, bloqueado o en mantenimiento)',
+        );
+      }
     }
 
     const playerId = await this.matchesRepository.getPlayerIdByUserId(userId);

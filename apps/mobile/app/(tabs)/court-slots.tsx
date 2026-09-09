@@ -117,6 +117,7 @@ interface CourtSlot {
   start_hour: number;
   end_hour: number;
   status: string;
+  block_reason?: string | null;
   bonus_points?: number;
   price_per_hour?: number | null;
   pricePerHour?: number | null;
@@ -573,10 +574,68 @@ export default function CourtSlotsScreen() {
     onError: (err: any) => Alert.alert('Error', err.response?.data?.message || 'No se pudo eliminar'),
   });
 
+  const blockSlot = useMutation({
+    mutationFn: async ({
+      slotId,
+      kind,
+    }: {
+      slotId: string;
+      kind: 'BLOCKED' | 'MAINTENANCE';
+    }) => {
+      if (!activeClubId) return;
+      await api.post(`/clubs/${activeClubId}/court-slots/${slotId}/block`, {
+        kind,
+        reason: kind === 'MAINTENANCE' ? 'Mantenimiento' : 'Bloqueo operativo',
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['court-slots', activeClubId] });
+      queryClient.invalidateQueries({ queryKey: ['club-dashboard', activeClubId] });
+    },
+    onError: (err: any) => Alert.alert('Error', err.response?.data?.message || 'No se pudo bloquear'),
+  });
+
+  const unblockSlot = useMutation({
+    mutationFn: async (slotId: string) => {
+      if (!activeClubId) return;
+      await api.post(`/clubs/${activeClubId}/court-slots/${slotId}/unblock`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['court-slots', activeClubId] });
+      queryClient.invalidateQueries({ queryKey: ['club-dashboard', activeClubId] });
+    },
+    onError: (err: any) => Alert.alert('Error', err.response?.data?.message || 'No se pudo desbloquear'),
+  });
+
   const handleDeleteSlot = (slot: CourtSlot) => {
     Alert.alert('Eliminar horario', `¿Quitar ${slot.court_label} del ${formatShortDate(slot.slot_date)}?`, [
       { text: 'Cancelar', style: 'cancel' },
       { text: 'Eliminar', style: 'destructive', onPress: () => deleteSlot.mutate(slot.id) },
+    ]);
+  };
+
+  const handleBlockSlot = (slot: CourtSlot) => {
+    if (slot.status === 'BOOKED') {
+      Alert.alert('Turno reservado', 'No podés bloquear un turno ya reservado.');
+      return;
+    }
+    if (slot.status === 'BLOCKED' || slot.status === 'MAINTENANCE') {
+      Alert.alert('Desbloquear turno', '¿Volver a publicar este horario?', [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Desbloquear', onPress: () => unblockSlot.mutate(slot.id) },
+      ]);
+      return;
+    }
+    Alert.alert('Bloquear turno', '¿Por qué motivo?', [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Mantenimiento',
+        onPress: () => blockSlot.mutate({ slotId: slot.id, kind: 'MAINTENANCE' }),
+      },
+      {
+        text: 'Bloqueo',
+        onPress: () => blockSlot.mutate({ slotId: slot.id, kind: 'BLOCKED' }),
+      },
     ]);
   };
 
@@ -894,7 +953,21 @@ export default function CourtSlotsScreen() {
                   slotsForSelectedDay.map((slot) => (
                     <AppCard key={slot.id} style={{ marginBottom: 8 }}>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                        <Ionicons name="tennisball" size={22} color={ui.colors.primary} />
+                        <Ionicons
+                          name={
+                            slot.status === 'MAINTENANCE' || slot.status === 'BLOCKED'
+                              ? 'construct-outline'
+                              : 'tennisball'
+                          }
+                          size={22}
+                          color={
+                            slot.status === 'MAINTENANCE' || slot.status === 'BLOCKED'
+                              ? ui.colors.warning
+                              : slot.status === 'BOOKED'
+                                ? ui.colors.textMuted
+                                : ui.colors.primary
+                          }
+                        />
                         <View style={{ flex: 1 }}>
                           <Text style={{ fontWeight: '700', color: ui.colors.textPrimary }}>{slot.court_label}</Text>
                           <Text style={{ fontSize: 12, color: ui.colors.textSecondary, marginTop: 4 }}>
@@ -908,11 +981,35 @@ export default function CourtSlotsScreen() {
                               return ` · $${Math.round(hourly).toLocaleString('es-AR')}/h${total}`;
                             })()}
                           </Text>
+                          <Text style={{ fontSize: 11, color: ui.colors.textMuted, marginTop: 2 }}>
+                            {slot.status === 'MAINTENANCE'
+                              ? `Mantenimiento${slot.block_reason ? ` · ${slot.block_reason}` : ''}`
+                              : slot.status === 'BLOCKED'
+                                ? `Bloqueado${slot.block_reason ? ` · ${slot.block_reason}` : ''}`
+                                : slot.status === 'BOOKED'
+                                  ? 'Reservado'
+                                  : 'Disponible'}
+                          </Text>
                         </View>
                         <View style={{ flexDirection: 'row', gap: 12 }}>
-                          <TouchableOpacity onPress={() => openEditSlot(slot)}>
-                            <Ionicons name="create-outline" size={20} color={ui.colors.primary} />
-                          </TouchableOpacity>
+                          {slot.status !== 'BOOKED' ? (
+                            <TouchableOpacity onPress={() => handleBlockSlot(slot)}>
+                              <Ionicons
+                                name={
+                                  slot.status === 'BLOCKED' || slot.status === 'MAINTENANCE'
+                                    ? 'lock-open-outline'
+                                    : 'lock-closed-outline'
+                                }
+                                size={20}
+                                color={ui.colors.warning}
+                              />
+                            </TouchableOpacity>
+                          ) : null}
+                          {slot.status === 'OPEN' ? (
+                            <TouchableOpacity onPress={() => openEditSlot(slot)}>
+                              <Ionicons name="create-outline" size={20} color={ui.colors.primary} />
+                            </TouchableOpacity>
+                          ) : null}
                           <TouchableOpacity onPress={() => handleDeleteSlot(slot)}>
                             <Ionicons name="trash-outline" size={20} color={ui.colors.danger} />
                           </TouchableOpacity>

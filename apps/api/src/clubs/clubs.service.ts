@@ -390,7 +390,7 @@ export class ClubsService {
       [clubId],
     );
     const result = await this.db.query(
-      `SELECT id, club_id, court_id, court_label, slot_date, start_hour, end_hour, status, bonus_points, price_per_hour, created_at
+      `SELECT id, club_id, court_id, court_label, slot_date, start_hour, end_hour, status, bonus_points, price_per_hour, block_reason, created_at
        FROM court_availability_slots
        WHERE club_id = $1 AND status <> 'CANCELLED'
        ORDER BY slot_date ASC, start_hour ASC`,
@@ -460,7 +460,7 @@ export class ClubsService {
   async updateCourtSlot(userId: string, clubId: string, slotId: string, dto: UpdateCourtSlotDto) {
     await this.assertClubRole(userId, clubId);
     const existing = await this.db.query(
-      `SELECT id, court_id, court_label, slot_date, start_hour, end_hour, price_per_hour
+      `SELECT id, court_id, court_label, slot_date, start_hour, end_hour, price_per_hour, status, block_reason
        FROM court_availability_slots
        WHERE id = $1 AND club_id = $2 AND status <> 'CANCELLED'`,
       [slotId, clubId],
@@ -468,6 +468,36 @@ export class ClubsService {
     const row = existing.rows[0];
     if (!row) {
       throw new NotFoundException('Horario no encontrado');
+    }
+
+    if (dto.status) {
+      if (row.status === 'BOOKED') {
+        throw new BadRequestException('No podés cambiar el estado de un turno ya reservado');
+      }
+      if (dto.status === 'OPEN') {
+        const result = await this.db.query(
+          `UPDATE court_availability_slots
+           SET status = 'OPEN', block_reason = NULL
+           WHERE id = $1 AND club_id = $2 AND status IN ('BLOCKED', 'MAINTENANCE', 'OPEN')
+           RETURNING id, club_id, court_id, court_label, slot_date, start_hour, end_hour, status, bonus_points, price_per_hour, block_reason, created_at`,
+          [slotId, clubId],
+        );
+        if (!result.rows[0]) {
+          throw new BadRequestException('No se pudo desbloquear el turno');
+        }
+        return result.rows[0];
+      }
+      const result = await this.db.query(
+        `UPDATE court_availability_slots
+         SET status = $3, block_reason = $4
+         WHERE id = $1 AND club_id = $2 AND status IN ('OPEN', 'BLOCKED', 'MAINTENANCE')
+         RETURNING id, club_id, court_id, court_label, slot_date, start_hour, end_hour, status, bonus_points, price_per_hour, block_reason, created_at`,
+        [slotId, clubId, dto.status, dto.blockReason?.trim() || null],
+      );
+      if (!result.rows[0]) {
+        throw new BadRequestException('No se pudo bloquear el turno');
+      }
+      return result.rows[0];
     }
 
     const club = await this.findOne(clubId);
@@ -509,12 +539,41 @@ export class ClubsService {
            start_hour = $6,
            end_hour = $7,
            bonus_points = $8,
-           price_per_hour = $9
+           price_per_hour = $9,
+           block_reason = COALESCE($10, block_reason)
        WHERE id = $1 AND club_id = $2
-       RETURNING id, club_id, court_id, court_label, slot_date, start_hour, end_hour, status, bonus_points, price_per_hour, created_at`,
-      [slotId, clubId, court.id, court.name, slotDate, startHour, endHour, bonusPoints, pricePerHour],
+       RETURNING id, club_id, court_id, court_label, slot_date, start_hour, end_hour, status, bonus_points, price_per_hour, block_reason, created_at`,
+      [
+        slotId,
+        clubId,
+        court.id,
+        court.name,
+        slotDate,
+        startHour,
+        endHour,
+        bonusPoints,
+        pricePerHour,
+        dto.blockReason !== undefined ? dto.blockReason?.trim() || null : null,
+      ],
     );
     return result.rows[0];
+  }
+
+  async blockCourtSlot(
+    userId: string,
+    clubId: string,
+    slotId: string,
+    kind: 'BLOCKED' | 'MAINTENANCE' = 'MAINTENANCE',
+    reason?: string,
+  ) {
+    return this.updateCourtSlot(userId, clubId, slotId, {
+      status: kind,
+      blockReason: reason,
+    });
+  }
+
+  async unblockCourtSlot(userId: string, clubId: string, slotId: string) {
+    return this.updateCourtSlot(userId, clubId, slotId, { status: 'OPEN' });
   }
 
   async listCourts(clubId: string, userId: string) {

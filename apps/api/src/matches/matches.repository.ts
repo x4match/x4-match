@@ -65,12 +65,14 @@ export class MatchesRepository {
   }
 
   async bookCourtSlot(slotId: string, clubId: string) {
-    await this.db.query(
+    const result = await this.db.query(
       `UPDATE court_availability_slots
        SET status = 'BOOKED'
-       WHERE id = $1 AND club_id = $2 AND status = 'OPEN'`,
+       WHERE id = $1 AND club_id = $2 AND status = 'OPEN'
+       RETURNING id`,
       [slotId, clubId],
     );
+    return result.rowCount ?? 0;
   }
 
   async releaseCourtSlot(slotId: string) {

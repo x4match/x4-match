@@ -259,6 +259,18 @@ export class TournamentsController {
     return this.tournamentsService.rejectRegistration(id, regId, user.sub);
   }
 
+  @Post(':id/registrations/:regId/promote')
+  @UseGuards(JwtAuthGuard)
+  async promote(
+    @Param('id') id: string,
+    @Param('regId') regId: string,
+    @CurrentUser() user: { sub: string },
+  ) {
+    const reg = await this.tournamentsService.promoteRegistration(id, regId, user.sub);
+    this.realtimeGateway.emitTournamentUpdated({ tournamentId: id, type: 'registration_promoted' });
+    return reg;
+  }
+
   @Delete(':id/registrations/:regId')
   @UseGuards(JwtAuthGuard)
   removeRegistration(

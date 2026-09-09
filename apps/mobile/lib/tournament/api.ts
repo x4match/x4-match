@@ -91,6 +91,11 @@ export async function rejectRegistration(id: string, regId: string) {
   return res.data;
 }
 
+export async function promoteRegistration(id: string, regId: string) {
+  const res = await api.post(`/tournaments/${id}/registrations/${regId}/promote`);
+  return res.data;
+}
+
 export async function removeRegistration(id: string, regId: string) {
   return api.delete(`/tournaments/${id}/registrations/${regId}`);
 }

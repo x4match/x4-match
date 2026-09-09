@@ -71,8 +71,11 @@ export interface TournamentMatch {
   team_a_name?: string | null;
   team_b_name?: string | null;
   status: TournamentMatchStatus;
-  score?: { sets: { teamA: number; teamB: number }[]; setsA?: number; setsB?: number } | null;
+  score?: { sets: { teamA: number; teamB: number }[]; setsA?: number; setsB?: number; bye?: boolean } | null;
   winner_registration_id?: string | null;
+  next_match_id?: string | null;
+  next_slot?: 'A' | 'B' | null;
+  bracket_position?: number | null;
   scheduled_at?: string | null;
 }
 

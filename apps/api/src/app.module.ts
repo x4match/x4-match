@@ -26,6 +26,7 @@ import { BadgesModule } from './badges/badges.module';
 import { ReportsModule } from './reports/reports.module';
 import { TournamentsModule } from './tournaments/tournaments.module';
 import { PlatformAdminModule } from './platform-admin/platform-admin.module';
+import { PlatformShopModule } from './platform-shop/platform-shop.module';
 import { HealthController } from './health/health.controller';
 
 @Module({
@@ -57,6 +58,7 @@ import { HealthController } from './health/health.controller';
     MessagingModule,
     NotificationsModule,
     ShopModule,
+    PlatformShopModule,
     PaymentsModule,
     CompetitiveScoringModule,
     BadgesModule,
