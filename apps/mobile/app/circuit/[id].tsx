@@ -55,6 +55,11 @@ export default function CircuitDetailScreen() {
   const [stageClubId, setStageClubId] = useState('');
   const [stageStart, setStageStart] = useState('');
   const [stageCategoryId, setStageCategoryId] = useState('');
+  const [eventName, setEventName] = useState('');
+  const [eventClubId, setEventClubId] = useState('');
+  const [eventStart, setEventStart] = useState('');
+  const [eventPrice, setEventPrice] = useState('');
+  const [publishTournaments, setPublishTournaments] = useState(true);
 
   useEffect(() => {
     if (categoryId) {
@@ -182,15 +187,74 @@ export default function CircuitDetailScreen() {
     onError: (err: any) => Alert.alert('Error', err.response?.data?.message || 'No se pudo publicar'),
   });
 
-  const onRefresh = useCallback(() => refetch(), [refetch]);
+  const createEvent = useMutation({
+    mutationFn: async () => {
+      const parsed = new Date(eventStart);
+      if (Number.isNaN(parsed.getTime())) throw new Error('Fecha inválida');
+      if (!eventName.trim()) throw new Error('Indicá el nombre de la etapa');
+      if (!eventClubId) throw new Error('Elegí la sede');
+      const price = eventPrice.trim() ? Number(eventPrice.replace(',', '.')) : undefined;
+      return api.post(`/circuits/${circuitId}/events`, {
+        name: eventName.trim(),
+        clubId: eventClubId,
+        startDate: parsed.toISOString(),
+        price: Number.isFinite(price) ? price : undefined,
+        publishTournaments,
+        maxTeams: 16,
+        format: 'GROUPS_THEN_ELIMINATION',
+      });
+    },
+    onSuccess: (res) => {
+      const count = res.data?.stages?.length ?? 0;
+      Alert.alert(
+        'Etapa creada',
+        publishTournaments
+          ? `Se abrieron ${count} torneos (uno por categoría), listos para inscripción.`
+          : `Se crearon ${count} fechas. Publicá cada torneo cuando quieras.`,
+      );
+      setEventName('');
+      setEventStart('');
+      setEventPrice('');
+      invalidate();
+      refetch();
+    },
+    onError: (err: any) =>
+      Alert.alert('Error', err.response?.data?.message || err.message || 'No se pudo crear la etapa'),
+  });
 
-  const upcomingStages = useMemo(() => {
-    if (!circuit?.stages) return [];
-    const now = Date.now();
-    return circuit.stages
-      .filter((s) => new Date(s.startDate).getTime() >= now - 86400000)
-      .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
-  }, [circuit?.stages]);
+  const publishStage = useMutation({
+    mutationFn: async (stageId: string) =>
+      api.post(`/circuits/${circuitId}/stages/${stageId}/publish`, {
+        maxTeams: 16,
+        format: 'GROUPS_THEN_ELIMINATION',
+      }),
+    onSuccess: (res) => {
+      const tid = res.data?.tournament_id;
+      Alert.alert('Torneo publicado', 'Inscripciones abiertas.', [
+        { text: 'OK' },
+        ...(tid
+          ? [{ text: 'Ver torneo', onPress: () => router.push(`/tournament/${tid}` as any) }]
+          : []),
+      ]);
+      invalidate();
+      refetch();
+    },
+    onError: (err: any) => Alert.alert('Error', err.response?.data?.message || 'No se pudo publicar'),
+  });
+
+  const PLACEMENT_LABELS: Record<string, string> = {
+    WINNER: 'Ganador',
+    FINALIST: 'Finalista',
+    SEMI: 'Semifinal',
+    QUARTERS: 'Cuartos',
+    R16: 'Octavos / 16',
+    R32: '32 avos',
+    R64: '64 avos',
+    GROUP_ELIMINATED: 'Perdedor de zona',
+    PARTICIPATION: 'Participación',
+  };
+
+  const onRefresh = useCallback(() => refetch(), [refetch]);
 
   const rankings = useMemo(() => {
     if (!circuit?.rankings?.length) return [];
@@ -338,111 +402,160 @@ export default function CircuitDetailScreen() {
           </AppCard>
         )}
 
-        <SectionHeader title="Próximas fechas" />
-        {upcomingStages.length === 0 ? (
+        <SectionHeader
+          title="Etapas y torneos"
+          subtitle={
+            circuit.stages?.length
+              ? `${circuit.stages.length} categoría${circuit.stages.length !== 1 ? 's' : ''} programadas`
+              : undefined
+          }
+        />
+        {(!circuit.stages || circuit.stages.length === 0) && (
           <AppCard>
-            <Text style={{ fontSize: 13, color: ui.colors.textSecondary }}>No hay fechas programadas por ahora.</Text>
+            <Text style={{ fontSize: 13, color: ui.colors.textSecondary }}>
+              Todavía no hay etapas. El organizador puede crear una etapa WPE (todas las categorías a la vez).
+            </Text>
           </AppCard>
-        ) : (
-          upcomingStages.map((stage) => (
-            <AppCard
-              key={stage.id}
-              onPress={stage.tournamentId ? () => router.push(`/tournament/${stage.tournamentId}` as any) : undefined}
-            >
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                <View style={iconBoxSm}>
-                  <Ionicons name="calendar" size={24} color={ui.colors.primary} />
+        )}
+        {(circuit.stages || []).map((stage) => (
+          <AppCard
+            key={stage.id}
+            onPress={
+              stage.tournamentId ? () => router.push(`/tournament/${stage.tournamentId}` as any) : undefined
+            }
+            style={{ marginBottom: 8 }}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <View style={iconBoxSm}>
+                <Ionicons name="trophy-outline" size={22} color={ui.colors.primary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontWeight: '700', color: ui.colors.textPrimary }}>
+                  {stage.name || 'Etapa'} · {stage.clubName}
+                </Text>
+                <Text style={{ fontSize: 12, color: ui.colors.textSecondary, marginTop: 4 }}>
+                  {formatCircuitCategory(stage.categoryLabel, stage.categoryGender)}
+                </Text>
+                <Text style={{ fontSize: 12, color: ui.colors.textSecondary, marginTop: 4 }}>
+                  {formatDateRange(stage.startDate, stage.endDate)}
+                </Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+                  <StatusPill status={stage.status} />
+                  {stage.tournamentStatus ? <StatusPill status={stage.tournamentStatus} /> : null}
+                  {stage.pointsAwarded ? (
+                    <Text style={{ fontSize: 11, color: ui.colors.success, fontWeight: '600' }}>
+                      Puntos otorgados
+                    </Text>
+                  ) : null}
                 </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontWeight: '700', color: ui.colors.textPrimary }}>{stage.clubName}</Text>
-                  {stage.categoryLabel ? (
-                    <View
+              </View>
+              {stage.tournamentId ? (
+                <Ionicons name="chevron-forward" size={18} color={ui.colors.textMuted} />
+              ) : null}
+            </View>
+            {isOrganizer && !stage.tournamentId ? (
+              <PrimaryButton
+                label="Abrir inscripción (publicar torneo)"
+                size="sm"
+                fullWidth
+                style={{ marginTop: 12 }}
+                loading={publishStage.isPending}
+                onPress={() => publishStage.mutate(stage.id)}
+              />
+            ) : null}
+          </AppCard>
+        ))}
+
+        <SectionHeader title="Ranking del circuito" />
+        <AppCard>
+          {circuit.categories && circuit.categories.length > 1 && (
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
+              {[{ id: '', label: 'Todas' }, ...circuit.categories].map((cat) => {
+                const active = (selectedCategoryId || '') === cat.id;
+                return (
+                  <TouchableOpacity
+                    key={cat.id || 'all'}
+                    onPress={() => setSelectedCategoryId(cat.id || null)}
+                    style={{
+                      paddingHorizontal: 14,
+                      paddingVertical: 8,
+                      borderRadius: ui.radius.pill,
+                      backgroundColor: active ? ui.colors.primary : ui.colors.cardMuted,
+                      borderWidth: 1,
+                      borderColor: active ? ui.colors.primary : ui.colors.border,
+                    }}
+                  >
+                    <Text
                       style={{
-                        alignSelf: 'flex-start',
-                        backgroundColor: ui.colors.surfaceAlt,
-                        paddingHorizontal: 8,
-                        paddingVertical: 3,
-                        borderRadius: 6,
-                        marginTop: 6,
+                        fontSize: 13,
+                        fontWeight: '600',
+                        color: active ? '#fff' : ui.colors.textPrimary,
                       }}
                     >
-                      <Text style={{ fontSize: 10, fontWeight: '600', color: ui.colors.textInverse }}>
-                        Cat. {stage.categoryLabel}
-                      </Text>
-                    </View>
-                  ) : null}
-                  <Text style={{ fontSize: 12, color: ui.colors.textSecondary, marginTop: 6 }}>
-                    {formatDateRange(stage.startDate, stage.endDate)}
+                      {cat.id ? formatCircuitCategory(cat.label, cat.gender) : cat.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          )}
+          {rankings.length === 0 ? (
+            <Text style={{ fontSize: 13, color: ui.colors.textSecondary }}>
+              El ranking se actualiza al finalizar los torneos de cada etapa (puntos WPE).
+            </Text>
+          ) : (
+            rankings.slice(0, 30).map((entry, index) => (
+              <View
+                key={entry.id}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  paddingVertical: 12,
+                  borderBottomWidth: index < Math.min(rankings.length, 30) - 1 ? 1 : 0,
+                  borderBottomColor: ui.colors.border,
+                  gap: 12,
+                }}
+              >
+                <Text style={{ width: 28, fontWeight: '800', fontSize: 15, color: ui.colors.primary }}>
+                  {entry.position ?? index + 1}
+                </Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontWeight: '600', color: ui.colors.textPrimary }}>{entry.playerName}</Text>
+                  <Text style={{ fontSize: 12, color: ui.colors.textSecondary }}>
+                    {formatCircuitCategory(entry.categoryLabel, entry.categoryGender)}
+                    {entry.tournamentsPlayed != null ? ` · ${entry.tournamentsPlayed} etapas` : ''}
                   </Text>
                 </View>
-                {stage.tournamentId ? (
-                  <Ionicons name="chevron-forward" size={18} color={ui.colors.textMuted} />
-                ) : null}
+                <Text style={{ fontWeight: '700', color: ui.colors.textPrimary }}>{entry.points} pts</Text>
               </View>
-            </AppCard>
-          ))
-        )}
+            ))
+          )}
+        </AppCard>
 
-        {circuit.rankings && circuit.rankings.length > 0 && (
+        {circuit.pointRules && circuit.pointRules.length > 0 ? (
           <>
-            <SectionHeader title="Ranking del circuito" />
+            <SectionHeader title="Puntaje del ranking" subtitle="Tabla estilo WPE" />
             <AppCard>
-              {circuit.categories && circuit.categories.length > 1 && (
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
-                  {[{ id: '', label: 'Todas' }, ...circuit.categories].map((cat) => {
-                    const active = (selectedCategoryId || '') === cat.id;
-                    return (
-                      <TouchableOpacity
-                        key={cat.id || 'all'}
-                        onPress={() => setSelectedCategoryId(cat.id || null)}
-                        style={{
-                          paddingHorizontal: 14,
-                          paddingVertical: 8,
-                          borderRadius: ui.radius.pill,
-                          backgroundColor: active ? ui.colors.primary : ui.colors.cardMuted,
-                          borderWidth: 1,
-                          borderColor: active ? ui.colors.primary : ui.colors.border,
-                        }}
-                      >
-                        <Text
-                          style={{
-                            fontSize: 13,
-                            fontWeight: '600',
-                            color: active ? '#fff' : ui.colors.textPrimary,
-                          }}
-                        >
-                          {cat.id ? formatCircuitCategory(cat.label, cat.gender) : cat.label}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              )}
-              {rankings.slice(0, 20).map((entry, index) => (
+              {circuit.pointRules.map((rule) => (
                 <View
-                  key={entry.id}
+                  key={rule.placement}
                   style={{
                     flexDirection: 'row',
-                    alignItems: 'center',
-                    paddingVertical: 12,
-                    borderBottomWidth: index < Math.min(rankings.length, 20) - 1 ? 1 : 0,
+                    justifyContent: 'space-between',
+                    paddingVertical: 8,
+                    borderBottomWidth: 1,
                     borderBottomColor: ui.colors.border,
-                    gap: 12,
                   }}
                 >
-                  <Text style={{ width: 28, fontWeight: '800', fontSize: 15, color: ui.colors.primary }}>
-                    {entry.position ?? index + 1}
+                  <Text style={{ color: ui.colors.textPrimary }}>
+                    {PLACEMENT_LABELS[rule.placement] || rule.placement}
                   </Text>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ fontWeight: '600', color: ui.colors.textPrimary }}>{entry.playerName}</Text>
-                    <Text style={{ fontSize: 12, color: ui.colors.textSecondary }}>{entry.categoryLabel}</Text>
-                  </View>
-                  <Text style={{ fontWeight: '700', color: ui.colors.textPrimary }}>{entry.points} pts</Text>
+                  <Text style={{ fontWeight: '700', color: ui.colors.primary }}>{rule.points}</Text>
                 </View>
               ))}
             </AppCard>
           </>
-        )}
+        ) : null}
 
         {isOrganizer && (
           <AppCard style={{ backgroundColor: ui.colors.surfaceAlt, marginTop: ui.spacing.md }}>
@@ -594,12 +707,140 @@ export default function CircuitDetailScreen() {
                 </TouchableOpacity>
               );
             })}
+            <Text
+              style={{
+                fontSize: 14,
+                fontWeight: '600',
+                color: ui.colors.textInverse,
+                marginTop: 16,
+                marginBottom: 6,
+              }}
+            >
+              Crear etapa (estilo WPE)
+            </Text>
+            <Text style={{ fontSize: 12, color: ui.colors.textMuted, marginBottom: 10 }}>
+              Una etapa = un torneo por cada categoría, mismo nombre, fecha y sede.
+            </Text>
+            <InputField
+              label="Nombre de la etapa"
+              value={eventName}
+              onChangeText={setEventName}
+              placeholder="Ej: 1° Fecha - Complejo Norte"
+            />
+            <InputField
+              label="Fecha"
+              value={eventStart}
+              onChangeText={setEventStart}
+              placeholder="2026-04-15"
+              style={{ marginTop: 8 }}
+            />
+            <InputField
+              label="Precio inscripción (opcional)"
+              value={eventPrice}
+              onChangeText={setEventPrice}
+              placeholder="15000"
+              keyboardType="decimal-pad"
+              style={{ marginTop: 8 }}
+            />
+            <Text style={{ fontSize: 13, fontWeight: '600', color: ui.colors.textInverse, marginTop: 10, marginBottom: 6 }}>
+              Sede de la etapa
+            </Text>
+            {(circuit.venues || []).length === 0 ? (
+              <Text style={{ fontSize: 12, color: ui.colors.textMuted, marginBottom: 8 }}>
+                Agregá al menos una sede arriba.
+              </Text>
+            ) : (
+              (circuit.venues || []).map((v) => (
+                <TouchableOpacity
+                  key={v.clubId}
+                  onPress={() => setEventClubId(eventClubId === v.clubId ? '' : v.clubId)}
+                  style={{ paddingVertical: 8 }}
+                >
+                  <Text
+                    style={{
+                      color: eventClubId === v.clubId ? ui.colors.primary : ui.colors.textInverse,
+                      fontWeight: '600',
+                    }}
+                  >
+                    {v.clubName}
+                  </Text>
+                </TouchableOpacity>
+              ))
+            )}
+            <TouchableOpacity
+              onPress={() => setPublishTournaments((v) => !v)}
+              style={{
+                alignSelf: 'flex-start',
+                paddingHorizontal: 12,
+                paddingVertical: 8,
+                borderRadius: ui.radius.pill,
+                backgroundColor: publishTournaments ? ui.colors.primary : ui.colors.surface,
+                borderWidth: 1,
+                borderColor: publishTournaments ? ui.colors.primary : ui.colors.border,
+                marginTop: 8,
+                marginBottom: 12,
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 12,
+                  fontWeight: '600',
+                  color: publishTournaments ? '#fff' : ui.colors.textInverse,
+                }}
+              >
+                {publishTournaments ? '✓ Publicar torneos al crear' : 'Solo borrador (publicar después)'}
+              </Text>
+            </TouchableOpacity>
+            <PrimaryButton
+              label="Crear etapa"
+              fullWidth
+              loading={createEvent.isPending}
+              disabled={createEvent.isPending || (circuit.categories?.length ?? 0) === 0}
+              onPress={() => {
+                if (!eventName.trim()) {
+                  Alert.alert('Falta el nombre', 'Indicá el nombre de la etapa.');
+                  return;
+                }
+                if (!eventStart.trim()) {
+                  Alert.alert('Falta la fecha', 'Ingresá una fecha (AAAA-MM-DD).');
+                  return;
+                }
+                const parsed = new Date(eventStart);
+                if (Number.isNaN(parsed.getTime())) {
+                  Alert.alert('Fecha inválida', 'Usá el formato AAAA-MM-DD.');
+                  return;
+                }
+                if (!eventClubId) {
+                  Alert.alert('Falta la sede', 'Elegí una sede para la etapa.');
+                  return;
+                }
+                if ((circuit.categories?.length ?? 0) === 0) {
+                  Alert.alert('Faltan categorías', 'Agregá al menos una categoría antes de crear la etapa.');
+                  return;
+                }
+                createEvent.mutate();
+              }}
+            />
+
+            <Text
+              style={{
+                fontSize: 14,
+                fontWeight: '600',
+                color: ui.colors.textInverse,
+                marginTop: 20,
+                marginBottom: 6,
+              }}
+            >
+              Agregar fecha (avanzado)
+            </Text>
+            <Text style={{ fontSize: 12, color: ui.colors.textMuted, marginBottom: 10 }}>
+              Solo una categoría. Preferí “Crear etapa” para el flujo WPE completo.
+            </Text>
             <InputField
               label="Fecha de la etapa"
               value={stageStart}
               onChangeText={setStageStart}
               placeholder="2025-02-15"
-              style={{ marginTop: 12 }}
             />
             {circuit.categories && circuit.categories.length > 0 && (
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginVertical: 10 }}>

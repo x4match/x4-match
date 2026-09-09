@@ -218,11 +218,22 @@ export interface CircuitStage {
   clubName: string;
   categoryId?: string;
   categoryLabel?: string;
+  categoryGender?: string;
   name?: string;
   startDate: string;
   endDate?: string;
   tournamentId?: string;
+  tournamentStatus?: string;
+  tournamentName?: string;
+  pointsAwarded?: boolean;
   status: string;
+}
+
+export interface CircuitPointRule {
+  id?: string;
+  placement: string;
+  points: number;
+  sortOrder?: number;
 }
 
 export interface CircuitRankingEntry {
@@ -231,9 +242,11 @@ export interface CircuitRankingEntry {
   playerName: string;
   categoryId: string;
   categoryLabel: string;
+  categoryGender?: string;
   points: number;
   wins: number;
   losses: number;
+  tournamentsPlayed?: number;
   position?: number;
 }
 
@@ -252,6 +265,7 @@ export interface Circuit {
   venues?: CircuitVenue[];
   stages?: CircuitStage[];
   rankings?: CircuitRankingEntry[];
+  pointRules?: CircuitPointRule[];
 }
 
 export type MessageAccessReason =

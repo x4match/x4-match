@@ -208,6 +208,12 @@ export function mapCircuit(raw: any): Circuit {
     venues: asArray<any>(raw.venues).map(mapCircuitVenue),
     stages: asArray<any>(raw.stages).map(mapCircuitStage),
     rankings: asArray<any>(raw.rankings).map(mapCircuitRanking),
+    pointRules: asArray<any>(raw.point_rules ?? raw.pointRules).map((r) => ({
+      id: r.id,
+      placement: String(r.placement ?? ''),
+      points: Number(r.points ?? 0),
+      sortOrder: r.sort_order ?? r.sortOrder,
+    })),
   };
 }
 
@@ -249,10 +255,14 @@ export function mapCircuitStage(raw: any): CircuitStage {
     clubName: String(raw.club_name ?? raw.clubName ?? 'Club'),
     categoryId: raw.category_id ?? raw.categoryId,
     categoryLabel: raw.category_label ?? raw.categoryLabel,
+    categoryGender: raw.category_gender ?? raw.categoryGender,
     name: raw.name,
     startDate: raw.start_date ?? raw.startDate,
     endDate: raw.end_date ?? raw.endDate,
     tournamentId: raw.tournament_id ?? raw.tournamentId,
+    tournamentStatus: raw.tournament_status ?? raw.tournamentStatus,
+    tournamentName: raw.tournament_name ?? raw.tournamentName,
+    pointsAwarded: raw.points_awarded ?? raw.pointsAwarded ?? false,
     status: raw.status ?? 'SCHEDULED',
   };
 }
@@ -276,9 +286,11 @@ export function mapCircuitRanking(raw: any): CircuitRankingEntry {
     playerName: String(raw.player_name ?? raw.playerName ?? raw.nickname ?? 'Jugador'),
     categoryId: raw.category_id ?? raw.categoryId,
     categoryLabel: raw.category_label ?? raw.categoryLabel,
+    categoryGender: raw.category_gender ?? raw.categoryGender,
     points: raw.points ?? 0,
     wins: raw.wins ?? 0,
     losses: raw.losses ?? 0,
+    tournamentsPlayed: raw.tournaments_played ?? raw.tournamentsPlayed,
     position: raw.position,
   };
 }
