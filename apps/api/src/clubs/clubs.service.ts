@@ -518,8 +518,25 @@ export class ClubsService {
       throw new BadRequestException('La hora de fin debe ser posterior a la de inicio');
     }
 
+    const dateStr = typeof slotDate === 'string' ? slotDate.slice(0, 10) : String(slotDate).slice(0, 10);
+    const overlap = await this.db.query(
+      `SELECT id FROM court_availability_slots
+       WHERE club_id = $1
+         AND id <> $2
+         AND status <> 'CANCELLED'
+         AND slot_date = $3::date
+         AND court_id IS NOT DISTINCT FROM $4::uuid
+         AND start_hour < $6
+         AND end_hour > $5
+       LIMIT 1`,
+      [clubId, slotId, dateStr, court.id, startHour, endHour],
+    );
+    if (overlap.rows[0]) {
+      throw new BadRequestException('Ese horario se solapa con otro turno de la misma cancha');
+    }
+
     const bonusPoints = await this.resolveSlotBonus(clubId, {
-      slotDate: typeof slotDate === 'string' ? slotDate.slice(0, 10) : slotDate,
+      slotDate: dateStr,
       startHour,
       endHour,
     });
@@ -1867,8 +1884,14 @@ export class ClubsService {
     await this.assertClubRole(userId, clubId);
     assertClubId(clubId);
 
-    const existing = await this.db.query<{ id: string; status: string; club_id: string }>(
-      `SELECT id, status, club_id FROM shop_purchases WHERE id = $1`,
+    const existing = await this.db.query<{
+      id: string;
+      status: string;
+      club_id: string;
+      product_id: string;
+      quantity: number;
+    }>(
+      `SELECT id, status, club_id, product_id, quantity FROM shop_purchases WHERE id = $1`,
       [purchaseId],
     );
     const purchase = existing.rows[0];
@@ -1894,7 +1917,154 @@ export class ClubsService {
     if (!updated.rows[0]) {
       throw new BadRequestException('No se pudo confirmar la compra');
     }
+
+    await this.db.query(
+      `UPDATE club_shop_products
+       SET stock_quantity = CASE
+             WHEN stock_quantity IS NULL THEN NULL
+             ELSE GREATEST(0, stock_quantity - $2)
+           END,
+           updated_at = NOW()
+       WHERE id = $1 AND club_id = $3`,
+      [purchase.product_id, purchase.quantity, clubId],
+    );
+
     return { ok: true, status: 'CONFIRMED' as const, purchase: updated.rows[0] };
+  }
+
+  async createPosSale(
+    clubId: string,
+    userId: string,
+    dto: {
+      items: { productId: string; quantity: number }[];
+      paymentMethod: 'CASH' | 'MP' | 'MANUAL' | 'OTHER';
+      customerUserId?: string;
+      note?: string;
+    },
+  ) {
+    await this.assertClubRole(userId, clubId);
+    assertClubId(clubId);
+    if (!dto.items?.length) {
+      throw new BadRequestException('Agregá al menos un producto');
+    }
+
+    const saleGroupId = crypto.randomUUID();
+    const lines: any[] = [];
+    let total = 0;
+
+    for (const item of dto.items) {
+      const productRes = await this.db.query<{
+        id: string;
+        name: string;
+        price: number;
+        stock_quantity: number | null;
+        active: boolean;
+      }>(
+        `SELECT id, name, price::float8 AS price, stock_quantity, active
+         FROM club_shop_products
+         WHERE id = $1 AND club_id = $2`,
+        [item.productId, clubId],
+      );
+      const product = productRes.rows[0];
+      if (!product || !product.active) {
+        throw new BadRequestException('Producto no disponible');
+      }
+      if (product.stock_quantity != null && product.stock_quantity < item.quantity) {
+        throw new BadRequestException(`Sin stock suficiente de ${product.name}`);
+      }
+
+      const unitPrice = Number(product.price);
+      const subtotal = unitPrice * item.quantity;
+      total += subtotal;
+
+      const inserted = await this.db.query(
+        `INSERT INTO shop_purchases (
+           club_id, user_id, product_id, quantity, unit_price, subtotal, status,
+           sold_by_user_id, payment_method, channel, sale_group_id, note
+         ) VALUES (
+           $1, $2, $3, $4, $5, $6, 'CONFIRMED',
+           $7, $8, 'POS', $9, $10
+         )
+         RETURNING id, product_id, quantity, unit_price, subtotal, status, payment_method, created_at`,
+        [
+          clubId,
+          dto.customerUserId ?? null,
+          product.id,
+          item.quantity,
+          unitPrice,
+          subtotal,
+          userId,
+          dto.paymentMethod,
+          saleGroupId,
+          dto.note?.trim() || null,
+        ],
+      );
+
+      await this.db.query(
+        `UPDATE club_shop_products
+         SET stock_quantity = CASE
+               WHEN stock_quantity IS NULL THEN NULL
+               ELSE GREATEST(0, stock_quantity - $2)
+             END,
+             updated_at = NOW()
+         WHERE id = $1 AND club_id = $3`,
+        [product.id, item.quantity, clubId],
+      );
+
+      lines.push({ ...inserted.rows[0], product_name: product.name });
+    }
+
+    return {
+      saleGroupId,
+      paymentMethod: dto.paymentMethod,
+      total,
+      items: lines,
+    };
+  }
+
+  async listPosDaySales(clubId: string, userId: string, date?: string) {
+    await this.assertClubRole(userId, clubId);
+    const day = date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : new Date().toISOString().slice(0, 10);
+
+    const result = await this.db.query(
+      `SELECT sp.id,
+              sp.sale_group_id,
+              sp.quantity,
+              sp.unit_price,
+              sp.subtotal,
+              sp.status,
+              sp.payment_method,
+              sp.note,
+              sp.created_at,
+              p.name AS product_name,
+              COALESCE(u.name, 'Walk-in') AS user_name,
+              seller.name AS sold_by_name
+       FROM shop_purchases sp
+       INNER JOIN club_shop_products p ON p.id = sp.product_id
+       LEFT JOIN users u ON u.id = sp.user_id
+       LEFT JOIN users seller ON seller.id = sp.sold_by_user_id
+       WHERE sp.club_id = $1
+         AND sp.channel = 'POS'
+         AND sp.created_at::date = $2::date
+       ORDER BY sp.created_at DESC`,
+      [clubId, day],
+    );
+
+    const byMethod: Record<string, number> = {};
+    let total = 0;
+    for (const row of result.rows) {
+      const amount = Number(row.subtotal) || 0;
+      total += amount;
+      const method = row.payment_method || 'OTHER';
+      byMethod[method] = (byMethod[method] || 0) + amount;
+    }
+
+    return {
+      date: day,
+      total,
+      byMethod,
+      sales: result.rows,
+    };
   }
 
   async markDepositPaid(clubId: string, userId: string, depositId: string) {
@@ -1982,13 +2152,15 @@ export class ClubsService {
               sp.quantity,
               sp.subtotal,
               sp.status,
+              sp.channel,
+              sp.payment_method,
               sp.created_at,
               p.name AS product_name,
-              u.name AS user_name,
+              COALESCE(u.name, 'Walk-in') AS user_name,
               m.title AS match_title
        FROM shop_purchases sp
        INNER JOIN club_shop_products p ON p.id = sp.product_id
-       INNER JOIN users u ON u.id = sp.user_id
+       LEFT JOIN users u ON u.id = sp.user_id
        LEFT JOIN matches m ON m.id = sp.match_id
        WHERE sp.club_id = $1
        ORDER BY sp.created_at DESC

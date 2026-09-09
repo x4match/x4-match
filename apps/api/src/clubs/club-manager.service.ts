@@ -100,6 +100,133 @@ export class ClubManagerService {
     };
   }
 
+  async getOccupancyReport(clubId: string, userId: string, periodDays = 30) {
+    await this.clubsService.requireClubAdmin(clubId, userId);
+    const club = await this.clubsService.findOne(clubId);
+    const days = Math.min(90, Math.max(7, periodDays));
+    const pricePerHour = await this.getCourtPricePerHour(clubId);
+
+    const [byDay, byHour, byCourt, shopRevenue, depositRevenue] = await Promise.all([
+      this.db.query<{
+        day: string;
+        total_slots: number;
+        booked_slots: number;
+        booked_hours: number;
+      }>(
+        `SELECT cas.slot_date::text AS day,
+                COUNT(*) FILTER (WHERE cas.status IN ('OPEN', 'BOOKED'))::int AS total_slots,
+                COUNT(*) FILTER (WHERE cas.status = 'BOOKED')::int AS booked_slots,
+                COALESCE(SUM(cas.end_hour - cas.start_hour) FILTER (WHERE cas.status = 'BOOKED'), 0)::float8 AS booked_hours
+         FROM court_availability_slots cas
+         WHERE cas.club_id = $1
+           AND cas.slot_date >= CURRENT_DATE - ($2::int * INTERVAL '1 day')
+           AND cas.slot_date < CURRENT_DATE + INTERVAL '1 day'
+           AND cas.status <> 'CANCELLED'
+         GROUP BY cas.slot_date
+         ORDER BY cas.slot_date ASC`,
+        [clubId, days],
+      ),
+      this.db.query<{
+        hour_bucket: number;
+        total_slots: number;
+        booked_slots: number;
+      }>(
+        `SELECT FLOOR(cas.start_hour)::int AS hour_bucket,
+                COUNT(*) FILTER (WHERE cas.status IN ('OPEN', 'BOOKED'))::int AS total_slots,
+                COUNT(*) FILTER (WHERE cas.status = 'BOOKED')::int AS booked_slots
+         FROM court_availability_slots cas
+         WHERE cas.club_id = $1
+           AND cas.slot_date >= CURRENT_DATE - ($2::int * INTERVAL '1 day')
+           AND cas.slot_date < CURRENT_DATE + INTERVAL '1 day'
+           AND cas.status IN ('OPEN', 'BOOKED')
+         GROUP BY FLOOR(cas.start_hour)::int
+         ORDER BY hour_bucket ASC`,
+        [clubId, days],
+      ),
+      this.queryByCourt(clubId, days, pricePerHour),
+      this.db.query<{ revenue: number }>(
+        `SELECT COALESCE(SUM(subtotal), 0)::float8 AS revenue
+         FROM shop_purchases
+         WHERE club_id = $1
+           AND status = 'CONFIRMED'
+           AND created_at >= NOW() - ($2::int * INTERVAL '1 day')`,
+        [clubId, days],
+      ),
+      this.db.query<{ revenue: number }>(
+        `SELECT COALESCE(SUM(md.amount), 0)::float8 AS revenue
+         FROM match_deposits md
+         INNER JOIN matches m ON m.id = md.match_id
+         WHERE m.club_id = $1
+           AND md.status = 'APPROVED'
+           AND md.updated_at >= NOW() - ($2::int * INTERVAL '1 day')`,
+        [clubId, days],
+      ),
+    ]);
+
+    const dayRows = byDay.rows.map((row) => {
+      const total = row.total_slots || 0;
+      const booked = row.booked_slots || 0;
+      return {
+        day: row.day.slice(0, 10),
+        totalSlots: total,
+        bookedSlots: booked,
+        bookedHours: Math.round(Number(row.booked_hours || 0) * 10) / 10,
+        occupancyPct: total > 0 ? Math.round((booked / total) * 100) : 0,
+      };
+    });
+
+    const hourRows = byHour.rows.map((row) => {
+      const total = row.total_slots || 0;
+      const booked = row.booked_slots || 0;
+      return {
+        hour: row.hour_bucket,
+        totalSlots: total,
+        bookedSlots: booked,
+        occupancyPct: total > 0 ? Math.round((booked / total) * 100) : 0,
+      };
+    });
+
+    const peaks = [...hourRows].sort((a, b) => b.occupancyPct - a.occupancyPct).slice(0, 5);
+    const valleys = [...hourRows]
+      .filter((h) => h.totalSlots > 0)
+      .sort((a, b) => a.occupancyPct - b.occupancyPct)
+      .slice(0, 5);
+
+    const totalSlots = dayRows.reduce((s, d) => s + d.totalSlots, 0);
+    const bookedSlots = dayRows.reduce((s, d) => s + d.bookedSlots, 0);
+    const bookedHours = dayRows.reduce((s, d) => s + d.bookedHours, 0);
+    const estimatedCourtRevenue = byCourt.reduce((s, c) => s + (c.estimatedRevenue || 0), 0);
+    const shop = Number(shopRevenue.rows[0]?.revenue || 0);
+    const deposits = Number(depositRevenue.rows[0]?.revenue || 0);
+
+    return {
+      clubId,
+      clubName: club.name,
+      periodDays: days,
+      courtPricePerHour: pricePerHour,
+      occupancy: {
+        overallPct: totalSlots > 0 ? Math.round((bookedSlots / totalSlots) * 100) : 0,
+        totalSlots,
+        bookedSlots,
+        bookedHours: Math.round(bookedHours * 10) / 10,
+        byDay: dayRows,
+        byHour: hourRows,
+        peaks,
+        valleys,
+      },
+      byCourt,
+      profitability: {
+        estimatedCourtRevenue,
+        collectedDeposits: Math.round(deposits),
+        shopRevenue: Math.round(shop),
+        estimatedTotal: Math.round(estimatedCourtRevenue + shop),
+        collectedTotal: Math.round(deposits + shop),
+        note:
+          'La rentabilidad estimada usa tarifa×horas reservadas + tienda confirmada. Sin costos operativos.',
+      },
+    };
+  }
+
   async getManagerReport(clubId: string, userId: string, periodDays = 30) {
     await this.clubsService.requireClubAdmin(clubId, userId);
     const club = await this.clubsService.findOne(clubId);
