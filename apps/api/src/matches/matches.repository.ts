@@ -539,10 +539,10 @@ export class MatchesRepository {
          )
          AND (
            $6::boolean = false
-           OR mp.match_lat IS NULL
-           OR mp.match_lng IS NULL
            OR (
-             (
+             mp.match_lat IS NOT NULL
+             AND mp.match_lng IS NOT NULL
+             AND (
                6371 * acos(
                  LEAST(
                    1,
