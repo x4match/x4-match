@@ -23,6 +23,7 @@ import { ShopModule } from './shop/shop.module';
 import { PaymentsModule } from './payments/payments.module';
 import { CompetitiveScoringModule } from './competitive-scoring/competitive-scoring.module';
 import { BadgesModule } from './badges/badges.module';
+import { ChallengesModule } from './challenges/challenges.module';
 import { ReportsModule } from './reports/reports.module';
 import { TournamentsModule } from './tournaments/tournaments.module';
 import { PlatformAdminModule } from './platform-admin/platform-admin.module';
@@ -62,6 +63,7 @@ import { HealthController } from './health/health.controller';
     PaymentsModule,
     CompetitiveScoringModule,
     BadgesModule,
+    ChallengesModule,
     ReportsModule,
     TournamentsModule,
     PlatformAdminModule,

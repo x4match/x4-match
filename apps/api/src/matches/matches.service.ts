@@ -9,9 +9,15 @@ import { ClubPointsService } from '../clubs/club-points.service';
 import { ClubGapFillService } from '../clubs/club-gap-fill.service';
 import { CompetitiveScoringService } from '../competitive-scoring/competitive-scoring.service';
 import { BadgesService } from '../badges/badges.service';
+import { ChallengesService } from '../challenges/challenges.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { isClubRole } from '../common/roles';
-import { defaultLevelBand, getCategoryLevelRange, getFemaleMixedLevelRange } from '../common/utils/level-range.util';
+import {
+  getCategoryLevelRange,
+  getCategorySearchRange,
+  isCategoryWithinSearchSteps,
+  resolveMatchLevelBand,
+} from '../common/utils/level-range.util';
 import { resolveVisibleLevelCategory, resolvePlayerRating, PLACEMENT_ELO_K_FACTOR, PLACEMENT_MATCHES_REQUIRED, resolveMatchGenderFromPartner, normalizeBinaryGender, type MatchGender } from '../common/utils';
 import { CreateMatchDto, type CourtBookingMode } from './dto/create-match.dto';
 import { ListOpenMatchesQueryDto } from './dto/list-open-matches.query.dto';
@@ -40,6 +46,7 @@ export class MatchesService {
     private readonly clubGapFillService: ClubGapFillService,
     private readonly competitiveScoringService: CompetitiveScoringService,
     private readonly badgesService: BadgesService,
+    private readonly challengesService: ChallengesService,
     @Inject(PAYMENTS_SERVICE)
     private readonly paymentsService: PaymentsService,
   ) {}
@@ -113,18 +120,15 @@ export class MatchesService {
       const isFemaleMixed =
         dto.gender === 'mixed' && normalizeBinaryGender(creatorGender) === 'female';
 
-      if (placement?.categoryStatus === 'provisional' && placement.declaredCategory) {
-        const band = isFemaleMixed
-          ? getFemaleMixedLevelRange(placement.declaredCategory)
-          : getCategoryLevelRange(placement.declaredCategory);
-        dto.levelMin = dto.levelMin ?? band.min;
-        dto.levelMax = dto.levelMax ?? band.max;
-      } else {
-        const level = placement?.skillScore ?? (await this.matchesRepository.getPlayerSkillScoreByUserId(userId));
-        const band = defaultLevelBand(level ?? 400);
-        dto.levelMin = dto.levelMin ?? band.min;
-        dto.levelMax = dto.levelMax ?? band.max;
-      }
+      const category = resolveVisibleLevelCategory({
+        rating: placement?.rating ?? 1000,
+        categoryStatus: placement?.categoryStatus,
+        declaredCategory: placement?.declaredCategory,
+        lockDeclaredCategory: placement?.lockDeclaredCategory,
+      });
+      const band = resolveMatchLevelBand({ category, femaleMixed: isFemaleMixed });
+      dto.levelMin = dto.levelMin ?? band.min;
+      dto.levelMax = dto.levelMax ?? band.max;
     }
 
     const courtBooking = this.resolveCourtBooking(dto);
@@ -169,8 +173,15 @@ export class MatchesService {
   async listOpenMatches(viewerUserId: string, query: ListOpenMatchesQueryDto) {
     await this.refreshExpiredCourtWindows();
 
-    const category = await this.resolveViewerCategory(viewerUserId, query.category);
-    const band = getCategoryLevelRange(category);
+    const viewerCategory = await this.resolveViewerCategory(viewerUserId);
+    const requestedCategory = query.category?.trim() || null;
+    const category =
+      requestedCategory && isCategoryWithinSearchSteps(viewerCategory, requestedCategory)
+        ? requestedCategory
+        : viewerCategory;
+    const band = requestedCategory
+      ? getCategoryLevelRange(category)
+      : getCategorySearchRange(viewerCategory);
 
     let lat = query.lat != null && Number.isFinite(Number(query.lat)) ? Number(query.lat) : null;
     let lng = query.lng != null && Number.isFinite(Number(query.lng)) ? Number(query.lng) : null;
@@ -895,6 +906,7 @@ export class MatchesService {
     await this.applyMatchRatings(matchId, winnerTeam);
     await this.advancePlacementIfCompetitive(matchId);
     await this.badgesService.evaluateForFinishedMatch(matchId);
+    await this.challengesService.completeFromMatch(matchId);
     const detail = await this.findOne(matchId);
     this.realtimeGateway.emitMatchUpdated(detail);
     return true;

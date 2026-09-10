@@ -30,10 +30,10 @@ export {
 } from './player-rating.util';
 export {
   COMPETITIVE_BASE_POINTS,
-  COMPETITIVE_SKILL_FACTOR,
   COMPETITIVE_MIN_WIN_POINTS,
-  COMPETITIVE_MIN_LOSS_POINTS,
-  COMPETITIVE_MAX_LOSS_POINTS,
+  categoryStrengthOrdinal,
+  computeCategoryDelta,
+  getCompetitiveBasePointsForDelta,
   computeCompetitiveMatchPoints,
   type CompetitiveMatchOutcome,
 } from './category-scoring.util';

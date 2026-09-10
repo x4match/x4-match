@@ -4,8 +4,8 @@ import { AvailabilityService } from '../availability/availability.service';
 import { MatchesRepository } from '../matches/matches.repository';
 import { MatchesService } from '../matches/matches.service';
 import { MatchInviteDto } from '../matches/dto/match-invite.dto';
-import { getCategoryLevelRange, defaultLevelBand } from '../common/utils/level-range.util';
-import { ratingToSkillScore } from '../common/utils';
+import { getCategorySearchRange, resolveMatchLevelBand } from '../common/utils/level-range.util';
+import { ratingToSkillScore, resolveVisibleLevelCategory } from '../common/utils';
 
 @Injectable()
 export class MatchmakingService {
@@ -32,14 +32,20 @@ export class MatchmakingService {
     let levelMax = data.maxRating ?? null;
 
     if (data.category && levelMin == null && levelMax == null) {
-      const range = getCategoryLevelRange(data.category);
+      const range = getCategorySearchRange(data.category);
       levelMin = range.min;
       levelMax = range.max;
     }
 
     if (levelMin == null || levelMax == null) {
-      const playerLevel = await this.matchesRepository.getPlayerSkillScoreByUserId(userId);
-      const band = defaultLevelBand(playerLevel ?? 400);
+      const placement = await this.matchesRepository.getPlayerPlacementBandByUserId(userId);
+      const category = resolveVisibleLevelCategory({
+        rating: placement?.rating ?? 1000,
+        categoryStatus: placement?.categoryStatus,
+        declaredCategory: placement?.declaredCategory,
+        lockDeclaredCategory: placement?.lockDeclaredCategory,
+      });
+      const band = resolveMatchLevelBand({ category });
       levelMin = levelMin ?? band.min;
       levelMax = levelMax ?? band.max;
     }

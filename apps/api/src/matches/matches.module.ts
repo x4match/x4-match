@@ -6,6 +6,7 @@ import { MatchesRepository } from './matches.repository';
 import { ClubsModule } from '../clubs/clubs.module';
 import { CompetitiveScoringModule } from '../competitive-scoring/competitive-scoring.module';
 import { BadgesModule } from '../badges/badges.module';
+import { ChallengesModule } from '../challenges/challenges.module';
 import { RealtimeModule } from '../realtime/realtime.module';
 import { PaymentsModule } from '../payments/payments.module';
 import { MatchResultExpiryService } from './match-result-expiry.service';
@@ -17,6 +18,7 @@ import { MatchResultExpiryService } from './match-result-expiry.service';
     forwardRef(() => ClubsModule),
     CompetitiveScoringModule,
     BadgesModule,
+    forwardRef(() => ChallengesModule),
     forwardRef(() => PaymentsModule),
   ],
   controllers: [MatchesController],

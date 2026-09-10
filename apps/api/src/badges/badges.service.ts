@@ -4,6 +4,7 @@ import { userTeamFromRank } from '../common/utils/match-result.util';
 import {
   computeWinStreak,
   evaluateEligibleBadges,
+  isCleanSweepWin,
   isComebackWin,
   type BadgeCode,
   type MatchOutcome,
@@ -115,7 +116,9 @@ export class BadgesService {
 
     const sets = this.parseSets(match.sets);
     const neededPlayers = Number(match.needed_players) || 4;
-    const matchHour = new Date(match.date).getHours();
+    const matchDate = new Date(match.date);
+    const matchHour = matchDate.getHours();
+    const matchDow = matchDate.getDay();
     const awarded: BadgeCode[] = [];
 
     for (const row of participantsRes.rows) {
@@ -138,7 +141,9 @@ export class BadgesService {
         mode: String(match.mode || 'friendly'),
         clubId: match.club_id ?? null,
         matchHour,
+        matchDow,
         isComebackWin: isComebackWin(myTeam, winnerTeam, sets),
+        isCleanSweep: isCleanSweepWin(myTeam, winnerTeam, sets),
       });
 
       const newlyEarned = await this.awardEligibleBadges(userId, ctx);
@@ -203,6 +208,21 @@ export class BadgesService {
       }
     }
 
+    // Distinct co-players (rivals + partners) across confirmed finished matches.
+    const socialRes = await this.db.query(
+      `SELECT COUNT(DISTINCT opp.user_id)::int AS unique_opponents
+       FROM match_players me_mp
+       INNER JOIN players me ON me.id = me_mp.player_id AND me.user_id = $1
+       INNER JOIN matches m ON m.id = me_mp.match_id AND m.status = 'FINISHED'
+       INNER JOIN match_results mr ON mr.match_id = m.id AND mr.result_status = 'confirmed'
+       INNER JOIN match_players other_mp ON other_mp.match_id = m.id
+         AND other_mp.status IN ('JOINED', 'CONFIRMED')
+         AND other_mp.player_id <> me.id
+       INNER JOIN players opp ON opp.id = other_mp.player_id
+       WHERE me_mp.status IN ('JOINED', 'CONFIRMED')`,
+      [userId],
+    );
+
     return {
       userId,
       completedMatches: historyRes.rows.length,
@@ -210,6 +230,7 @@ export class BadgesService {
       currentWinStreak: computeWinStreak(outcomes),
       competitiveMatches,
       maxMatchesAtSingleClub: clubCounts.size ? Math.max(...clubCounts.values()) : 0,
+      uniqueOpponents: Number(socialRes.rows[0]?.unique_opponents ?? 0),
       justFinished,
     };
   }

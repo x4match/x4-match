@@ -1,11 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import {
-  COMPETITIVE_BASE_POINTS,
   type CompetitiveMatchOutcome,
+  computeCategoryDelta,
   computeCompetitiveMatchPoints,
+  getCompetitiveBasePointsForDelta,
 } from '../common/utils/category-scoring.util';
 import { getCategoryRatingRange, getLevelCategory, getMonthKey, resolveVisibleLevelCategory } from '../common/utils';
-import { resolvePlayerRating, ratingToSkillScore } from '../common/utils/player-rating.util';
+import { resolvePlayerRating } from '../common/utils/player-rating.util';
 import { DatabaseService } from '../database/database.service';
 import { applyNoveltyToCompetitivePoints, splitParticipantsByTeam } from '../rating/engine';
 import { countRecentTeamMatchups } from '../rating/matchup-history';
@@ -108,16 +109,12 @@ export class CompetitiveScoringService {
       if (player.categoryStatus === 'provisional') continue;
       const myTeam = userTeamFromRank(player.rnk, neededPlayers);
       const playerRating = resolvePlayerRating({ rating: player.rating, level: player.level });
-      const mySkill = ratingToSkillScore(playerRating);
       const myCategory = getLevelCategory(playerRating);
 
       const opponents = participants
         .filter((p) => p.userId !== player.userId)
         .filter((p) => userTeamFromRank(p.rnk, neededPlayers) !== myTeam);
 
-      const opponentSkills = opponents.map((o) =>
-        ratingToSkillScore(resolvePlayerRating({ rating: o.rating, level: o.level })),
-      );
       const opponentCategories = opponents.map((o) =>
         getLevelCategory(resolvePlayerRating({ rating: o.rating, level: o.level })),
       );
@@ -127,8 +124,10 @@ export class CompetitiveScoringService {
         match.winner_team,
         match.score,
       );
+      const categoryDelta = computeCategoryDelta(myCategory, opponentCategories);
+      const basePoints = getCompetitiveBasePointsForDelta(categoryDelta);
       const points = applyNoveltyToCompetitivePoints(
-        computeCompetitiveMatchPoints(mySkill, opponentSkills, outcome),
+        computeCompetitiveMatchPoints(myCategory, opponentCategories, outcome),
         priorEncounters,
       );
 
@@ -143,7 +142,7 @@ export class CompetitiveScoringService {
           matchId,
           monthKey,
           points,
-          COMPETITIVE_BASE_POINTS,
+          basePoints,
           myCategory,
           opponentCategories,
         ],
