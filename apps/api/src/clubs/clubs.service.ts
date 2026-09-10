@@ -4,14 +4,14 @@ import {
   Inject,
   Injectable,
   NotFoundException,
-  forwardRef,
 } from '@nestjs/common';
 import { isClubRole } from '../common/roles';
 import { getMonthKey } from '../common/utils';
 import { COURT_SLOT_END_AT_SQL } from '../common/utils/court-schedule.util';
 import { deleteCloudinaryAsset, uploadImageBuffer } from '../common/cloudinary/cloudinary.util';
 import { DatabaseService } from '../database/database.service';
-import { PaymentsService } from '../payments/payments.service';
+import { PAYMENTS_SERVICE } from '../payments/payments.tokens';
+import type { PaymentsService } from '../payments/payments.service';
 import { CreateClubDto } from './dto/create-club.dto';
 import { CreateClubPromotionDto } from './dto/create-club-promotion.dto';
 import { CreateClubRewardDto } from './dto/create-club-reward.dto';
@@ -44,7 +44,7 @@ function assertClubId(id: string): void {
 export class ClubsService {
   constructor(
     private readonly db: DatabaseService,
-    @Inject(forwardRef(() => PaymentsService))
+    @Inject(PAYMENTS_SERVICE)
     private readonly paymentsService: PaymentsService,
   ) {}
 

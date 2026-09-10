@@ -4,7 +4,6 @@ import {
   Inject,
   Injectable,
   NotFoundException,
-  forwardRef,
 } from '@nestjs/common';
 import { ClubPointsService } from '../clubs/club-points.service';
 import { ClubGapFillService } from '../clubs/club-gap-fill.service';
@@ -24,7 +23,8 @@ import { RejectMatchResultDto } from './dto/reject-match-result.dto';
 import { PlayerRatingDto } from './dto/player-rating.dto';
 import { UpdateMatchStatusDto } from './dto/update-match-status.dto';
 import { MatchesRepository } from './matches.repository';
-import { PaymentsService } from '../payments/payments.service';
+import { PAYMENTS_SERVICE } from '../payments/payments.tokens';
+import type { PaymentsService } from '../payments/payments.service';
 import { parseBestOfThreeSets } from '../common/utils/match-result.util';
 import { computeMatchRatingChanges, splitParticipantsByTeam } from '../rating/engine';
 
@@ -40,7 +40,7 @@ export class MatchesService {
     private readonly clubGapFillService: ClubGapFillService,
     private readonly competitiveScoringService: CompetitiveScoringService,
     private readonly badgesService: BadgesService,
-    @Inject(forwardRef(() => PaymentsService))
+    @Inject(PAYMENTS_SERVICE)
     private readonly paymentsService: PaymentsService,
   ) {}
 
