@@ -14,6 +14,8 @@
       "usesAppleSignIn": true,
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "x4 match usa tu ubicación para mostrarte partidos y jugadores cerca tuyo.",
+        "NSCameraUsageDescription": "x4 match usa la cámara para que puedas tomar fotos dentro de la app, por ejemplo tu foto de perfil, el logo o la portada del club, un flyer de torneo o la foto de un producto de la tienda.",
+        "NSPhotoLibraryUsageDescription": "x4 match accede a tu galería para que puedas elegir fotos dentro de la app, por ejemplo tu foto de perfil, el logo o la portada del club, un flyer de torneo o la foto de un producto de la tienda.",
         "ITSAppUsesNonExemptEncryption": false
       }
     },
@@ -44,6 +46,14 @@
         "expo-location",
         {
           "locationWhenInUsePermission": "x4 match usa tu ubicación para mostrarte partidos y jugadores cerca tuyo."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "x4 match usa la cámara para que puedas tomar fotos dentro de la app, por ejemplo tu foto de perfil, el logo o la portada del club, un flyer de torneo o la foto de un producto de la tienda.",
+          "photosPermission": "x4 match accede a tu galería para que puedas elegir fotos dentro de la app, por ejemplo tu foto de perfil, el logo o la portada del club, un flyer de torneo o la foto de un producto de la tienda.",
+          "microphonePermission": false
         }
       ],
       [
