@@ -247,7 +247,7 @@ export class MatchesRepository {
     let club = null;
     if (match.club_id) {
       const clubResult = await this.db.query(
-        `SELECT id, name, city, zone, address FROM clubs WHERE id = $1`,
+        `SELECT id, name, city, zone, address, logo_url, cover_url FROM clubs WHERE id = $1`,
         [match.club_id],
       );
       club = clubResult.rows[0] ?? null;
@@ -512,6 +512,8 @@ export class MatchesRepository {
                 c.name AS club_name,
                 c.zone AS club_zone,
                 c.city AS club_city,
+                c.logo_url AS club_logo_url,
+                c.cover_url AS club_cover_url,
                 COALESCE(c.latitude::float8, creator.latitude::float8) AS match_lat,
                 COALESCE(c.longitude::float8, creator.longitude::float8) AS match_lng,
                 (
@@ -599,6 +601,11 @@ export class MatchesRepository {
   async getPlayerIdByUserId(userId: string) {
     const result = await this.db.query(`SELECT id FROM players WHERE user_id = $1`, [userId]);
     return result.rows[0]?.id ?? null;
+  }
+
+  async getUserIdByPlayerId(playerId: string) {
+    const result = await this.db.query(`SELECT user_id FROM players WHERE id = $1`, [playerId]);
+    return result.rows[0]?.user_id ?? null;
   }
 
   async getGenderByUserId(userId: string): Promise<string | null> {

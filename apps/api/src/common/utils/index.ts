@@ -45,6 +45,7 @@ export {
 export {
   normalizeBinaryGender,
   resolveMatchGenderFromPartner,
+  playerFitsMatchGender,
   type MatchGender,
   type BinaryGender,
 } from './match-gender.util';

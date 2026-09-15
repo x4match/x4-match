@@ -411,8 +411,14 @@ export class AuthService {
     return 'Esta cuenta no tiene contraseña. Usá Apple o Google.';
   }
 
-  private appleAudience(): string {
-    return process.env.APPLE_BUNDLE_ID?.trim() || 'com.x4match.app';
+  /** Bundle ID (iOS) y Services ID (web) son audiences válidos del identity token. */
+  private appleAudiences(): string[] {
+    const audiences = [
+      process.env.APPLE_BUNDLE_ID?.trim() || 'com.x4match.app',
+      process.env.APPLE_SERVICES_ID?.trim(),
+      process.env.APPLE_CLIENT_ID?.trim(),
+    ].filter((value): value is string => Boolean(value));
+    return [...new Set(audiences)];
   }
 
   private async verifyAppleIdentityToken(identityToken: string) {
@@ -426,7 +432,7 @@ export class AuthService {
       const payload = jwt.verify(identityToken, pem, {
         algorithms: ['RS256'],
         issuer: 'https://appleid.apple.com',
-        audience: this.appleAudience(),
+        audience: this.appleAudiences(),
       }) as jwt.JwtPayload;
 
       if (!payload?.sub) {

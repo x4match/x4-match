@@ -17,8 +17,9 @@ import {
   getCategorySearchRange,
   isCategoryWithinSearchSteps,
   resolveMatchLevelBand,
+  categoryOverlapsMatchLevel,
 } from '../common/utils/level-range.util';
-import { resolveVisibleLevelCategory, resolvePlayerRating, PLACEMENT_ELO_K_FACTOR, PLACEMENT_MATCHES_REQUIRED, resolveMatchGenderFromPartner, normalizeBinaryGender, type MatchGender } from '../common/utils';
+import { resolveVisibleLevelCategory, resolvePlayerRating, PLACEMENT_ELO_K_FACTOR, PLACEMENT_MATCHES_REQUIRED, resolveMatchGenderFromPartner, normalizeBinaryGender, playerFitsMatchGender, type MatchGender } from '../common/utils';
 import { CreateMatchDto, type CourtBookingMode } from './dto/create-match.dto';
 import { ListOpenMatchesQueryDto } from './dto/list-open-matches.query.dto';
 import { MatchInviteDto } from './dto/match-invite.dto';
@@ -281,15 +282,48 @@ export class MatchesService {
     userId: string,
     match: { level_min?: number | null; level_max?: number | null },
   ): Promise<boolean> {
-    const level = await this.matchesRepository.getPlayerSkillScoreByUserId(userId);
-    if (level == null) return true;
+    const placement = await this.matchesRepository.getPlayerPlacementBandByUserId(userId);
+    if (!placement) return true;
 
-    const min = match.level_min != null ? Number(match.level_min) : null;
-    const max = match.level_max != null ? Number(match.level_max) : null;
-    if (min == null && max == null) return true;
-    if (min != null && level < min) return false;
-    if (max != null && level > max) return false;
-    return true;
+    // Usar categoría visible (declarada en provisional). Skill 0 de placement
+    // haría pasar a cualquiera en bandas que incluyen 0 (p.ej. 0–639).
+    const category = resolveVisibleLevelCategory({
+      rating: placement.rating,
+      categoryStatus: placement.categoryStatus,
+      declaredCategory: placement.declaredCategory,
+      lockDeclaredCategory: placement.lockDeclaredCategory,
+    });
+    return categoryOverlapsMatchLevel(category, match.level_min, match.level_max);
+  }
+
+  private async assertPlayerGenderFitsMatch(
+    userId: string,
+    matchGender?: string | null,
+  ): Promise<void> {
+    const playerGender = await this.matchesRepository.getGenderByUserId(userId);
+    const result = playerFitsMatchGender(matchGender, playerGender);
+    if (!result.ok) {
+      throw new BadRequestException(result.reason);
+    }
+  }
+
+  private async assertPlayerCategoryFitsMatch(
+    userId: string,
+    match: { level_min?: number | null; level_max?: number | null },
+  ): Promise<void> {
+    const fits = await this.playerLevelFitsMatch(userId, match);
+    if (!fits) {
+      throw new BadRequestException('Tu categoría no coincide con el rango de este partido');
+    }
+  }
+
+  /** Género siempre; categoría en invitaciones (join público puede pedir aprobación). */
+  private async assertPlayerCanBeInvitedToMatch(
+    userId: string,
+    match: { gender?: string | null; level_min?: number | null; level_max?: number | null },
+  ): Promise<void> {
+    await this.assertPlayerGenderFitsMatch(userId, match.gender);
+    await this.assertPlayerCategoryFitsMatch(userId, match);
   }
 
   private async assertCanManageJoinRequests(matchId: string, approverUserId: string) {
@@ -379,7 +413,16 @@ export class MatchesService {
       creatorUserId,
       invites,
     );
+    const match = await this.matchesRepository.getById(matchId);
+    if (!match) {
+      throw new NotFoundException('Partido no encontrado');
+    }
+
     for (const invite of playerInvites) {
+      const invitedUserId = await this.matchesRepository.getUserIdByPlayerId(invite.playerId);
+      if (invitedUserId) {
+        await this.assertPlayerCanBeInvitedToMatch(invitedUserId, match);
+      }
       await this.matchesRepository.join(matchId, invite.playerId, 'JOINED', invite.slotOrder);
     }
     for (const guest of guestInvites) {
@@ -394,7 +437,6 @@ export class MatchesService {
     }
 
     if (invitedUserIds.length > 0) {
-      const match = await this.matchesRepository.getById(matchId);
       const inviterName = await this.matchesRepository.getUserName(creatorUserId);
       await this.matchesRepository.notifyUsers(
         invitedUserIds,
@@ -455,7 +497,9 @@ export class MatchesService {
       throw new BadRequestException('Este partido ya no acepta jugadores');
     }
 
-    const fitsLevel = await this.playerLevelFitsMatch(userId, match);
+    await this.assertPlayerGenderFitsMatch(userId, match.gender);
+    await this.assertPlayerCategoryFitsMatch(userId, match);
+
     const existingStatus = await this.matchesRepository.getPlayerMatchStatus(matchId, playerId);
     if (existingStatus === 'REQUESTED') {
       throw new BadRequestException('Ya enviaste una solicitud para este partido');
@@ -466,41 +510,26 @@ export class MatchesService {
 
     const joinerName = await this.matchesRepository.getUserName(userId);
 
-    if (fitsLevel) {
-      await this.joinPlayerWithNextSlot(matchId, playerId);
-      await this.matchesRepository.createMatchChatIfMissing(matchId);
+    await this.joinPlayerWithNextSlot(matchId, playerId);
+    await this.matchesRepository.createMatchChatIfMissing(matchId);
 
-      const joinedCount = await this.matchesRepository.countJoinedPlayers(matchId);
-      if (joinedCount >= match.needed_players && match.status === 'OPEN') {
-        await this.matchesRepository.updateStatus(matchId, 'FULL');
-      }
-
-      const participants = await this.matchesRepository.listActiveParticipantUserIds(matchId);
-      const notifyIds = participants.filter((id) => id !== userId);
-      await this.matchesRepository.notifyUsers(
-        notifyIds,
-        'MATCH_PLAYER_JOINED',
-        'Nuevo jugador en el partido',
-        `${joinerName} se unió a "${match.title}".`,
-        { matchId, fromUserId: userId },
-      );
-    } else {
-      await this.requestJoin(matchId, playerId);
-      if (match.created_by_user_id && match.created_by_user_id !== userId) {
-        await this.matchesRepository.notifyUsers(
-          [match.created_by_user_id],
-          'MATCH_JOIN_REQUEST',
-          'Solicitud para unirse',
-          `${joinerName} pidió unirse a "${match.title}" (fuera de nivel).`,
-          { matchId, fromUserId: userId },
-        );
-      }
+    const joinedCount = await this.matchesRepository.countJoinedPlayers(matchId);
+    if (joinedCount >= match.needed_players && match.status === 'OPEN') {
+      await this.matchesRepository.updateStatus(matchId, 'FULL');
     }
+
+    const participants = await this.matchesRepository.listActiveParticipantUserIds(matchId);
+    const notifyIds = participants.filter((id) => id !== userId);
+    await this.matchesRepository.notifyUsers(
+      notifyIds,
+      'MATCH_PLAYER_JOINED',
+      'Nuevo jugador en el partido',
+      `${joinerName} se unió a "${match.title}".`,
+      { matchId, fromUserId: userId },
+    );
 
     const updated = await this.findOne(matchId, userId);
-    if (fitsLevel) {
-      this.realtimeGateway.emitMatchJoined({ matchId, userId });
-    }
+    this.realtimeGateway.emitMatchJoined({ matchId, userId });
     this.realtimeGateway.emitMatchUpdated(updated);
     return updated;
   }
@@ -522,6 +551,9 @@ export class MatchesService {
     if (requestStatus !== 'REQUESTED') {
       throw new BadRequestException('No hay una solicitud pendiente de este jugador');
     }
+
+    await this.assertPlayerGenderFitsMatch(requestUserId, match.gender);
+    await this.assertPlayerCategoryFitsMatch(requestUserId, match);
 
     const slotOrder = await this.nextAvailableSlotOrder(matchId);
     if (slotOrder == null) {
@@ -1203,6 +1235,7 @@ export class MatchesService {
         if (!invitedPlayerId) {
           throw new BadRequestException('Uno de los jugadores invitados no tiene perfil de jugador');
         }
+        await this.assertPlayerCanBeInvitedToMatch(invite.userId, match);
         await this.matchesRepository.join(matchId, invitedPlayerId, 'JOINED', slotOrder);
         existingUserIds.add(invite.userId);
         continue;

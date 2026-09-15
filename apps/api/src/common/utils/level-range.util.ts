@@ -114,3 +114,19 @@ export function defaultLevelBand(level: number, margin = 100): { min: number; ma
     max: Math.min(1000, Math.round(level + margin)),
   };
 }
+
+/**
+ * True si la categoría del jugador solapa el rango skill del partido.
+ * Usa la categoría visible (declarada en provisional), no el skill 0 de placement.
+ */
+export function categoryOverlapsMatchLevel(
+  category: string,
+  levelMin?: number | null,
+  levelMax?: number | null,
+): boolean {
+  if (levelMin == null && levelMax == null) return true;
+  const range = getCategoryLevelRange(category);
+  const matchMin = levelMin ?? 0;
+  const matchMax = levelMax ?? 1000;
+  return matchMin <= range.max && matchMax >= range.min;
+}
