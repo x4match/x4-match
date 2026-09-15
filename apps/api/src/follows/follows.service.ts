@@ -30,7 +30,7 @@ export class FollowsService {
   async listFollowers(userIdOrPlayerId: string, limit = 50) {
     const userId = await this.friends.resolveUserId(userIdOrPlayerId);
     const result = await this.db.query(
-      `SELECT u.id AS user_id, u.name, u.photo, p.photo_url, p.nickname, f.created_at
+      `SELECT u.id AS user_id, u.name, p.photo_url, p.nickname, f.created_at
        FROM user_follows f
        INNER JOIN users u ON u.id = f.follower_id
        LEFT JOIN players p ON p.user_id = u.id
@@ -45,7 +45,7 @@ export class FollowsService {
   async listFollowing(userIdOrPlayerId: string, limit = 50) {
     const userId = await this.friends.resolveUserId(userIdOrPlayerId);
     const result = await this.db.query(
-      `SELECT u.id AS user_id, u.name, u.photo, p.photo_url, p.nickname, f.created_at
+      `SELECT u.id AS user_id, u.name, p.photo_url, p.nickname, f.created_at
        FROM user_follows f
        INNER JOIN users u ON u.id = f.following_id
        LEFT JOIN players p ON p.user_id = u.id

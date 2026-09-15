@@ -27,7 +27,6 @@ export class FriendsService {
          fr.id AS request_id,
          CASE WHEN fr.requester_id = $1 THEN fr.addressee_id ELSE fr.requester_id END AS user_id,
          u.name,
-         u.photo,
          p.photo_url,
          p.nickname,
          fr.updated_at
