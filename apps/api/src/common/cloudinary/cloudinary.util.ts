@@ -50,20 +50,33 @@ export function extractCloudinaryPublicId(url: string): string | null {
 export async function uploadImageBuffer(
   file: Express.Multer.File,
   folder: string,
+  options?: {
+    width?: number;
+    height?: number;
+    crop?: 'fill' | 'limit';
+  },
 ): Promise<UploadApiResponse> {
   ensureCloudinaryConfigured();
 
   const b64 = file.buffer.toString('base64');
   const dataUri = `data:${file.mimetype};base64,${b64}`;
+  const width = options?.width ?? 800;
+  const height = options?.height;
+  const crop = options?.crop ?? 'fill';
+
+  const transformation =
+    crop === 'limit' || height == null
+      ? [{ width, crop: 'limit' as const }, { quality: 'auto:good' as const, fetch_format: 'auto' as const }]
+      : [
+          { width, height, crop: 'fill' as const, gravity: 'auto' as const },
+          { quality: 'auto:good' as const, fetch_format: 'auto' as const },
+        ];
 
   return cloudinary.uploader.upload(dataUri, {
     folder,
     resource_type: 'image',
     overwrite: true,
-    transformation: [
-      { width: 800, height: 800, crop: 'fill', gravity: 'auto' },
-      { quality: 'auto:good', fetch_format: 'auto' },
-    ],
+    transformation,
   });
 }
 

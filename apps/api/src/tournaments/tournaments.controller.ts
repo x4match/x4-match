@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -8,8 +9,12 @@ import {
   Post,
   Query,
   Res,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import { Response } from 'express';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -431,6 +436,32 @@ export class TournamentsController {
     @Body() dto: CreateTournamentPhotoDto,
   ) {
     const photo = await this.tournamentsService.addPhoto(id, user.sub, dto);
+    this.realtimeGateway.emitTournamentUpdated({ tournamentId: id, type: 'photo_added' });
+    return photo;
+  }
+
+  @Post(':id/photos/upload')
+  @UseGuards(JwtAuthGuard)
+  @UseInterceptors(
+    FileInterceptor('photo', {
+      storage: memoryStorage(),
+      limits: { fileSize: 6 * 1024 * 1024 },
+      fileFilter: (_req, file, cb) => {
+        if (!file.mimetype?.startsWith('image/')) {
+          cb(new BadRequestException('Solo se permiten imágenes'), false);
+          return;
+        }
+        cb(null, true);
+      },
+    }),
+  )
+  async uploadPhoto(
+    @Param('id') id: string,
+    @CurrentUser() user: { sub: string },
+    @UploadedFile() file: Express.Multer.File,
+    @Body('caption') caption?: string,
+  ) {
+    const photo = await this.tournamentsService.addPhotoFromFile(id, user.sub, file, caption);
     this.realtimeGateway.emitTournamentUpdated({ tournamentId: id, type: 'photo_added' });
     return photo;
   }

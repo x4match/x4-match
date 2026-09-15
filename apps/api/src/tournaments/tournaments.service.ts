@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { randomBytes } from 'crypto';
 import { CircuitsService } from '../circuits/circuits.service';
+import { uploadImageBuffer } from '../common/cloudinary/cloudinary.util';
 import { DatabaseService } from '../database/database.service';
 import { CreateTournamentPhotoDto } from './dto/create-tournament-photo.dto';
 import {
@@ -119,13 +120,30 @@ export class TournamentsService {
               (SELECT COUNT(*)::int FROM tournament_registrations r
                  WHERE r.tournament_id = t.id AND r.status = 'APPROVED') AS approved_count,
               (SELECT COUNT(*)::int FROM tournament_registrations r
-                 WHERE r.tournament_id = t.id AND r.status = 'PENDING') AS pending_count
+                 WHERE r.tournament_id = t.id AND r.status = 'PENDING') AS pending_count,
+              (
+                SELECT tp.photo_url
+                FROM tournament_photos tp
+                WHERE tp.tournament_id = t.id
+                ORDER BY
+                  CASE WHEN lower(COALESCE(tp.caption, '')) = 'flyer' THEN 0 ELSE 1 END,
+                  tp.created_at DESC
+                LIMIT 1
+              ) AS flyer_url,
+              CASE
+                WHEN COALESCE(t.featured_priority, 0) > 0
+                 AND (t.featured_until IS NULL OR t.featured_until > NOW())
+                THEN COALESCE(t.featured_priority, 0)
+                ELSE 0
+              END AS active_featured_priority
        FROM tournaments t
        LEFT JOIN clubs c ON c.id = t.club_id
        WHERE t.modality = 'EXTERNAL'
          AND t.club_validation_status = 'APPROVED'
          AND t.status IN ('OPEN_REGISTRATION', 'IN_PROGRESS', 'FINISHED')
        ORDER BY
+         active_featured_priority DESC,
+         COALESCE(t.price, 0) DESC,
          CASE t.status WHEN 'OPEN_REGISTRATION' THEN 0 WHEN 'IN_PROGRESS' THEN 1 ELSE 2 END,
          t.start_date NULLS LAST,
          t.created_at DESC
@@ -980,11 +998,61 @@ export class TournamentsService {
     await this.assertCanManageTournament(tournamentId, userId);
     this.validatePhotoPayload(dto.photoUrl);
     const upload = await this.uploadTournamentImage(tournamentId, dto.photoUrl);
+    return this.insertTournamentPhoto(
+      tournamentId,
+      userId,
+      upload.secure_url,
+      upload.public_id,
+      dto.caption ?? null,
+    );
+  }
+
+  async addPhotoFromFile(
+    tournamentId: string,
+    userId: string,
+    file: Express.Multer.File,
+    caption?: string,
+  ) {
+    await this.loadTournamentRow(tournamentId);
+    await this.assertCanManageTournament(tournamentId, userId);
+
+    const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'];
+    if (!allowed.includes(file.mimetype)) {
+      throw new BadRequestException('Formato de imagen no soportado. Usá JPG, PNG o WEBP.');
+    }
+    if (!file.buffer?.length) {
+      throw new BadRequestException('Archivo requerido');
+    }
+    if (file.size > 6 * 1024 * 1024) {
+      throw new BadRequestException('La imagen excede el límite de 6MB');
+    }
+
+    const upload = await uploadImageBuffer(file, `playtomic-clone/tournaments/${tournamentId}`, {
+      width: 1600,
+      crop: 'limit',
+    });
+
+    return this.insertTournamentPhoto(
+      tournamentId,
+      userId,
+      upload.secure_url,
+      upload.public_id,
+      caption?.trim() || null,
+    );
+  }
+
+  private async insertTournamentPhoto(
+    tournamentId: string,
+    userId: string,
+    photoUrl: string,
+    cloudinaryPublicId: string | null,
+    caption: string | null,
+  ) {
     const result = await this.db.query(
       `INSERT INTO tournament_photos (tournament_id, uploaded_by_user_id, photo_url, cloudinary_public_id, caption)
        VALUES ($1, $2, $3, $4, $5)
        RETURNING id, tournament_id, uploaded_by_user_id, photo_url, cloudinary_public_id, caption, created_at`,
-      [tournamentId, userId, upload.secure_url, upload.public_id, dto.caption ?? null],
+      [tournamentId, userId, photoUrl, cloudinaryPublicId, caption],
     );
     return result.rows[0];
   }
