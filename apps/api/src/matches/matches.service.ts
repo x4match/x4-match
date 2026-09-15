@@ -375,7 +375,10 @@ export class MatchesService {
   }
 
   async joinInvitedPlayers(matchId: string, creatorUserId: string, invites?: MatchInviteDto[]) {
-    const { playerInvites, guestInvites } = await this.resolveInvites(creatorUserId, invites);
+    const { playerInvites, guestInvites, invitedUserIds } = await this.resolveInvites(
+      creatorUserId,
+      invites,
+    );
     for (const invite of playerInvites) {
       await this.matchesRepository.join(matchId, invite.playerId, 'JOINED', invite.slotOrder);
     }
@@ -388,6 +391,18 @@ export class MatchesService {
         invitedByUserId: creatorUserId,
         sponsorUserId: creatorUserId,
       });
+    }
+
+    if (invitedUserIds.length > 0) {
+      const match = await this.matchesRepository.getById(matchId);
+      const inviterName = await this.matchesRepository.getUserName(creatorUserId);
+      await this.matchesRepository.notifyUsers(
+        invitedUserIds,
+        'MATCH_INVITE',
+        'Te invitaron a un partido',
+        `${inviterName} te sumó a "${match?.title ?? 'un partido'}".`,
+        { matchId, fromUserId: creatorUserId },
+      );
     }
   }
 
@@ -449,6 +464,8 @@ export class MatchesService {
       throw new BadRequestException('Ya participás de este partido');
     }
 
+    const joinerName = await this.matchesRepository.getUserName(userId);
+
     if (fitsLevel) {
       await this.joinPlayerWithNextSlot(matchId, playerId);
       await this.matchesRepository.createMatchChatIfMissing(matchId);
@@ -457,8 +474,27 @@ export class MatchesService {
       if (joinedCount >= match.needed_players && match.status === 'OPEN') {
         await this.matchesRepository.updateStatus(matchId, 'FULL');
       }
+
+      const participants = await this.matchesRepository.listActiveParticipantUserIds(matchId);
+      const notifyIds = participants.filter((id) => id !== userId);
+      await this.matchesRepository.notifyUsers(
+        notifyIds,
+        'MATCH_PLAYER_JOINED',
+        'Nuevo jugador en el partido',
+        `${joinerName} se unió a "${match.title}".`,
+        { matchId, fromUserId: userId },
+      );
     } else {
       await this.requestJoin(matchId, playerId);
+      if (match.created_by_user_id && match.created_by_user_id !== userId) {
+        await this.matchesRepository.notifyUsers(
+          [match.created_by_user_id],
+          'MATCH_JOIN_REQUEST',
+          'Solicitud para unirse',
+          `${joinerName} pidió unirse a "${match.title}" (fuera de nivel).`,
+          { matchId, fromUserId: userId },
+        );
+      }
     }
 
     const updated = await this.findOne(matchId, userId);
@@ -496,6 +532,15 @@ export class MatchesService {
     await this.matchesRepository.createMatchChatIfMissing(matchId);
     await this.syncMatchCapacityStatus(matchId);
 
+    const matchTitle = match.title ?? 'el partido';
+    await this.matchesRepository.notifyUsers(
+      [requestUserId],
+      'MATCH_JOIN_ACCEPTED',
+      'Te aceptaron en el partido',
+      `Tu solicitud para unirte a "${matchTitle}" fue aceptada.`,
+      { matchId },
+    );
+
     const updated = await this.findOne(matchId, approverUserId);
     this.realtimeGateway.emitMatchJoined({ matchId, userId: requestUserId });
     this.realtimeGateway.emitMatchUpdated(updated);
@@ -515,7 +560,16 @@ export class MatchesService {
       throw new BadRequestException('No hay una solicitud pendiente de este jugador');
     }
 
+    const match = await this.matchesRepository.getById(matchId);
     await this.matchesRepository.leave(matchId, requestPlayerId);
+
+    await this.matchesRepository.notifyUsers(
+      [requestUserId],
+      'MATCH_JOIN_REJECTED',
+      'Solicitud rechazada',
+      `Tu solicitud para unirte a "${match?.title ?? 'el partido'}" fue rechazada.`,
+      { matchId },
+    );
 
     const updated = await this.findOne(matchId, approverUserId);
     this.realtimeGateway.emitMatchUpdated(updated);
@@ -705,11 +759,24 @@ export class MatchesService {
     const joinedCount = await this.matchesRepository.countJoinedPlayers(matchId);
     const confirmedCount = await this.matchesRepository.countConfirmedPlayers(matchId);
 
+    let becameConfirmed = false;
     if (joinedCount >= match.needed_players && confirmedCount >= match.needed_players) {
       await this.matchesRepository.updateStatus(matchId, 'CONFIRMED');
       await this.bookCourtAfterFullyPaid(matchId);
+      becameConfirmed = true;
     } else if (match.status === 'OPEN' && joinedCount >= match.needed_players) {
       await this.matchesRepository.updateStatus(matchId, 'FULL');
+    }
+
+    if (becameConfirmed) {
+      const participants = await this.matchesRepository.listActiveParticipantUserIds(matchId);
+      await this.matchesRepository.notifyUsers(
+        participants,
+        'MATCH_CONFIRMED',
+        'Partido confirmado',
+        `"${match.title}" quedó confirmado. ¡Nos vemos en la cancha!`,
+        { matchId },
+      );
     }
 
     const updated = await this.findOne(matchId);
@@ -811,6 +878,16 @@ export class MatchesService {
       await this.matchesRepository.updateStatus(matchId, 'IN_PROGRESS');
     }
 
+    const submitterName = await this.matchesRepository.getUserName(userId);
+    const participants = await this.matchesRepository.listActiveParticipantUserIds(matchId);
+    await this.matchesRepository.notifyUsers(
+      participants.filter((id) => id !== userId),
+      'MATCH_RESULT_SUBMITTED',
+      'Resultado propuesto',
+      `${submitterName} cargó el resultado de "${match.title}". Confirmalo o rechazalo.`,
+      { matchId, fromUserId: userId },
+    );
+
     const finalized = await this.tryFinalizeResultIfAllConfirmed(matchId);
     const detail = await this.findOne(matchId);
     this.realtimeGateway.emitMatchScoreUpdated({ matchId, finalized });
@@ -840,6 +917,18 @@ export class MatchesService {
     }
 
     await this.matchesRepository.addResultRejection(matchId, userId, dto?.comment);
+
+    const rejectorName = await this.matchesRepository.getUserName(userId);
+    const proposerId = match.result?.submittedByUserId;
+    if (proposerId && proposerId !== userId) {
+      await this.matchesRepository.notifyUsers(
+        [proposerId],
+        'MATCH_RESULT_REJECTED',
+        'Resultado rechazado',
+        `${rejectorName} rechazó el resultado de "${match.title}".`,
+        { matchId, fromUserId: userId },
+      );
+    }
 
     const detail = await this.findOne(matchId);
     this.realtimeGateway.emitMatchUpdated(detail);
@@ -1132,6 +1221,17 @@ export class MatchesService {
       }
 
       throw new BadRequestException('Cada invitación debe tener un jugador o un invitado externo');
+    }
+
+    if (invitedUserIds.length > 0) {
+      const inviterName = await this.matchesRepository.getUserName(inviterUserId);
+      await this.matchesRepository.notifyUsers(
+        invitedUserIds,
+        'MATCH_INVITE',
+        'Te invitaron a un partido',
+        `${inviterName} te sumó a "${match.title}".`,
+        { matchId, fromUserId: inviterUserId },
+      );
     }
 
     await this.syncMatchCapacityStatus(matchId);

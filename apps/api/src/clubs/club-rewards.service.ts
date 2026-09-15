@@ -7,6 +7,7 @@ import {
 import { PoolClient } from 'pg';
 import { isClubRole } from '../common/roles';
 import { DatabaseService } from '../database/database.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { assertRewardRedeemable, generateRedemptionCode } from './club-rewards.util';
 import { CreateClubRewardDto } from './dto/create-club-reward.dto';
 import { UpdateClubRewardDto } from './dto/update-club-reward.dto';
@@ -26,7 +27,10 @@ type RewardRow = {
 
 @Injectable()
 export class ClubRewardsService {
-  constructor(private readonly db: DatabaseService) {}
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly notifications: NotificationsService,
+  ) {}
 
   async getPublicCatalog(clubId: string) {
     await this.assertClubExists(clubId);
@@ -111,7 +115,7 @@ export class ClubRewardsService {
   async redeemReward(clubId: string, userId: string, rewardId: string) {
     await this.assertClubExists(clubId);
 
-    return this.db.transaction(async (client) => {
+    const result = await this.db.transaction(async (client) => {
       const rewardResult = await client.query<RewardRow>(
         `SELECT id, club_id, title, description, points_required, reward_type, active,
                 stock, max_per_user, created_at
@@ -213,23 +217,6 @@ export class ClubRewardsService {
         throw new BadRequestException('No se pudo generar el código de canje');
       }
 
-      await client.query(
-        `INSERT INTO notifications (user_id, type, title, body, data)
-         VALUES ($1, 'REWARD_REDEEMED', $2, $3, $4::jsonb)`,
-        [
-          userId,
-          'Premio canjeado',
-          `Canjeaste "${reward.title}". Código: ${redemptionCode}. Presentate en recepción.`,
-          JSON.stringify({
-            clubId,
-            rewardId,
-            redemptionId: redemption.id,
-            redemptionCode,
-            status: 'PENDING',
-          }),
-        ],
-      );
-
       return {
         ok: true,
         rewardTitle: reward.title,
@@ -244,8 +231,27 @@ export class ClubRewardsService {
           user_nickname: null,
         }),
         deductions,
+        rewardId,
+        redemptionId: String(redemption.id),
       };
     });
+
+    await this.notifications.create({
+      userId,
+      type: 'REWARD_REDEEMED',
+      title: 'Premio canjeado',
+      body: `Canjeaste "${result.rewardTitle}". Código: ${result.redemptionCode}. Presentate en recepción.`,
+      data: {
+        clubId,
+        rewardId: result.rewardId,
+        redemptionId: result.redemptionId,
+        redemptionCode: result.redemptionCode,
+        status: 'PENDING',
+      },
+    });
+
+    const { rewardId: _rid, redemptionId: _reid, ...publicResult } = result;
+    return publicResult;
   }
 
   async listMyRedemptions(clubId: string, userId: string, limit = 50) {
@@ -314,12 +320,21 @@ export class ClubRewardsService {
     if (!result.rows[0]) {
       throw new BadRequestException('Canje no encontrado o ya no está pendiente');
     }
+    const row = result.rows[0];
     const titleRes = await this.db.query(`SELECT title FROM club_reward_catalog WHERE id = $1`, [
-      result.rows[0].reward_id,
+      row.reward_id,
     ]);
+    const rewardTitle = titleRes.rows[0]?.title ?? 'premio';
+    await this.notifications.create({
+      userId: row.user_id,
+      type: 'REWARD_FULFILLED',
+      title: 'Premio entregado',
+      body: `Tu canje "${rewardTitle}" fue entregado. ¡Disfrutalo!`,
+      data: { clubId, redemptionId, status: 'FULFILLED' },
+    });
     return this.mapRedemption({
-      ...result.rows[0],
-      reward_title: titleRes.rows[0]?.title ?? null,
+      ...row,
+      reward_title: rewardTitle,
       user_name: null,
       user_nickname: null,
     });
@@ -333,7 +348,7 @@ export class ClubRewardsService {
   ) {
     await this.assertClubRole(staffUserId, clubId);
 
-    return this.db.transaction(async (client) => {
+    const cancelled = await this.db.transaction(async (client) => {
       const existing = await client.query(
         `SELECT id, user_id, reward_id, points_spent, status, redemption_code, created_at
          FROM club_reward_redemptions
@@ -351,7 +366,7 @@ export class ClubRewardsService {
         `UPDATE club_reward_redemptions
          SET status = 'CANCELLED',
              cancelled_at = NOW(),
-             cancel_reason = $3
+             cancel_reason = $2
          WHERE id = $1`,
         [redemptionId, reason?.trim() || null],
       );
@@ -384,27 +399,31 @@ export class ClubRewardsService {
         row.reward_id,
       ]);
 
-      await client.query(
-        `INSERT INTO notifications (user_id, type, title, body, data)
-         VALUES ($1, 'REWARD_CANCELLED', $2, $3, $4::jsonb)`,
-        [
-          row.user_id,
-          'Canje cancelado',
-          `Se canceló tu canje "${titleRes.rows[0]?.title ?? 'premio'}" y se reintegraron ${row.points_spent} puntos.`,
-          JSON.stringify({ clubId, redemptionId, status: 'CANCELLED' }),
-        ],
-      );
-
-      return this.mapRedemption({
-        ...row,
-        status: 'CANCELLED',
-        cancelled_at: new Date(),
-        cancel_reason: reason?.trim() || null,
-        reward_title: titleRes.rows[0]?.title ?? null,
-        user_name: null,
-        user_nickname: null,
-      });
+      return {
+        mapped: this.mapRedemption({
+          ...row,
+          status: 'CANCELLED',
+          cancelled_at: new Date(),
+          cancel_reason: reason?.trim() || null,
+          reward_title: titleRes.rows[0]?.title ?? null,
+          user_name: null,
+          user_nickname: null,
+        }),
+        userId: String(row.user_id),
+        rewardTitle: String(titleRes.rows[0]?.title ?? 'premio'),
+        pointsSpent: Number(row.points_spent),
+      };
     });
+
+    await this.notifications.create({
+      userId: cancelled.userId,
+      type: 'REWARD_CANCELLED',
+      title: 'Canje cancelado',
+      body: `Se canceló tu canje "${cancelled.rewardTitle}" y se reintegraron ${cancelled.pointsSpent} puntos.`,
+      data: { clubId, redemptionId, status: 'CANCELLED' },
+    });
+
+    return cancelled.mapped;
   }
 
   private async deductPoints(
@@ -522,70 +541,19 @@ export class ClubRewardsService {
   }
 
   private async assertClubRole(userId: string, clubId: string) {
-    const result = await this.db.query(`SELECT role FROM users WHERE id = $1`, [userId]);
-    const role = result.rows[0]?.role;
-    if (!isClubRole(role)) {
-      throw new ForbiddenException('Solo cuentas de club pueden gestionar clubes y horarios');
+    const roleResult = await this.db.query(`SELECT role FROM users WHERE id = $1`, [userId]);
+    const role = roleResult.rows[0]?.role;
+    if (!isClubRole(role) && role !== 'SUPER_ADMIN') {
+      throw new ForbiddenException('Solo cuentas de club pueden gestionar premios');
     }
+    if (role === 'SUPER_ADMIN') return;
+
     const admin = await this.db.query(
-      `SELECT 1 FROM club_admins WHERE club_id = $1 AND user_id = $2
-       UNION ALL
-       SELECT 1 FROM clubs WHERE id = $1 AND owner_user_id = $2
-       LIMIT 1`,
+      `SELECT 1 FROM club_admins WHERE club_id = $1 AND user_id = $2 LIMIT 1`,
       [clubId, userId],
     );
-    // Fallback: many clubs use users.club_id
     if (!admin.rows[0]) {
-      const owned = await this.db.query(
-        `SELECT 1 FROM users WHERE id = $1 AND role IN ('CLUB', 'CLUB_ADMIN')
-           AND (
-             id IN (SELECT user_id FROM club_admins WHERE club_id = $2)
-             OR EXISTS (SELECT 1 FROM clubs c WHERE c.id = $2)
-           )
-         LIMIT 1`,
-        [userId, clubId],
-      );
-      // Mirror ClubsService.assertClubAdminOf if present
-      const link = await this.db.query(
-        `SELECT 1
-         FROM clubs c
-         LEFT JOIN club_admins ca ON ca.club_id = c.id AND ca.user_id = $2
-         WHERE c.id = $1 AND (c.owner_id = $2 OR ca.user_id IS NOT NULL OR c.created_by = $2)
-         LIMIT 1`,
-        [clubId, userId],
-      );
-      // Use the same helper path as ClubsService — check assertClubAdminOf
-      void owned;
-      if (!link.rows[0]) {
-        // Delegate to clubs table columns that exist in this schema
-        await this.assertClubAdminOf(clubId, userId);
-      }
-    }
-  }
-
-  private async assertClubAdminOf(clubId: string, userId: string) {
-    // Reuse pattern from ClubsService
-    const result = await this.db.query(
-      `SELECT 1 FROM clubs WHERE id = $1`,
-      [clubId],
-    );
-    if (!result.rows[0]) throw new NotFoundException('Club no encontrado');
-
-    const staff = await this.db.query(
-      `SELECT 1
-       FROM club_staff
-       WHERE club_id = $1 AND user_id = $2
-       LIMIT 1`,
-      [clubId, userId],
-    );
-    if (staff.rows[0]) return;
-
-    const manager = await this.db.query(
-      `SELECT 1 FROM users WHERE id = $1 AND role IN ('CLUB', 'CLUB_ADMIN', 'ADMIN')`,
-      [userId],
-    );
-    if (!manager.rows[0]) {
-      throw new ForbiddenException('No tenés permisos sobre este club');
+      throw new ForbiddenException('Solo admins de este club pueden realizar esta acción');
     }
   }
 }

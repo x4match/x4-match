@@ -14,6 +14,11 @@ export class NotificationsController {
     return this.notificationsService.listForUser(user.sub);
   }
 
+  @Get('unread-count')
+  unreadCount(@CurrentUser() user: { sub: string }) {
+    return this.notificationsService.unreadCount(user.sub);
+  }
+
   @Post('read-all')
   markAllRead(@CurrentUser() user: { sub: string }) {
     return this.notificationsService.markAllRead(user.sub);

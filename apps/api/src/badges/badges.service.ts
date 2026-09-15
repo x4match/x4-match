@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { userTeamFromRank } from '../common/utils/match-result.util';
 import {
   computeWinStreak,
@@ -25,7 +26,10 @@ function parseScore(score: string): { a: number; b: number } | null {
 export class BadgesService {
   private readonly logger = new Logger(BadgesService.name);
 
-  constructor(private readonly db: DatabaseService) {}
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly notifications: NotificationsService,
+  ) {}
 
   listCatalog() {
     return this.db
@@ -272,16 +276,13 @@ export class BadgesService {
   private async notifyBadgeEarned(userId: string, code: string, matchId: string) {
     const badgeRes = await this.db.query(`SELECT name FROM badges WHERE code = $1`, [code]);
     const name = badgeRes.rows[0]?.name ?? 'Nueva insignia';
-    await this.db.query(
-      `INSERT INTO notifications (user_id, type, title, body, data)
-       VALUES ($1, 'badge_earned', $2, $3, $4::jsonb)`,
-      [
-        userId,
-        '¡Nueva insignia!',
-        `Desbloqueaste "${name}".`,
-        JSON.stringify({ badgeCode: code, matchId }),
-      ],
-    );
+    await this.notifications.create({
+      userId,
+      type: 'BADGE_EARNED',
+      title: '¡Nueva insignia!',
+      body: `Desbloqueaste "${name}".`,
+      data: { badgeCode: code, matchId },
+    });
   }
 
   private parseSets(raw: unknown): SetScore[] {

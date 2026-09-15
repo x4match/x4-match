@@ -1,6 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
 import { isClubRole } from '../common/roles';
 import { DatabaseService } from '../database/database.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 
 @Injectable()
@@ -8,6 +9,7 @@ export class ChatService {
   constructor(
     private readonly db: DatabaseService,
     private readonly realtimeGateway: RealtimeGateway,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async getMatchMessages(matchId: string, userId: string) {
@@ -28,15 +30,58 @@ export class ChatService {
   async createMessage(matchId: string, userId: string, content: string) {
     await this.assertNotClubAccount(userId);
     await this.assertParticipant(matchId, userId);
+    const trimmed = content?.trim();
+    if (!trimmed) {
+      throw new BadRequestException('El mensaje no puede estar vacío');
+    }
+
     const chatId = await this.getOrCreateMatchChat(matchId);
     const result = await this.db.query(
       `INSERT INTO messages (chat_id, sender_user_id, content)
        VALUES ($1, $2, $3)
        RETURNING id, chat_id, sender_user_id, content, created_at`,
-      [chatId, userId, content],
+      [chatId, userId, trimmed],
     );
-    this.realtimeGateway.emitNewMessage(matchId, result.rows[0]);
-    return result.rows[0];
+    const message = result.rows[0];
+    this.realtimeGateway.emitNewMessage(matchId, message);
+
+    const senderRes = await this.db.query(`SELECT name FROM users WHERE id = $1`, [userId]);
+    const senderName = senderRes.rows[0]?.name || 'Alguien';
+    const matchRes = await this.db.query(`SELECT title FROM matches WHERE id = $1`, [matchId]);
+    const matchTitle = matchRes.rows[0]?.title || 'tu partido';
+    const recipients = await this.listOtherParticipants(matchId, userId);
+    const preview = trimmed.length > 80 ? `${trimmed.slice(0, 77)}...` : trimmed;
+
+    if (recipients.length > 0) {
+      await this.notifications.createMany(
+        recipients.map((recipientId) => ({
+          userId: recipientId,
+          type: 'MATCH_CHAT_MESSAGE',
+          title: `${senderName} · ${matchTitle}`,
+          body: preview,
+          data: {
+            matchId,
+            fromUserId: userId,
+            messageId: message.id,
+          },
+        })),
+      );
+    }
+
+    return message;
+  }
+
+  private async listOtherParticipants(matchId: string, excludeUserId: string): Promise<string[]> {
+    const result = await this.db.query<{ user_id: string }>(
+      `SELECT DISTINCT p.user_id
+       FROM match_players mp
+       INNER JOIN players p ON p.id = mp.player_id
+       WHERE mp.match_id = $1
+         AND mp.status IN ('JOINED', 'CONFIRMED')
+         AND p.user_id <> $2`,
+      [matchId, excludeUserId],
+    );
+    return result.rows.map((row) => String(row.user_id));
   }
 
   private async getOrCreateMatchChat(matchId: string) {

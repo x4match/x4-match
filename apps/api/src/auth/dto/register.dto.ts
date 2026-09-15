@@ -13,7 +13,7 @@ export class RegisterDto {
   @IsEmail()
   email: string;
 
-  @ValidateIf((o: RegisterDto) => !o.identityToken)
+  @ValidateIf((o: RegisterDto) => !o.identityToken && !o.idToken)
   @IsString()
   @MinLength(6)
   password?: string;
@@ -22,6 +22,12 @@ export class RegisterDto {
   @IsString()
   @MinLength(20)
   identityToken?: string;
+
+  /** Google ID token (registro passwordless, mismo patrón que Apple). */
+  @IsOptional()
+  @IsString()
+  @MinLength(20)
+  idToken?: string;
 
   @IsOptional()
   @IsString()

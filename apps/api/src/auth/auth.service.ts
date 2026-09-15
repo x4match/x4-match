@@ -50,8 +50,10 @@ export class AuthService {
   async register(dto: RegisterDto) {
     const role = dto.role || 'PLAYER';
     let appleId: string | null = null;
+    let googleId: string | null = null;
     let email = dto.email.trim().toLowerCase();
     let passwordHash: string | null = null;
+    let googlePhoto: string | null = null;
 
     if (dto.identityToken) {
       const payload = await this.verifyAppleIdentityToken(dto.identityToken);
@@ -71,6 +73,19 @@ export class AuthService {
       const existingApple = await this.authRepository.findByAppleId(appleId);
       if (existingApple) {
         throw new ConflictException('Esta cuenta de Apple ya está registrada. Iniciá sesión.');
+      }
+    } else if (dto.idToken) {
+      const payload = await this.verifyGoogleIdToken(dto.idToken);
+      googleId = payload.sub ?? null;
+      const googleEmail = payload.email?.trim().toLowerCase();
+      googlePhoto = payload.picture?.trim() || null;
+      if (!googleId || !googleEmail) {
+        throw new UnauthorizedException('No se pudo verificar la cuenta de Google');
+      }
+      email = googleEmail;
+      const existingGoogle = await this.authRepository.findByGoogleId(googleId);
+      if (existingGoogle) {
+        throw new ConflictException('Esta cuenta de Google ya está registrada. Iniciá sesión.');
       }
     } else {
       if (!dto.password || dto.password.length < 6) {
@@ -116,6 +131,7 @@ export class AuthService {
       passwordHash,
       name: displayName,
       role,
+      googleId,
       appleId,
     });
 
@@ -131,6 +147,11 @@ export class AuthService {
       // FEJUBA: sin nivelación. Resto: nivelan desde skill 0.
       startInPlacement: role === 'PLAYER' && !isFederated,
     });
+
+    const photo = dto.photo?.trim() || googlePhoto;
+    if (photo) {
+      await this.authRepository.updatePlayerPhotoIfEmpty(user.id, photo);
+    }
 
     const fullUser = await this.authRepository.findMe(user.id);
 
@@ -180,7 +201,6 @@ export class AuthService {
     }
 
     let user = await this.authRepository.findByGoogleId(googleId);
-    let isNewUser = false;
 
     if (!user) {
       const existing = await this.authRepository.findByEmail(email);
@@ -191,20 +211,13 @@ export class AuthService {
         await this.authRepository.linkGoogleAccount(existing.id, googleId);
         user = await this.authRepository.findById(existing.id);
       } else {
-        const displayName = name || this.fallbackNameFromEmail(email);
-        user = await this.authRepository.createUser({
+        // Misma política que Apple: no crear cuenta sin DNI / formulario de registro.
+        return {
+          needsRegistration: true,
           email,
-          passwordHash: null,
-          name: displayName,
-          role: 'PLAYER',
-          googleId,
-        });
-        const nickname = await this.generateUniqueNickname(email);
-        await this.authRepository.createPlayerForUser(user.id, {
-          nickname,
-          startInPlacement: true,
-        });
-        isNewUser = true;
+          fullName: name || undefined,
+          photo: photo || undefined,
+        };
       }
     }
 
@@ -221,7 +234,6 @@ export class AuthService {
     return {
       access_token: token,
       user: this.serializeAuthUser(fullUser ?? user),
-      isNewUser,
     };
   }
 

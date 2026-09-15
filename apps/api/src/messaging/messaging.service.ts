@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { isClubRole } from '../common/roles';
 import { DatabaseService } from '../database/database.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 type MessageAccessDenied = {
   canMessage: false;
@@ -19,7 +20,10 @@ export type MessageAccess =
 
 @Injectable()
 export class MessagingService {
-  constructor(private readonly db: DatabaseService) {}
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly notifications: NotificationsService,
+  ) {}
 
   private canonicalPair(userId: string, otherUserId: string): [string, string] {
     return userId < otherUserId ? [userId, otherUserId] : [otherUserId, userId];
@@ -158,7 +162,23 @@ export class MessagingService {
        RETURNING id, status`,
       [userA, userB, userId],
     );
-    return { conversationId: result.rows[0].id, status: result.rows[0].status };
+    const conversationId = result.rows[0].id;
+    if (result.rows[0].status === 'pending') {
+      const requester = await this.db.query(`SELECT name FROM users WHERE id = $1`, [userId]);
+      const requesterName = requester.rows[0]?.name || 'Alguien';
+      await this.notifications.create({
+        userId: otherUserId,
+        type: 'DM_REQUEST',
+        title: 'Nueva solicitud de mensaje',
+        body: `${requesterName} quiere enviarte un mensaje`,
+        data: {
+          conversationId,
+          fromUserId: userId,
+          fromUserName: requesterName,
+        },
+      });
+    }
+    return { conversationId, status: result.rows[0].status };
   }
 
   async acceptConversation(userId: string, conversationId: string) {
@@ -173,6 +193,21 @@ export class MessagingService {
       `UPDATE dm_conversations SET status = 'active', updated_at = NOW() WHERE id = $1`,
       [conversationId],
     );
+    const accepter = await this.db.query(`SELECT name FROM users WHERE id = $1`, [userId]);
+    const accepterName = accepter.rows[0]?.name || 'Alguien';
+    if (conv.requested_by_id) {
+      await this.notifications.create({
+        userId: conv.requested_by_id,
+        type: 'DM_REQUEST_ACCEPTED',
+        title: 'Solicitud de mensaje aceptada',
+        body: `${accepterName} aceptó tu solicitud. Ya podés chatear.`,
+        data: {
+          conversationId,
+          fromUserId: userId,
+          fromUserName: accepterName,
+        },
+      });
+    }
     return { conversationId, status: 'active' };
   }
 
@@ -328,7 +363,24 @@ export class MessagingService {
     );
     await this.db.query(`UPDATE dm_conversations SET updated_at = NOW() WHERE id = $1`, [conversationId]);
     const row = result.rows[0];
-    return { ...row, sender_name: (await this.db.query(`SELECT name FROM users WHERE id = $1`, [userId])).rows[0]?.name };
+    const senderName =
+      (await this.db.query(`SELECT name FROM users WHERE id = $1`, [userId])).rows[0]?.name ||
+      'Alguien';
+
+    const preview = trimmed.length > 80 ? `${trimmed.slice(0, 77)}...` : trimmed;
+    await this.notifications.create({
+      userId: otherUserId,
+      type: 'DM_MESSAGE',
+      title: senderName,
+      body: preview,
+      data: {
+        conversationId,
+        fromUserId: userId,
+        messageId: row.id,
+      },
+    });
+
+    return { ...row, sender_name: senderName };
   }
 
   async resolveUserIdFromPlayer(playerOrUserId: string): Promise<string> {

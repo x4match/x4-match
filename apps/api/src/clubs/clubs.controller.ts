@@ -26,7 +26,9 @@ import { ClubManagerService } from './club-manager.service';
 import { ClubPaymentConfigService } from './club-payment-config.service';
 import { ClubTrialService } from './club-trial.service';
 import { ClubsService } from './clubs.service';
+import { ClubRewardsService } from './club-rewards.service';
 import { CreateClubCommentDto } from './dto/create-club-comment.dto';
+import { CancelRedemptionDto } from './dto/cancel-redemption.dto';
 import { CreateClubDto } from './dto/create-club.dto';
 import { CreateClubPromotionDto } from './dto/create-club-promotion.dto';
 import { CreateClubRewardDto } from './dto/create-club-reward.dto';
@@ -53,6 +55,7 @@ import { UpdateClubPaymentModeDto } from './dto/update-club-payment-mode.dto';
 export class ClubsController {
   constructor(
     private readonly clubsService: ClubsService,
+    private readonly clubRewardsService: ClubRewardsService,
     private readonly clubCommentsService: ClubCommentsService,
     private readonly clubGapFillService: ClubGapFillService,
     private readonly clubManagerService: ClubManagerService,
@@ -321,7 +324,7 @@ export class ClubsController {
 
   @Get(':id/rewards-catalog')
   getRewardsCatalog(@Param('id') id: string) {
-    return this.clubsService.getPublicRewards(id);
+    return this.clubRewardsService.getPublicCatalog(id);
   }
 
   @Get(':id/comments')
@@ -349,6 +352,12 @@ export class ClubsController {
     return this.clubsService.getMyClubPoints(id, user.sub, month);
   }
 
+  @Get(':id/my-redemptions')
+  @UseGuards(JwtAuthGuard)
+  listMyRedemptions(@Param('id') id: string, @CurrentUser() user: { sub: string }) {
+    return this.clubRewardsService.listMyRedemptions(id, user.sub);
+  }
+
   @Post(':id/rewards/:rewardId/redeem')
   @UseGuards(JwtAuthGuard)
   redeemReward(
@@ -356,7 +365,7 @@ export class ClubsController {
     @Param('rewardId') rewardId: string,
     @CurrentUser() user: { sub: string },
   ) {
-    return this.clubsService.redeemReward(id, user.sub, rewardId);
+    return this.clubRewardsService.redeemReward(id, user.sub, rewardId);
   }
 
   @Get(':id/revenue')
@@ -427,7 +436,7 @@ export class ClubsController {
   @Get(':id/rewards')
   @UseGuards(JwtAuthGuard)
   listRewards(@Param('id') id: string, @CurrentUser() user: { sub: string }) {
-    return this.clubsService.listRewards(id, user.sub);
+    return this.clubRewardsService.listRewards(id, user.sub);
   }
 
   @Post(':id/rewards')
@@ -437,13 +446,17 @@ export class ClubsController {
     @CurrentUser() user: { sub: string },
     @Body() dto: CreateClubRewardDto,
   ) {
-    return this.clubsService.createReward(id, user.sub, dto);
+    return this.clubRewardsService.createReward(id, user.sub, dto);
   }
 
   @Get(':id/rewards/redemptions')
   @UseGuards(JwtAuthGuard)
-  listRewardRedemptions(@Param('id') id: string, @CurrentUser() user: { sub: string }) {
-    return this.clubsService.listRewardRedemptions(id, user.sub);
+  listRewardRedemptions(
+    @Param('id') id: string,
+    @CurrentUser() user: { sub: string },
+    @Query('status') status?: string,
+  ) {
+    return this.clubRewardsService.listRedemptions(id, user.sub, { status });
   }
 
   @Patch(':id/rewards/:rewardId')
@@ -454,7 +467,28 @@ export class ClubsController {
     @CurrentUser() user: { sub: string },
     @Body() dto: UpdateClubRewardDto,
   ) {
-    return this.clubsService.updateReward(id, user.sub, rewardId, dto);
+    return this.clubRewardsService.updateReward(id, user.sub, rewardId, dto);
+  }
+
+  @Post(':id/redemptions/:redemptionId/fulfill')
+  @UseGuards(JwtAuthGuard)
+  fulfillRedemption(
+    @Param('id') id: string,
+    @Param('redemptionId') redemptionId: string,
+    @CurrentUser() user: { sub: string },
+  ) {
+    return this.clubRewardsService.fulfillRedemption(id, user.sub, redemptionId);
+  }
+
+  @Post(':id/redemptions/:redemptionId/cancel')
+  @UseGuards(JwtAuthGuard)
+  cancelRedemption(
+    @Param('id') id: string,
+    @Param('redemptionId') redemptionId: string,
+    @CurrentUser() user: { sub: string },
+    @Body() dto: CancelRedemptionDto,
+  ) {
+    return this.clubRewardsService.cancelRedemption(id, user.sub, redemptionId, dto.reason);
   }
 
   @Get(':id/shop/products/manage')

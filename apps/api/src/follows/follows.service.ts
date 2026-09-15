@@ -93,14 +93,4 @@ export class FollowsService {
     return this.getRelation(userId, targetId);
   }
 
-  /** Crea follows mutuos (p. ej. al aceptar amistad). */
-  async ensureMutual(userA: string, userB: string) {
-    if (!userA || !userB || userA === userB) return;
-    await this.db.query(
-      `INSERT INTO user_follows (follower_id, following_id)
-       VALUES ($1, $2), ($2, $1)
-       ON CONFLICT DO NOTHING`,
-      [userA, userB],
-    );
-  }
 }

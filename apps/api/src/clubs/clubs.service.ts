@@ -10,15 +10,14 @@ import { getMonthKey } from '../common/utils';
 import { COURT_SLOT_END_AT_SQL } from '../common/utils/court-schedule.util';
 import { deleteCloudinaryAsset, uploadImageBuffer } from '../common/cloudinary/cloudinary.util';
 import { DatabaseService } from '../database/database.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { PAYMENTS_SERVICE } from '../payments/payments.tokens';
 import type { PaymentsService } from '../payments/payments.service';
 import { CreateClubDto } from './dto/create-club.dto';
 import { CreateClubPromotionDto } from './dto/create-club-promotion.dto';
-import { CreateClubRewardDto } from './dto/create-club-reward.dto';
 import { CreateShopCouponDto } from './dto/create-shop-coupon.dto';
 import { CreateShopProductDto } from './dto/create-shop-product.dto';
 import { UpdateShopProductDto } from './dto/update-shop-product.dto';
-import { UpdateClubRewardDto } from './dto/update-club-reward.dto';
 import { UpdateShopStockDto } from './dto/update-shop-stock.dto';
 
 type RankingPeriod = 'weekly' | 'monthly' | 'annual';
@@ -44,6 +43,7 @@ function assertClubId(id: string): void {
 export class ClubsService {
   constructor(
     private readonly db: DatabaseService,
+    private readonly notifications: NotificationsService,
     @Inject(PAYMENTS_SERVICE)
     private readonly paymentsService: PaymentsService,
   ) {}
@@ -1023,26 +1023,23 @@ export class ClubsService {
       bonus > 0 ? ' · Sumá puntos del club' : ''
     }`;
 
-    for (const player of players.rows) {
-      await this.db.query(
-        `INSERT INTO notifications (user_id, type, title, body, data)
-         VALUES ($1, 'COURT_SLOT_AVAILABLE', $2, $3, $4::jsonb)`,
-        [
-          player.id,
-          title,
-          body,
-          JSON.stringify({
-            clubId: club.id,
-            slotId: slot.id,
-            slotDate: slot.slot_date,
-            startHour: slot.start_hour,
-            endHour: slot.end_hour,
-            pricePerHour,
-            estimatedTotal: total,
-          }),
-        ],
-      );
-    }
+    await this.notifications.createMany(
+      players.rows.map((player) => ({
+        userId: player.id,
+        type: 'COURT_SLOT_AVAILABLE',
+        title,
+        body,
+        data: {
+          clubId: club.id,
+          slotId: slot.id,
+          slotDate: slot.slot_date,
+          startHour: slot.start_hour,
+          endHour: slot.end_hour,
+          pricePerHour,
+          estimatedTotal: total,
+        },
+      })),
+    );
 
     return players.rows.length;
   }
@@ -1389,18 +1386,6 @@ export class ClubsService {
     return this.queryMonthlyLeaderboard(clubId, limit, monthKey);
   }
 
-  async getPublicRewards(clubId: string) {
-    await this.findOne(clubId);
-    const result = await this.db.query(
-      `SELECT id, title, description, points_required, reward_type
-       FROM club_reward_catalog
-       WHERE club_id = $1 AND active = TRUE
-       ORDER BY points_required ASC`,
-      [clubId],
-    );
-    return result.rows;
-  }
-
   async getMyClubPoints(clubId: string, userId: string, monthKey?: string) {
     await this.findOne(clubId);
     const month = monthKey ?? getMonthKey();
@@ -1434,112 +1419,6 @@ export class ClubsService {
       monthKey: month,
       monthlyPoints: monthlyRow?.points ?? 0,
       monthlyMatchesPlayed: monthlyRow?.matches_played ?? 0,
-    };
-  }
-
-  async redeemReward(clubId: string, userId: string, rewardId: string) {
-    await this.findOne(clubId);
-
-    const rewardResult = await this.db.query(
-      `SELECT id, title, points_required FROM club_reward_catalog
-       WHERE id = $1 AND club_id = $2 AND active = TRUE`,
-      [rewardId, clubId],
-    );
-    const reward = rewardResult.rows[0];
-    if (!reward) {
-      throw new NotFoundException('Premio no encontrado');
-    }
-
-    const balanceResult = await this.db.query(
-      `SELECT COALESCE(SUM(points), 0)::int AS points
-       FROM club_member_points
-       WHERE user_id = $1`,
-      [userId],
-    );
-    const balance = Number(balanceResult.rows[0]?.points ?? 0);
-    if (balance < reward.points_required) {
-      throw new BadRequestException(
-        `Te faltan ${reward.points_required - balance} puntos para canjear este premio`,
-      );
-    }
-
-    const deductionsResult = await this.db.query<{
-      club_id: string;
-      deducted: number;
-    }>(
-      `WITH balances AS (
-         SELECT club_id,
-                points,
-                SUM(points) OVER (
-                  ORDER BY
-                    CASE WHEN club_id = $2 THEN 0 ELSE 1 END,
-                    points DESC,
-                    club_id ASC
-                ) AS running_points
-         FROM club_member_points
-         WHERE user_id = $1 AND points > 0
-       ),
-       cuts AS (
-         SELECT club_id,
-                GREATEST(
-                  0,
-                  LEAST(points, $3 - (running_points - points))
-                )::int AS deducted
-         FROM balances
-         WHERE (running_points - points) < $3
-       ),
-       updated AS (
-         UPDATE club_member_points cmp
-         SET points = cmp.points - cuts.deducted,
-             updated_at = NOW()
-         FROM cuts
-         WHERE cmp.user_id = $1
-           AND cmp.club_id = cuts.club_id
-           AND cuts.deducted > 0
-         RETURNING cmp.club_id, cuts.deducted
-       )
-       SELECT club_id, deducted
-       FROM updated`,
-      [userId, clubId, reward.points_required],
-    );
-    const deductedTotal = deductionsResult.rows.reduce(
-      (sum, row) => sum + Number(row.deducted ?? 0),
-      0,
-    );
-    if (deductedTotal < Number(reward.points_required)) {
-      throw new BadRequestException('No se pudo descontar el saldo global de puntos');
-    }
-
-    for (const row of deductionsResult.rows) {
-      await this.db.query(
-        `INSERT INTO club_points_ledger (club_id, user_id, amount, reason, reference_id)
-         VALUES ($1, $2, $3, 'REWARD_REDEEM', $4)`,
-        [row.club_id, userId, -Number(row.deducted), rewardId],
-      );
-    }
-
-    await this.db.query(
-      `INSERT INTO club_reward_redemptions (club_id, user_id, reward_id, points_spent)
-       VALUES ($1, $2, $3, $4)`,
-      [clubId, userId, rewardId, reward.points_required],
-    );
-
-    await this.db.query(
-      `INSERT INTO notifications (user_id, type, title, body, data)
-       VALUES ($1, 'REWARD_REDEEMED', $2, $3, $4::jsonb)`,
-      [
-        userId,
-        'Premio canjeado',
-        `Canjeaste "${reward.title}" en el club. Presentate en recepción para retirarlo.`,
-        JSON.stringify({ clubId, rewardId }),
-      ],
-    );
-
-    return {
-      ok: true,
-      rewardTitle: reward.title,
-      pointsSpent: reward.points_required,
-      remainingPoints: balance - reward.points_required,
     };
   }
 
@@ -1657,85 +1536,6 @@ export class ClubsService {
       throw new NotFoundException('Promoción no encontrada');
     }
     return { ok: true };
-  }
-
-  async listRewards(clubId: string, userId: string) {
-    await this.assertClubRole(userId, clubId);
-    const result = await this.db.query(
-      `SELECT id, club_id, title, description, points_required, reward_type, active, created_at
-       FROM club_reward_catalog
-       WHERE club_id = $1 AND active = TRUE
-       ORDER BY points_required ASC`,
-      [clubId],
-    );
-    return result.rows;
-  }
-
-  async createReward(clubId: string, userId: string, dto: CreateClubRewardDto) {
-    await this.assertClubRole(userId, clubId);
-    const result = await this.db.query(
-      `INSERT INTO club_reward_catalog (club_id, title, description, points_required, reward_type, active)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       RETURNING *`,
-      [
-        clubId,
-        dto.title,
-        dto.description ?? null,
-        dto.pointsRequired,
-        dto.rewardType ?? 'BENEFIT',
-        dto.active ?? true,
-      ],
-    );
-    return result.rows[0];
-  }
-
-  async updateReward(clubId: string, userId: string, rewardId: string, dto: UpdateClubRewardDto) {
-    await this.assertClubRole(userId, clubId);
-    const result = await this.db.query(
-      `UPDATE club_reward_catalog
-       SET title = COALESCE($3, title),
-           description = COALESCE($4, description),
-           points_required = COALESCE($5, points_required),
-           reward_type = COALESCE($6, reward_type),
-           active = COALESCE($7, active)
-       WHERE id = $1 AND club_id = $2
-       RETURNING id, club_id, title, description, points_required, reward_type, active, created_at`,
-      [
-        rewardId,
-        clubId,
-        dto.title ?? null,
-        dto.description ?? null,
-        dto.pointsRequired ?? null,
-        dto.rewardType ?? null,
-        dto.active ?? null,
-      ],
-    );
-    if (!result.rows[0]) {
-      throw new NotFoundException('Premio no encontrado');
-    }
-    return result.rows[0];
-  }
-
-  async listRewardRedemptions(clubId: string, userId: string, limit = 50) {
-    await this.assertClubRole(userId, clubId);
-    const safeLimit = Math.min(100, Math.max(5, limit));
-    const result = await this.db.query(
-      `SELECT r.id,
-              r.points_spent,
-              r.created_at,
-              u.name AS user_name,
-              p.nickname AS user_nickname,
-              rc.title AS reward_title
-       FROM club_reward_redemptions r
-       INNER JOIN users u ON u.id = r.user_id
-       LEFT JOIN players p ON p.user_id = r.user_id
-       INNER JOIN club_reward_catalog rc ON rc.id = r.reward_id
-       WHERE r.club_id = $1
-       ORDER BY r.created_at DESC
-       LIMIT $2`,
-      [clubId, safeLimit],
-    );
-    return result.rows;
   }
 
   async listShopProducts(clubId: string, options: { matchExtraOnly?: boolean } = {}) {

@@ -120,16 +120,20 @@ export class FriendsService {
       throw new NotFoundException('Solicitud no encontrada o ya procesada');
     }
     const row = result.rows[0];
-    try {
-      await this.db.query(
-        `INSERT INTO user_follows (follower_id, following_id)
-         VALUES ($1, $2), ($2, $1)
-         ON CONFLICT DO NOTHING`,
-        [row.requester_id, row.addressee_id],
-      );
-    } catch {
-      // Tabla user_follows puede no existir aún si la migración no corrió.
-    }
+    // Amistad y seguimiento son independientes: aceptar no crea follows mutuos.
+    const accepter = await this.db.query(`SELECT name FROM users WHERE id = $1`, [userId]);
+    const accepterName = accepter.rows[0]?.name || 'Alguien';
+    await this.notifications.create({
+      userId: row.requester_id,
+      type: 'FRIEND_ACCEPTED',
+      title: 'Solicitud aceptada',
+      body: `${accepterName} aceptó tu solicitud de amistad`,
+      data: {
+        requestId: row.id,
+        fromUserId: userId,
+        fromUserName: accepterName,
+      },
+    });
     return row;
   }
 

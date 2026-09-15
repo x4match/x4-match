@@ -9,6 +9,7 @@ import { ClubManagerService } from './club-manager.service';
 import { ClubsController } from './clubs.controller';
 import { ClubCommentsService } from './club-comments.service';
 import { ClubPointsService } from './club-points.service';
+import { ClubRewardsService } from './club-rewards.service';
 import { ClubTrialService } from './club-trial.service';
 import { ClubsService } from './clubs.service';
 
@@ -19,6 +20,7 @@ import { ClubsService } from './clubs.service';
     ClubsService,
     ClubTrialService,
     ClubPointsService,
+    ClubRewardsService,
     ClubCommentsService,
     ClubGapFillService,
     ClubGapFillCron,
@@ -29,6 +31,7 @@ import { ClubsService } from './clubs.service';
     ClubsService,
     ClubTrialService,
     ClubPointsService,
+    ClubRewardsService,
     ClubCommentsService,
     ClubGapFillService,
     ClubManagerService,

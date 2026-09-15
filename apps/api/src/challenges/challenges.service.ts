@@ -9,6 +9,7 @@ import { isCategoryWithinSearchSteps } from '../common/utils/level-range.util';
 import { userTeamFromRank } from '../common/utils/match-result.util';
 import { ClubPointsService } from '../clubs/club-points.service';
 import { DatabaseService } from '../database/database.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import {
   CHALLENGE_COOLDOWN_DAYS,
   CHALLENGE_EXPIRY_HOURS,
@@ -37,6 +38,7 @@ export class ChallengesService {
   constructor(
     private readonly db: DatabaseService,
     private readonly clubPointsService: ClubPointsService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async getEligibility(clubId: string, userId: string) {
@@ -197,6 +199,13 @@ export class ChallengesService {
       'CLUB_CHALLENGE',
       '¡Te desafiaron!',
       'El #1 de otro club te desafió a un 2v2 interclub. Aceptá y elegí compañero.',
+      { challengeId: challenge.id },
+    );
+    await this.notify(
+      dto.partnerUserId,
+      'CLUB_CHALLENGE',
+      'Te eligieron de compañero',
+      'El #1 de tu club te sumó a un desafío interclub 2v2.',
       { challengeId: challenge.id },
     );
 
@@ -719,10 +728,6 @@ export class ChallengesService {
     body: string,
     data: Record<string, unknown>,
   ) {
-    await this.db.query(
-      `INSERT INTO notifications (user_id, type, title, body, data)
-       VALUES ($1, $2, $3, $4, $5::jsonb)`,
-      [userId, type, title, body, JSON.stringify(data)],
-    );
+    await this.notifications.create({ userId, type, title, body, data });
   }
 }

@@ -84,6 +84,14 @@ export class NotificationsService {
     return { ok: true };
   }
 
+  async unreadCount(userId: string) {
+    const result = await this.db.query(
+      `SELECT COUNT(*)::int AS count FROM notifications WHERE user_id = $1 AND read = FALSE`,
+      [userId],
+    );
+    return { count: Number(result.rows[0]?.count ?? 0) };
+  }
+
   async registerPushToken(userId: string, token: string, platform: PushPlatform) {
     await this.db.query(
       `INSERT INTO user_push_tokens (user_id, token, platform)

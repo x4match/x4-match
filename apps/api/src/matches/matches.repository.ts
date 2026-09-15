@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { CreateMatchDto } from './dto/create-match.dto';
 import type { ParsedBestOfThree } from '../common/utils/match-result.util';
 import type { PlayerRatingDto } from './dto/player-rating.dto';
@@ -12,7 +13,10 @@ export const RESULT_CONFIRM_HOURS = 48;
 
 @Injectable()
 export class MatchesRepository {
-  constructor(private readonly db: DatabaseService) {}
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly notifications: NotificationsService,
+  ) {}
 
   async expirePastCourtSlots(): Promise<number> {
     const result = await this.db.query(
@@ -194,13 +198,14 @@ export class MatchesRepository {
     data: Record<string, unknown>,
   ) {
     const unique = [...new Set(userIds.filter(Boolean))];
-    for (const userId of unique) {
-      await this.db.query(
-        `INSERT INTO notifications (user_id, type, title, body, data)
-         VALUES ($1, $2, $3, $4, $5::jsonb)`,
-        [userId, type, title, body, JSON.stringify(data)],
-      );
-    }
+    await this.notifications.createMany(
+      unique.map((userId) => ({ userId, type, title, body, data })),
+    );
+  }
+
+  async getUserName(userId: string): Promise<string> {
+    const result = await this.db.query(`SELECT name FROM users WHERE id = $1`, [userId]);
+    return result.rows[0]?.name || 'Alguien';
   }
 
   async getById(matchId: string) {
