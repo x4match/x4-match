@@ -243,6 +243,57 @@ export class ClubsController {
     return this.clubsService.uploadCover(user.sub, id, file);
   }
 
+  @Get(':id/photos')
+  listPhotos(@Param('id') id: string) {
+    return this.clubsService.listPhotos(id);
+  }
+
+  @Post(':id/photos')
+  @UseGuards(JwtAuthGuard)
+  @UseInterceptors(
+    FileInterceptor('photo', {
+      storage: memoryStorage(),
+      limits: { fileSize: 5 * 1024 * 1024 },
+      fileFilter: (_req, file, cb) => {
+        if (!file.mimetype?.startsWith('image/')) {
+          cb(new BadRequestException('Solo se permiten imágenes'), false);
+          return;
+        }
+        cb(null, true);
+      },
+    }),
+  )
+  uploadPhoto(
+    @Param('id') id: string,
+    @CurrentUser() user: { sub: string },
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    if (!file?.buffer?.length) {
+      throw new BadRequestException('Archivo requerido');
+    }
+    return this.clubsService.uploadPhoto(user.sub, id, file);
+  }
+
+  @Post(':id/photos/:photoId/primary')
+  @UseGuards(JwtAuthGuard)
+  setPrimaryPhoto(
+    @Param('id') id: string,
+    @Param('photoId') photoId: string,
+    @CurrentUser() user: { sub: string },
+  ) {
+    return this.clubsService.setPrimaryPhoto(user.sub, id, photoId);
+  }
+
+  @Delete(':id/photos/:photoId')
+  @UseGuards(JwtAuthGuard)
+  deletePhoto(
+    @Param('id') id: string,
+    @Param('photoId') photoId: string,
+    @CurrentUser() user: { sub: string },
+  ) {
+    return this.clubsService.deletePhoto(user.sub, id, photoId);
+  }
+
   @Get(':id/dashboard')
   @UseGuards(JwtAuthGuard)
   getDashboard(@Param('id') id: string, @CurrentUser() user: { sub: string }) {

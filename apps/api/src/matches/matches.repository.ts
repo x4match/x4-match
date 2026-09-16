@@ -11,6 +11,27 @@ import { countRecentTeamMatchups as countRecentTeamMatchupsQuery } from '../rati
 
 export const RESULT_CONFIRM_HOURS = 48;
 
+/** Primary gallery photo → cover → logo for match cards. */
+function clubCardPhotoSql(alias = 'c') {
+  return `COALESCE(
+    (
+      SELECT cp.photo_url
+      FROM club_photos cp
+      WHERE cp.club_id = ${alias}.id AND cp.is_primary = TRUE
+      LIMIT 1
+    ),
+    (
+      SELECT cp.photo_url
+      FROM club_photos cp
+      WHERE cp.club_id = ${alias}.id
+      ORDER BY cp.sort_order ASC, cp.created_at ASC
+      LIMIT 1
+    ),
+    ${alias}.cover_url,
+    ${alias}.logo_url
+  )`;
+}
+
 @Injectable()
 export class MatchesRepository {
   constructor(
@@ -247,7 +268,9 @@ export class MatchesRepository {
     let club = null;
     if (match.club_id) {
       const clubResult = await this.db.query(
-        `SELECT id, name, city, zone, address, logo_url, cover_url FROM clubs WHERE id = $1`,
+        `SELECT id, name, city, zone, address, logo_url, cover_url,
+                ${clubCardPhotoSql('clubs')} AS card_photo_url
+         FROM clubs WHERE id = $1`,
         [match.club_id],
       );
       club = clubResult.rows[0] ?? null;
@@ -522,6 +545,7 @@ export class MatchesRepository {
                 c.city AS club_city,
                 c.logo_url AS club_logo_url,
                 c.cover_url AS club_cover_url,
+                ${clubCardPhotoSql('c')} AS club_card_photo_url,
                 COALESCE(c.latitude::float8, creator.latitude::float8) AS match_lat,
                 COALESCE(c.longitude::float8, creator.longitude::float8) AS match_lng,
                 (

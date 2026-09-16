@@ -202,8 +202,15 @@ export class ClubsService {
       throw new NotFoundException('Club no encontrado');
     }
 
+    const photos = await this.listPhotos(id);
+    const cardPhotoUrl =
+      photos.find((p) => p.isPrimary)?.photoUrl || photos[0]?.photoUrl || club.cover_url || club.logo_url || null;
+
     return {
       ...club,
+      photos,
+      cardPhotoUrl,
+      card_photo_url: cardPhotoUrl,
       autoFillGapsEnabled: Boolean(club.auto_fill_gaps_enabled),
       courtPricePerHour: Number(club.court_price_per_hour ?? 0),
       depositPercent: Number(club.deposit_percent ?? 0),
@@ -376,6 +383,147 @@ export class ClubsService {
     }
 
     return result.rows[0];
+  }
+
+  /** Foto principal para cards de partidos: primary gallery → cover → logo. */
+  static cardPhotoSql(clubAlias = 'c') {
+    return `COALESCE(
+      (
+        SELECT cp.photo_url
+        FROM club_photos cp
+        WHERE cp.club_id = ${clubAlias}.id AND cp.is_primary = TRUE
+        LIMIT 1
+      ),
+      (
+        SELECT cp.photo_url
+        FROM club_photos cp
+        WHERE cp.club_id = ${clubAlias}.id
+        ORDER BY cp.sort_order ASC, cp.created_at ASC
+        LIMIT 1
+      ),
+      ${clubAlias}.cover_url,
+      ${clubAlias}.logo_url
+    )`;
+  }
+
+  private static readonly MAX_CLUB_PHOTOS = 8;
+
+  async listPhotos(clubId: string) {
+    assertClubId(clubId);
+    const clubExists = await this.db.query(`SELECT id FROM clubs WHERE id = $1`, [clubId]);
+    if (!clubExists.rows[0]) {
+      throw new NotFoundException('Club no encontrado');
+    }
+    const result = await this.db.query(
+      `SELECT id, club_id, photo_url, cloudinary_public_id, is_primary, sort_order, created_at
+       FROM club_photos
+       WHERE club_id = $1
+       ORDER BY is_primary DESC, sort_order ASC, created_at ASC`,
+      [clubId],
+    );
+    return result.rows.map((row) => ({
+      id: row.id as string,
+      clubId: row.club_id as string,
+      photoUrl: row.photo_url as string,
+      isPrimary: Boolean(row.is_primary),
+      sortOrder: Number(row.sort_order ?? 0),
+      createdAt: row.created_at,
+    }));
+  }
+
+  async uploadPhoto(userId: string, clubId: string, file: Express.Multer.File) {
+    await this.assertClubRole(userId, clubId);
+    assertClubId(clubId);
+
+    const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'];
+    if (!allowed.includes(file.mimetype)) {
+      throw new BadRequestException('Formato de imagen no soportado. Usá JPG, PNG o WEBP.');
+    }
+
+    const countResult = await this.db.query<{ count: string }>(
+      `SELECT COUNT(*)::text AS count FROM club_photos WHERE club_id = $1`,
+      [clubId],
+    );
+    const count = Number(countResult.rows[0]?.count ?? 0);
+    if (count >= ClubsService.MAX_CLUB_PHOTOS) {
+      throw new BadRequestException(
+        `Podés subir hasta ${ClubsService.MAX_CLUB_PHOTOS} fotos para las cards de partidos`,
+      );
+    }
+
+    const upload = await uploadImageBuffer(file, `playtomic-clone/clubs/${clubId}/photos`);
+    const makePrimary = count === 0;
+
+    const result = await this.db.query(
+      `INSERT INTO club_photos (club_id, uploaded_by_user_id, photo_url, cloudinary_public_id, is_primary, sort_order)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING id, club_id, photo_url, cloudinary_public_id, is_primary, sort_order, created_at`,
+      [clubId, userId, upload.secure_url, upload.public_id ?? null, makePrimary, count],
+    );
+
+    const row = result.rows[0];
+    return {
+      id: row.id as string,
+      clubId: row.club_id as string,
+      photoUrl: row.photo_url as string,
+      isPrimary: Boolean(row.is_primary),
+      sortOrder: Number(row.sort_order ?? 0),
+      createdAt: row.created_at,
+    };
+  }
+
+  async setPrimaryPhoto(userId: string, clubId: string, photoId: string) {
+    await this.assertClubRole(userId, clubId);
+    assertClubId(clubId);
+
+    const existing = await this.db.query(
+      `SELECT id FROM club_photos WHERE id = $1 AND club_id = $2`,
+      [photoId, clubId],
+    );
+    if (!existing.rows[0]) {
+      throw new NotFoundException('Foto no encontrada');
+    }
+
+    await this.db.query(`UPDATE club_photos SET is_primary = FALSE WHERE club_id = $1`, [clubId]);
+    await this.db.query(
+      `UPDATE club_photos SET is_primary = TRUE WHERE id = $1 AND club_id = $2`,
+      [photoId, clubId],
+    );
+
+    return this.listPhotos(clubId);
+  }
+
+  async deletePhoto(userId: string, clubId: string, photoId: string) {
+    await this.assertClubRole(userId, clubId);
+    assertClubId(clubId);
+
+    const existing = await this.db.query(
+      `SELECT id, photo_url, is_primary FROM club_photos WHERE id = $1 AND club_id = $2`,
+      [photoId, clubId],
+    );
+    const row = existing.rows[0];
+    if (!row) {
+      throw new NotFoundException('Foto no encontrada');
+    }
+
+    await this.db.query(`DELETE FROM club_photos WHERE id = $1 AND club_id = $2`, [photoId, clubId]);
+    await deleteCloudinaryAsset(row.photo_url as string).catch(() => undefined);
+
+    if (row.is_primary) {
+      await this.db.query(
+        `UPDATE club_photos
+         SET is_primary = TRUE
+         WHERE id = (
+           SELECT id FROM club_photos
+           WHERE club_id = $1
+           ORDER BY sort_order ASC, created_at ASC
+           LIMIT 1
+         )`,
+        [clubId],
+      );
+    }
+
+    return this.listPhotos(clubId);
   }
 
   async listCourtSlots(clubId: string, userId?: string) {
