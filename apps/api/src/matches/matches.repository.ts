@@ -334,6 +334,7 @@ export class MatchesRepository {
     }
 
     const neededPlayers = Number(match.needed_players) || 4;
+    // Duración de juego (turno). No usar ends_at de franja (mañana/tarde/noche = varias horas).
     let durationMinutes = 90;
     if (courtSlot) {
       durationMinutes = Math.max(
@@ -342,11 +343,17 @@ export class MatchesRepository {
       );
     } else if (match.ends_at && match.date) {
       const diffMs = new Date(match.ends_at).getTime() - new Date(match.date).getTime();
-      if (diffMs > 0) durationMinutes = Math.round(diffMs / 60000);
+      const mins = diffMs > 0 ? Math.round(diffMs / 60000) : 0;
+      // Ventanas de búsqueda suelen ser > 2h; un turno real de cancha suele ser 60–120 min.
+      if (mins > 0 && mins <= 120) {
+        durationMinutes = mins;
+      }
     }
 
     const pricePerHour = Number(courtSlot?.price_per_hour ?? clubPricing?.court_price_per_hour ?? 0);
-    const durationHours = durationMinutes / 60;
+    // Precio de cancha solo con turno reservado; franja sin slot no cobra horas de búsqueda.
+    const billableMinutes = courtSlot ? durationMinutes : 0;
+    const durationHours = billableMinutes / 60;
     const totalCourt = pricePerHour * durationHours;
     const pricePerPlayer =
       neededPlayers > 0 && totalCourt > 0
@@ -361,8 +368,9 @@ export class MatchesRepository {
 
     const courtInfo = {
       label: courtSlot?.court_label ?? null,
-      duration_minutes: durationMinutes,
-      cancel_policy: '30 min para cancelar gratis',
+      // Solo exponer duración cuando hay turno real; en franja no es "minutos de juego".
+      duration_minutes: courtSlot ? durationMinutes : null,
+      cancel_policy: courtSlot ? '30 min para cancelar gratis' : null,
     };
 
     const pricing =
