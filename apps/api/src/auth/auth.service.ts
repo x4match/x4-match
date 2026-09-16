@@ -412,13 +412,15 @@ export class AuthService {
   }
 
   /** Bundle ID (iOS) y Services ID (web) son audiences válidos del identity token. */
-  private appleAudiences(): string[] {
+  private appleAudiences(): [string, ...string[]] {
     const audiences = [
       process.env.APPLE_BUNDLE_ID?.trim() || 'com.x4match.app',
       process.env.APPLE_SERVICES_ID?.trim(),
       process.env.APPLE_CLIENT_ID?.trim(),
     ].filter((value): value is string => Boolean(value));
-    return [...new Set(audiences)];
+    const unique = [...new Set(audiences)];
+    // Siempre hay al menos el bundle ID por defecto; el tuple tipa jwt.verify.
+    return unique as [string, ...string[]];
   }
 
   private async verifyAppleIdentityToken(identityToken: string) {

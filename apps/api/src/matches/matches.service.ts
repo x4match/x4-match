@@ -302,7 +302,7 @@ export class MatchesService {
   ): Promise<void> {
     const playerGender = await this.matchesRepository.getGenderByUserId(userId);
     const result = playerFitsMatchGender(matchGender, playerGender);
-    if (!result.ok) {
+    if (result.ok === false) {
       throw new BadRequestException(result.reason);
     }
   }
