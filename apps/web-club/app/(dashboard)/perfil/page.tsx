@@ -176,7 +176,7 @@ export default function PerfilPage() {
   const uploadAsset = useMutation({
     mutationFn: async ({ kind, file }: { kind: 'logo' | 'cover'; file: File }) => {
       const form = new FormData();
-      form.append('file', file);
+      form.append(kind, file);
       await api.post(`/clubs/${activeClubId}/${kind}`, form);
     },
     onSuccess: async () => {

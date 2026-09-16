@@ -118,13 +118,41 @@ function ShopInner() {
       const res = await api.get(`/clubs/${activeClubId}/rewards/redemptions`);
       return res.data as Array<{
         id: string;
+        userName?: string;
         user_name?: string;
-        reward_name?: string;
+        rewardTitle?: string;
+        reward_title?: string;
+        createdAt?: string;
         created_at?: string;
+        pointsSpent?: number;
         points_spent?: number;
+        status?: string;
+        redemptionCode?: string;
+        redemption_code?: string;
       }>;
     },
-    enabled: !!activeClubId && tab === 'redemptions',
+    enabled: !!activeClubId && (tab === 'redemptions' || tab === 'rewards'),
+  });
+
+  const rewardsQuery = useQuery({
+    queryKey: ['club-rewards-manage', activeClubId],
+    queryFn: async () => {
+      const res = await api.get(`/clubs/${activeClubId}/rewards`);
+      return res.data as Array<{
+        id: string;
+        title: string;
+        description?: string | null;
+        pointsRequired?: number;
+        points_required?: number;
+        rewardType?: string;
+        reward_type?: string;
+        active?: boolean;
+        stock?: number | null;
+        maxPerUser?: number | null;
+        max_per_user?: number | null;
+      }>;
+    },
+    enabled: !!activeClubId && tab === 'rewards',
   });
 
   const [productOpen, setProductOpen] = useState(false);
@@ -142,6 +170,16 @@ function ShopInner() {
   const [couponCode, setCouponCode] = useState('');
   const [couponLabel, setCouponLabel] = useState('');
   const [couponPercent, setCouponPercent] = useState('10');
+
+  const [rewardOpen, setRewardOpen] = useState(false);
+  const [editingRewardId, setEditingRewardId] = useState<string | null>(null);
+  const [rewardTitle, setRewardTitle] = useState('');
+  const [rewardDesc, setRewardDesc] = useState('');
+  const [rewardPoints, setRewardPoints] = useState('50');
+  const [rewardType, setRewardType] = useState('BENEFIT');
+  const [rewardStock, setRewardStock] = useState('');
+  const [rewardMaxPerUser, setRewardMaxPerUser] = useState('');
+  const [rewardActive, setRewardActive] = useState(true);
 
   const clearPendingPhoto = () => {
     if (pendingPhotoPreview) URL.revokeObjectURL(pendingPhotoPreview);
@@ -282,6 +320,111 @@ function ShopInner() {
     },
   });
 
+  const openNewReward = () => {
+    setEditingRewardId(null);
+    setRewardTitle('');
+    setRewardDesc('');
+    setRewardPoints('50');
+    setRewardType('BENEFIT');
+    setRewardStock('');
+    setRewardMaxPerUser('');
+    setRewardActive(true);
+    setRewardOpen(true);
+  };
+
+  const openEditReward = (reward: {
+    id: string;
+    title: string;
+    description?: string | null;
+    pointsRequired?: number;
+    points_required?: number;
+    rewardType?: string;
+    reward_type?: string;
+    active?: boolean;
+    stock?: number | null;
+    maxPerUser?: number | null;
+    max_per_user?: number | null;
+  }) => {
+    setEditingRewardId(reward.id);
+    setRewardTitle(reward.title);
+    setRewardDesc(reward.description || '');
+    setRewardPoints(String(reward.pointsRequired ?? reward.points_required ?? 50));
+    setRewardType(String(reward.rewardType ?? reward.reward_type ?? 'BENEFIT'));
+    setRewardStock(reward.stock != null ? String(reward.stock) : '');
+    setRewardMaxPerUser(
+      (reward.maxPerUser ?? reward.max_per_user) != null
+        ? String(reward.maxPerUser ?? reward.max_per_user)
+        : '',
+    );
+    setRewardActive(reward.active !== false);
+    setRewardOpen(true);
+  };
+
+  const saveReward = useMutation({
+    mutationFn: async () => {
+      const payload = {
+        title: rewardTitle.trim(),
+        description: rewardDesc.trim() || undefined,
+        pointsRequired: parseInt(rewardPoints, 10) || 50,
+        rewardType: rewardType,
+        stock: rewardStock.trim() ? parseInt(rewardStock, 10) : null,
+        maxPerUser: rewardMaxPerUser.trim() ? parseInt(rewardMaxPerUser, 10) : null,
+        active: rewardActive,
+      };
+      if (editingRewardId) {
+        await api.patch(`/clubs/${activeClubId}/rewards/${editingRewardId}`, payload);
+      } else {
+        await api.post(`/clubs/${activeClubId}/rewards`, payload);
+      }
+    },
+    onSuccess: async () => {
+      setRewardOpen(false);
+      await queryClient.invalidateQueries({ queryKey: ['club-rewards-manage', activeClubId] });
+      toast.success(editingRewardId ? 'Premio actualizado' : 'Premio publicado');
+    },
+    onError: (err: { response?: { data?: { message?: string } } }) => {
+      toast.error(err.response?.data?.message || 'No se pudo guardar el premio');
+    },
+  });
+
+  const deactivateReward = useMutation({
+    mutationFn: async (id: string) => {
+      await api.patch(`/clubs/${activeClubId}/rewards/${id}`, { active: false });
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['club-rewards-manage', activeClubId] });
+      toast.success('Premio desactivado');
+    },
+  });
+
+  const fulfillRedemption = useMutation({
+    mutationFn: async (redemptionId: string) => {
+      await api.post(`/clubs/${activeClubId}/redemptions/${redemptionId}/fulfill`);
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['club-rewards-redemptions', activeClubId] });
+      toast.success('Premio entregado');
+    },
+    onError: (err: { response?: { data?: { message?: string } } }) => {
+      toast.error(err.response?.data?.message || 'No se pudo entregar');
+    },
+  });
+
+  const cancelRedemption = useMutation({
+    mutationFn: async (redemptionId: string) => {
+      await api.post(`/clubs/${activeClubId}/redemptions/${redemptionId}/cancel`, {
+        reason: 'Cancelado por el club',
+      });
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['club-rewards-redemptions', activeClubId] });
+      toast.success('Canje cancelado y puntos reintegrados');
+    },
+    onError: (err: { response?: { data?: { message?: string } } }) => {
+      toast.error(err.response?.data?.message || 'No se pudo cancelar');
+    },
+  });
+
   if (!activeClubId) return <EmptyState title="Seleccioná un club" />;
   if (productsQuery.isLoading && statsQuery.isLoading) return <DashboardSkeleton />;
 
@@ -343,6 +486,9 @@ function ShopInner() {
           </TabsTrigger>
           <TabsTrigger value="sales" className="rounded-lg">
             Ventas
+          </TabsTrigger>
+          <TabsTrigger value="rewards" className="rounded-lg">
+            Premios
           </TabsTrigger>
           <TabsTrigger value="redemptions" className="rounded-lg">
             Canjes
@@ -577,18 +723,101 @@ function ShopInner() {
           {!salesQuery.data?.length ? <EmptyState title="Sin ventas" /> : null}
         </TabsContent>
 
+        <TabsContent value="rewards" className="mt-4 space-y-3">
+          <div className="flex justify-end">
+            <Button className="rounded-xl" onClick={openNewReward}>
+              <Plus className="size-4" />
+              Nuevo premio
+            </Button>
+          </div>
+          {(rewardsQuery.data || []).map((reward) => {
+            const pts = reward.pointsRequired ?? reward.points_required ?? 0;
+            return (
+              <Card key={reward.id}>
+                <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="font-semibold">{reward.title}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {pts} pts
+                      {reward.stock != null ? ` · stock ${reward.stock}` : ' · stock ilimitado'}
+                      {(reward.maxPerUser ?? reward.max_per_user) != null
+                        ? ` · máx ${reward.maxPerUser ?? reward.max_per_user}/jugador`
+                        : ''}
+                      {reward.active === false ? ' · inactivo' : ''}
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" className="rounded-lg" onClick={() => openEditReward(reward)}>
+                      Editar
+                    </Button>
+                    {reward.active !== false ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="rounded-lg"
+                        onClick={() => deactivateReward.mutate(reward.id)}
+                      >
+                        Desactivar
+                      </Button>
+                    ) : null}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+          {!rewardsQuery.data?.length ? (
+            <EmptyState title="Sin premios" description="Creá beneficios canjeables por puntos." />
+          ) : null}
+        </TabsContent>
+
         <TabsContent value="redemptions" className="mt-4 space-y-2">
-          {(redemptionsQuery.data || []).map((r) => (
-            <Card key={r.id}>
-              <CardContent className="p-4">
-                <p className="font-semibold">{r.reward_name || 'Recompensa'}</p>
-                <p className="text-sm text-muted-foreground">
-                  {r.user_name} · {formatFullDate(r.created_at)}
-                  {r.points_spent != null ? ` · ${r.points_spent} pts` : ''}
-                </p>
-              </CardContent>
-            </Card>
-          ))}
+          {(redemptionsQuery.data || []).map((r) => {
+            const title = r.rewardTitle || r.reward_title || 'Recompensa';
+            const user = r.userName || r.user_name || 'Jugador';
+            const created = r.createdAt || r.created_at;
+            const spent = r.pointsSpent ?? r.points_spent;
+            const code = r.redemptionCode || r.redemption_code;
+            const pending = r.status === 'PENDING' || !r.status;
+            return (
+              <Card key={r.id}>
+                <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="font-semibold">{title}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {user}
+                      {created ? ` · ${formatFullDate(created)}` : ''}
+                      {spent != null ? ` · ${spent} pts` : ''}
+                      {r.status ? ` · ${r.status}` : ''}
+                    </p>
+                    {code ? (
+                      <p className="mt-1 font-mono text-lg font-bold tracking-wider text-primary">{code}</p>
+                    ) : null}
+                  </div>
+                  {pending ? (
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        className="rounded-lg"
+                        onClick={() => fulfillRedemption.mutate(r.id)}
+                        disabled={fulfillRedemption.isPending}
+                      >
+                        Entregar
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="rounded-lg"
+                        onClick={() => cancelRedemption.mutate(r.id)}
+                        disabled={cancelRedemption.isPending}
+                      >
+                        Cancelar
+                      </Button>
+                    </div>
+                  ) : null}
+                </CardContent>
+              </Card>
+            );
+          })}
           {!redemptionsQuery.data?.length ? <EmptyState title="Sin canjes" /> : null}
         </TabsContent>
       </Tabs>
@@ -748,6 +977,92 @@ function ShopInner() {
                 }
                 updateStock.mutate({ id: stockDialogId, stockQuantity: next });
               }}
+            >
+              Guardar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={rewardOpen} onOpenChange={setRewardOpen}>
+        <DialogContent className="rounded-2xl sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{editingRewardId ? 'Editar premio' : 'Nuevo premio'}</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-4">
+            <div className="space-y-1">
+              <Label>Título</Label>
+              <Input
+                value={rewardTitle}
+                onChange={(e) => setRewardTitle(e.target.value)}
+                className="rounded-xl"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>Descripción</Label>
+              <Input
+                value={rewardDesc}
+                onChange={(e) => setRewardDesc(e.target.value)}
+                className="rounded-xl"
+              />
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1">
+                <Label>Puntos</Label>
+                <Input
+                  type="number"
+                  value={rewardPoints}
+                  onChange={(e) => setRewardPoints(e.target.value)}
+                  className="rounded-xl"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>Tipo</Label>
+                <Select value={rewardType} onValueChange={setRewardType}>
+                  <SelectTrigger className="rounded-xl">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="BENEFIT">Beneficio</SelectItem>
+                    <SelectItem value="DISCOUNT">Descuento</SelectItem>
+                    <SelectItem value="FREE_SLOT">Turno gratis</SelectItem>
+                    <SelectItem value="MERCH">Merch</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1">
+                <Label>Stock (vacío = ilimitado)</Label>
+                <Input
+                  type="number"
+                  value={rewardStock}
+                  onChange={(e) => setRewardStock(e.target.value)}
+                  className="rounded-xl"
+                  placeholder="Ilimitado"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>Máx. por jugador</Label>
+                <Input
+                  type="number"
+                  value={rewardMaxPerUser}
+                  onChange={(e) => setRewardMaxPerUser(e.target.value)}
+                  className="rounded-xl"
+                  placeholder="Sin tope"
+                />
+              </div>
+            </div>
+            <div className="flex items-center justify-between rounded-xl border px-3 py-2">
+              <Label>Activo</Label>
+              <Switch checked={rewardActive} onCheckedChange={setRewardActive} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              className="rounded-xl"
+              disabled={!rewardTitle.trim() || saveReward.isPending}
+              onClick={() => saveReward.mutate()}
             >
               Guardar
             </Button>
