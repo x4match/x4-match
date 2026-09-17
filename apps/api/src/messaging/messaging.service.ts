@@ -274,18 +274,36 @@ export class MessagingService {
          (
            SELECT content FROM dm_messages m
            WHERE m.conversation_id = c.id
+             AND (h.hidden_at IS NULL OR m.created_at > h.hidden_at)
            ORDER BY m.created_at DESC LIMIT 1
          ) AS last_message,
          (
            SELECT created_at FROM dm_messages m
            WHERE m.conversation_id = c.id
+             AND (h.hidden_at IS NULL OR m.created_at > h.hidden_at)
            ORDER BY m.created_at DESC LIMIT 1
          ) AS last_message_at
        FROM dm_conversations c
        INNER JOIN users u ON u.id = CASE WHEN c.user_a_id = $1 THEN c.user_b_id ELSE c.user_a_id END
        LEFT JOIN players p ON p.user_id = u.id
-       WHERE c.user_a_id = $1 OR c.user_b_id = $1
-       ORDER BY c.updated_at DESC`,
+       LEFT JOIN dm_conversation_hides h ON h.conversation_id = c.id AND h.user_id = $1
+       WHERE (c.user_a_id = $1 OR c.user_b_id = $1)
+         AND (
+           h.hidden_at IS NULL
+           OR EXISTS (
+             SELECT 1 FROM dm_messages m
+             WHERE m.conversation_id = c.id AND m.created_at > h.hidden_at
+           )
+         )
+       ORDER BY COALESCE(
+         (
+           SELECT created_at FROM dm_messages m
+           WHERE m.conversation_id = c.id
+             AND (h.hidden_at IS NULL OR m.created_at > h.hidden_at)
+           ORDER BY m.created_at DESC LIMIT 1
+         ),
+         c.updated_at
+       ) DESC`,
       [userId],
     );
     return result.rows;
@@ -305,7 +323,11 @@ export class MessagingService {
        LEFT JOIN players p ON p.user_id = u.id
        WHERE c.status = 'pending'
          AND c.requested_by_id <> $1
-         AND (c.user_a_id = $1 OR c.user_b_id = $1)`,
+         AND (c.user_a_id = $1 OR c.user_b_id = $1)
+         AND NOT EXISTS (
+           SELECT 1 FROM dm_conversation_hides h
+           WHERE h.conversation_id = c.id AND h.user_id = $1
+         )`,
       [userId],
     );
     return result.rows;
@@ -324,9 +346,12 @@ export class MessagingService {
       `SELECT m.id, m.sender_id, m.content, m.created_at, u.name AS sender_name
        FROM dm_messages m
        INNER JOIN users u ON u.id = m.sender_id
+       LEFT JOIN dm_conversation_hides h
+         ON h.conversation_id = m.conversation_id AND h.user_id = $2
        WHERE m.conversation_id = $1
+         AND (h.hidden_at IS NULL OR m.created_at > h.hidden_at)
        ORDER BY m.created_at ASC`,
-      [conversationId],
+      [conversationId, userId],
     );
     return result.rows;
   }
@@ -381,6 +406,44 @@ export class MessagingService {
     });
 
     return { ...row, sender_name: senderName };
+  }
+
+  async deleteMessage(userId: string, conversationId: string, messageId: string) {
+    await this.getConversationForUser(conversationId, userId);
+
+    const result = await this.db.query(
+      `SELECT id, sender_id, conversation_id FROM dm_messages
+       WHERE id = $1 AND conversation_id = $2`,
+      [messageId, conversationId],
+    );
+    const message = result.rows[0] as
+      | { id: string; sender_id: string; conversation_id: string }
+      | undefined;
+
+    if (!message) {
+      throw new NotFoundException('Mensaje no encontrado');
+    }
+    if (message.sender_id !== userId) {
+      throw new ForbiddenException('Solo podés borrar tus propios mensajes');
+    }
+
+    await this.db.query(`DELETE FROM dm_messages WHERE id = $1`, [messageId]);
+    await this.db.query(`UPDATE dm_conversations SET updated_at = NOW() WHERE id = $1`, [
+      conversationId,
+    ]);
+
+    return { ok: true, id: messageId };
+  }
+
+  async deleteConversation(userId: string, conversationId: string) {
+    await this.getConversationForUser(conversationId, userId);
+    await this.db.query(
+      `INSERT INTO dm_conversation_hides (conversation_id, user_id)
+       VALUES ($1, $2)
+       ON CONFLICT (conversation_id, user_id) DO UPDATE SET hidden_at = NOW()`,
+      [conversationId, userId],
+    );
+    return { ok: true, id: conversationId };
   }
 
   async resolveUserIdFromPlayer(playerOrUserId: string): Promise<string> {

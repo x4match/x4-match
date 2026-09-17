@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, UseGuards } from '@nestjs/common';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { MessagingService } from './messaging.service';
@@ -56,5 +56,19 @@ export class MessagingController {
     @Body() dto: SendDmDto,
   ) {
     return this.messagingService.sendMessage(user.sub, id, dto.content);
+  }
+
+  @Delete(':id/messages/:messageId')
+  deleteMessage(
+    @CurrentUser() user: { sub: string },
+    @Param('id') id: string,
+    @Param('messageId') messageId: string,
+  ) {
+    return this.messagingService.deleteMessage(user.sub, id, messageId);
+  }
+
+  @Delete(':id')
+  deleteConversation(@CurrentUser() user: { sub: string }, @Param('id') id: string) {
+    return this.messagingService.deleteConversation(user.sub, id);
   }
 }

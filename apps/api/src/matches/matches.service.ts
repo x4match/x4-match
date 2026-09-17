@@ -205,6 +205,7 @@ export class MatchesService {
       radiusKm: lat != null && lng != null ? radiusKm : null,
       zone: query.zone,
       limit: 50,
+      viewerUserId,
     });
 
     return {

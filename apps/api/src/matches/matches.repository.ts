@@ -391,6 +391,8 @@ export class MatchesRepository {
 
     const courtInfo = {
       label: courtSlot?.court_label ?? null,
+      start_hour: courtSlot ? Number(courtSlot.start_hour) : null,
+      end_hour: courtSlot ? Number(courtSlot.end_hour) : null,
       // Solo exponer duración cuando hay turno real; en franja no es "minutos de juego".
       duration_minutes: courtSlot ? durationMinutes : null,
       cancel_policy: courtSlot ? '30 min para cancelar gratis' : null,
@@ -507,11 +509,13 @@ export class MatchesRepository {
     radiusKm?: number | null;
     zone?: string | null;
     limit?: number;
+    viewerUserId?: string | null;
   }) {
     const hasCoords = params.lat != null && params.lng != null;
     const radiusKm = params.radiusKm ?? 30;
     const zoneFilter = params.zone?.trim() ? `%${params.zone.trim()}%` : null;
     const limit = params.limit ?? 50;
+    const viewerUserId = params.viewerUserId?.trim() || null;
 
     const distanceExpr = hasCoords
       ? `CASE
@@ -546,16 +550,29 @@ export class MatchesRepository {
                 c.logo_url AS club_logo_url,
                 c.cover_url AS club_cover_url,
                 ${clubCardPhotoSql('c')} AS club_card_photo_url,
+                cas.court_label AS court_slot_label,
+                cas.start_hour AS court_slot_start_hour,
+                cas.end_hour AS court_slot_end_hour,
                 COALESCE(c.latitude::float8, creator.latitude::float8) AS match_lat,
                 COALESCE(c.longitude::float8, creator.longitude::float8) AS match_lng,
                 (
                   (SELECT COUNT(*)::int FROM match_players mp WHERE mp.match_id = m.id AND mp.status IN ('JOINED','CONFIRMED'))
                   +
                   (SELECT COUNT(*)::int FROM match_guests mg WHERE mg.match_id = m.id)
-                ) AS joined_count
+                ) AS joined_count,
+                (
+                  SELECT mp.status
+                  FROM match_players mp
+                  INNER JOIN players p ON p.id = mp.player_id
+                  WHERE mp.match_id = m.id
+                    AND $9::uuid IS NOT NULL
+                    AND p.user_id = $9::uuid
+                  LIMIT 1
+                ) AS viewer_join_status
          FROM matches m
          LEFT JOIN clubs c ON c.id = m.club_id
          LEFT JOIN players creator ON creator.user_id = m.created_by_user_id
+         LEFT JOIN court_availability_slots cas ON cas.id = m.court_slot_id
          WHERE m.status = 'OPEN'
            AND m.date > NOW()
            AND COALESCE(m.level_min, 0) <= $2
@@ -607,6 +624,7 @@ export class MatchesRepository {
         hasCoords,
         radiusKm,
         limit,
+        viewerUserId,
       ],
     );
     return result.rows;
@@ -615,6 +633,9 @@ export class MatchesRepository {
   async listByUser(userId: string) {
     const result = await this.db.query(
       `SELECT m.*,
+        cas.court_label AS court_slot_label,
+        cas.start_hour AS court_slot_start_hour,
+        cas.end_hour AS court_slot_end_hour,
         (
           (SELECT COUNT(*)::int FROM match_players mp2 WHERE mp2.match_id = m.id AND mp2.status IN ('JOINED','CONFIRMED'))
           +
@@ -623,6 +644,7 @@ export class MatchesRepository {
        FROM matches m
        INNER JOIN players p ON p.user_id = $1
        INNER JOIN match_players mp ON mp.player_id = p.id AND mp.match_id = m.id
+       LEFT JOIN court_availability_slots cas ON cas.id = m.court_slot_id
        WHERE mp.status IN ('JOINED', 'CONFIRMED', 'REQUESTED')
        ORDER BY m.date ASC`,
       [userId],
