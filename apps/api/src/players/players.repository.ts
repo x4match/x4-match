@@ -26,17 +26,15 @@ export class PlayersRepository {
       `UPDATE players
        SET nickname = COALESCE($2, nickname),
            city = COALESCE($3, city),
-           level = COALESCE($4, level),
-           position = COALESCE($5, position),
-           bio = COALESCE($6, bio),
-           photo_url = COALESCE($7, photo_url),
+           position = COALESCE($4, position),
+           bio = COALESCE($5, bio),
+           photo_url = COALESCE($6, photo_url),
            updated_at = NOW()
        WHERE user_id = $1`,
       [
         userId,
         dto.nickname ?? null,
         dto.city ?? null,
-        dto.level ?? null,
         dto.position ?? null,
         dto.bio ?? null,
         dto.photoUrl ?? null,
@@ -121,7 +119,6 @@ export class PlayersRepository {
               p.user_id,
               u.name,
               p.nickname,
-              p.level,
               p.rating,
               p.photo_url,
               p.city,

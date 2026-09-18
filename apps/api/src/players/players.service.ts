@@ -62,7 +62,6 @@ export class PlayersService {
       ...player,
       rating,
       skillScore: ratingToSkillScore(rating),
-      level: player.level != null ? Number(player.level) : null,
       levelCategory: resolveVisibleLevelCategory({
         rating,
         categoryStatus,

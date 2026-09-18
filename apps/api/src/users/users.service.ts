@@ -80,7 +80,7 @@ export class UsersService {
   async getProfile(userId: string) {
     const res = await this.db.query(
       `SELECT u.id, u.name, u.email, u.role,
-              p.id AS player_id, p.photo_url, p.city, p.level, p.rating, p.position, p.bio, p.nickname,
+              p.id AS player_id, p.photo_url, p.city, p.rating, p.position, p.bio, p.nickname,
               p.extras, p.category_status, p.placement_matches_played
        FROM users u
        LEFT JOIN players p ON p.user_id = u.id
@@ -201,7 +201,7 @@ export class UsersService {
       slice = ordered.slice(-limit);
     }
 
-    const levelRes = await this.db.query(`SELECT level, rating FROM players WHERE user_id = $1`, [
+    const levelRes = await this.db.query(`SELECT rating FROM players WHERE user_id = $1`, [
       userId,
     ]);
     const baseRating = resolvePlayerRating(levelRes.rows[0] ?? {});

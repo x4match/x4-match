@@ -30,7 +30,6 @@ type RankRow = {
   rank: number;
   position?: string | null;
   rating?: number | null;
-  level?: number | null;
 };
 
 @Injectable()
@@ -89,7 +88,7 @@ export class ChallengesService {
     const myCat = eligibility.myCategory;
     const result = await this.db.query(
       `SELECT c.id AS club_id, c.name AS club_name, c.city, c.logo_url, c.interclub_wins,
-              cmmp.user_id, u.name, p.nickname, p.photo_url, p.position, p.rating, p.level,
+              cmmp.user_id, u.name, p.nickname, p.photo_url, p.position, p.rating,
               cmmp.points, cmmp.matches_played,
               RANK() OVER (
                 PARTITION BY c.id
@@ -130,7 +129,7 @@ export class ChallengesService {
     for (const row of result.rows) {
       if (row.user_id === userId) continue;
       const theirCat = getLevelCategory(
-        resolvePlayerRating({ rating: row.rating, level: row.level }),
+        resolvePlayerRating({ rating: row.rating }),
       );
       if (myCat && theirCat && !isCategoryWithinSearchSteps(myCat, theirCat)) continue;
 
@@ -641,7 +640,7 @@ export class ChallengesService {
     const result = await this.db.query(
       `SELECT ranked.*
        FROM (
-         SELECT cmmp.user_id, u.name, p.nickname, p.photo_url, p.position, p.rating, p.level,
+         SELECT cmmp.user_id, u.name, p.nickname, p.photo_url, p.position, p.rating,
                 cmmp.points,
                 RANK() OVER (ORDER BY cmmp.points DESC, cmmp.matches_played DESC) AS rank
          FROM club_member_monthly_points cmmp
@@ -673,7 +672,7 @@ export class ChallengesService {
 
   private async getUserCategory(userId: string) {
     const result = await this.db.query(
-      `SELECT rating, level FROM players WHERE user_id = $1`,
+      `SELECT rating FROM players WHERE user_id = $1`,
       [userId],
     );
     if (!result.rows[0]) return null;
@@ -682,7 +681,7 @@ export class ChallengesService {
 
   private async getPlayerProfile(userId: string) {
     const result = await this.db.query(
-      `SELECT user_id, position, rating, level, nickname, photo_url FROM players WHERE user_id = $1`,
+      `SELECT user_id, position, rating, nickname, photo_url FROM players WHERE user_id = $1`,
       [userId],
     );
     return result.rows[0] ?? null;

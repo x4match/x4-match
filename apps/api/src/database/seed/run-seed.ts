@@ -36,7 +36,7 @@ const USERS = [
     role: 'PLAYER',
     nickname: 'JuanP',
     city: 'CABA',
-    level: 3.5,
+    rating: 1080,
   },
   {
     id: 'b0000001-0001-4001-8001-000000000002',
@@ -45,7 +45,7 @@ const USERS = [
     role: 'PLAYER',
     nickname: 'MariaG',
     city: 'CABA',
-    level: 3.0,
+    rating: 1040,
   },
   {
     id: 'b0000001-0001-4001-8001-000000000003',
@@ -54,7 +54,7 @@ const USERS = [
     role: 'CLUB_ADMIN',
     nickname: 'AdminClub',
     city: 'CABA',
-    level: 4.0,
+    rating: 1120,
   },
   {
     id: 'b0000001-0001-4001-8001-000000000004',
@@ -63,7 +63,7 @@ const USERS = [
     role: 'ORGANIZER',
     nickname: 'OrgX4Match',
     city: 'CABA',
-    level: 4.0,
+    rating: 1120,
   },
   {
     id: 'b0000001-0001-4001-8001-000000000005',
@@ -196,18 +196,18 @@ async function main() {
 
       await pool.query(
         `INSERT INTO players (
-           user_id, nickname, city, level, position,
+           user_id, nickname, city, rating, position,
            category_status, placement_matches_played
          )
          VALUES ($1, $2, $3, $4, 'ambos', 'confirmed', 5)
          ON CONFLICT (user_id) DO UPDATE SET
            nickname = EXCLUDED.nickname,
            city = EXCLUDED.city,
-           level = EXCLUDED.level,
+           rating = EXCLUDED.rating,
            category_status = 'confirmed',
            placement_matches_played = GREATEST(players.placement_matches_played, 5),
            updated_at = NOW()`,
-        [userId, user.nickname, user.city, user.level],
+        [userId, user.nickname, user.city, user.rating],
       );
     }
     console.log(`✅ ${USERS.length} usuarios + perfiles player`);

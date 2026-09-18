@@ -155,7 +155,6 @@ export class AvailabilityService {
       SELECT DISTINCT p.id AS player_id,
              p.user_id,
              u.name,
-             p.level,
              p.rating,
              p.photo_url
       FROM players p
@@ -184,7 +183,7 @@ export class AvailabilityService {
       .map((row) => ({
         ...row,
         skill_score: ratingToSkillScore(
-          row.rating != null ? Number(row.rating) : row.level != null ? Number(row.level) : null,
+          row.rating != null ? Number(row.rating) : null,
         ),
       }))
       .filter((row) => {

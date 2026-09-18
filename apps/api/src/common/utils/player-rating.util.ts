@@ -58,12 +58,6 @@ export function normalizeSkillScore(value: number | null | undefined): number {
   return Math.round(clamp(numeric, MIN_VISIBLE_SKILL_SCORE, MAX_VISIBLE_SKILL_SCORE));
 }
 
-/** Convierte nivel de pádel (1–7) a rating numérico para categorías. */
-export function levelToRating(level: number | null | undefined): number {
-  const l = level != null ? Number(level) : 2.5;
-  return Math.round(DEFAULT_PLAYER_RATING + (l - 2.5) * 80);
-}
-
 export function getInitialRatingForCategory(category: PlayerCategory | null | undefined): number {
   if (!category) return DEFAULT_PLAYER_RATING;
   return CATEGORY_TO_INITIAL_RATING[category] ?? DEFAULT_PLAYER_RATING;
@@ -78,10 +72,10 @@ export function ratingToSkillScore(rating: number | null | undefined): number {
   }
 
   for (let i = 1; i < RATING_SKILL_ANCHORS.length; i += 1) {
-    const previous = RATING_SKILL_ANCHORS[i - 1];
     const current = RATING_SKILL_ANCHORS[i];
+    const previous = RATING_SKILL_ANCHORS[i - 1];
     if (normalizedRating <= current.rating) {
-      return normalizeSkillScore(
+      return Math.round(
         interpolate(
           normalizedRating,
           previous.rating,
@@ -98,12 +92,12 @@ export function ratingToSkillScore(rating: number | null | undefined): number {
 
 export function resolvePlayerRating(input: {
   rating?: number | string | null;
-  level?: number | string | null;
 }): number {
   if (input.rating != null && input.rating !== '') {
-    return Math.round(Number(input.rating));
+    const n = Number(input.rating);
+    if (Number.isFinite(n)) return Math.round(n);
   }
-  return levelToRating(input.level != null ? Number(input.level) : null);
+  return DEFAULT_PLAYER_RATING;
 }
 
 export function expectedScore(rating: number, opponentRating: number): number {

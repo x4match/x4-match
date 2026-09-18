@@ -13,7 +13,6 @@ import { countRecentTeamMatchups } from '../rating/matchup-history';
 
 type MatchParticipant = {
   userId: string;
-  level: number | null;
   rating: number | null;
   rnk: number;
   categoryStatus: string;
@@ -71,7 +70,7 @@ export class CompetitiveScoringService {
     if (already.rows[0]) return;
 
     const playersRes = await this.db.query(
-      `SELECT p.user_id, p.level, p.rating, p.category_status,
+      `SELECT p.user_id, p.rating, p.category_status,
               ROW_NUMBER() OVER (ORDER BY mp.created_at) AS rnk
        FROM match_players mp
        INNER JOIN players p ON p.id = mp.player_id
@@ -81,7 +80,6 @@ export class CompetitiveScoringService {
 
     const participants: MatchParticipant[] = playersRes.rows.map((row) => ({
       userId: row.user_id,
-      level: row.level != null ? Number(row.level) : null,
       rating: row.rating != null ? Number(row.rating) : null,
       rnk: Number(row.rnk),
       categoryStatus: (row.category_status as string) ?? 'confirmed',
@@ -108,7 +106,7 @@ export class CompetitiveScoringService {
     for (const player of participants) {
       if (player.categoryStatus === 'provisional') continue;
       const myTeam = userTeamFromRank(player.rnk, neededPlayers);
-      const playerRating = resolvePlayerRating({ rating: player.rating, level: player.level });
+      const playerRating = resolvePlayerRating({ rating: player.rating });
       const myCategory = getLevelCategory(playerRating);
 
       const opponents = participants
@@ -116,7 +114,7 @@ export class CompetitiveScoringService {
         .filter((p) => userTeamFromRank(p.rnk, neededPlayers) !== myTeam);
 
       const opponentCategories = opponents.map((o) =>
-        getLevelCategory(resolvePlayerRating({ rating: o.rating, level: o.level })),
+        getLevelCategory(resolvePlayerRating({ rating: o.rating })),
       );
 
       const outcome = matchOutcomeForPlayer(
@@ -173,7 +171,7 @@ export class CompetitiveScoringService {
     );
     const row = result.rows[0];
     const levelRes = await this.db.query(
-      `SELECT level, rating, category_status, extras FROM players WHERE user_id = $1`,
+      `SELECT rating, category_status, extras FROM players WHERE user_id = $1`,
       [userId],
     );
     const playerRow = levelRes.rows[0] ?? {};
@@ -220,7 +218,7 @@ export class CompetitiveScoringService {
       params.push(categoryRange.max);
       const ratingExpr = `CASE
         WHEN p.rating IS NOT NULL THEN ROUND(p.rating::numeric)
-        ELSE ROUND(1000 + (COALESCE(p.level, 2.5) - 2.5) * 80)
+        ELSE 1000
       END`;
       conditions.push(`${ratingExpr} >= $${minParam}`);
       conditions.push(`${ratingExpr} <= $${maxParam}`);
@@ -235,7 +233,7 @@ export class CompetitiveScoringService {
     const limitParam = `$${params.length}`;
 
     const result = await this.db.query(
-      `SELECT u.id AS user_id, u.name, p.photo_url, p.level, p.rating,
+      `SELECT u.id AS user_id, u.name, p.photo_url, p.rating,
               pcm.points, pcm.matches_played
        FROM player_competitive_monthly_points pcm
        INNER JOIN users u ON u.id = pcm.user_id
@@ -248,14 +246,13 @@ export class CompetitiveScoringService {
     );
 
     const entries = result.rows.map((row, index) => {
-      const rating = resolvePlayerRating({ rating: row.rating, level: row.level });
+      const rating = resolvePlayerRating({ rating: row.rating });
       const levelCategory = getLevelCategory(rating);
       return {
         position: index + 1,
         userId: row.user_id,
         name: row.name,
         photo: row.photo_url,
-        level: row.level != null ? Number(row.level) : null,
         rating,
         levelCategory,
         points: row.points,

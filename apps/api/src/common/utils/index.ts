@@ -17,7 +17,6 @@ export {
   PLACEMENT_INITIAL_RATING,
   PLACEMENT_MATCHES_REQUIRED,
   PLACEMENT_ELO_K_FACTOR,
-  levelToRating,
   normalizeSkillScore,
   ratingToSkillScore,
   resolvePlayerRating,

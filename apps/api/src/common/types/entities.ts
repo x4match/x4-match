@@ -22,7 +22,6 @@ export interface PlayerEntity {
   user_id: string;
   nickname: string | null;
   city: string | null;
-  level: number | null;
   position: 'drive' | 'reves' | 'ambos' | null;
   bio: string | null;
   photo_url: string | null;

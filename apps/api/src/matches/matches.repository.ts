@@ -241,7 +241,6 @@ export class MatchesRepository {
       `SELECT p.id,
               p.user_id,
               u.name,
-              p.level,
               p.rating,
               p.photo_url,
               p.extras,
@@ -437,7 +436,6 @@ export class MatchesRepository {
           id: p.user_id,
           playerId: p.id,
           name: p.name,
-          level: p.level != null ? Number(p.level) : null,
           rating,
           skillScore: ratingToSkillScore(rating),
           levelCategory: resolveVisibleLevelCategory({
@@ -677,14 +675,14 @@ export class MatchesRepository {
   }
 
   async getPlayerSkillScoreByUserId(userId: string) {
-    const result = await this.db.query(`SELECT level, rating FROM players WHERE user_id = $1`, [userId]);
+    const result = await this.db.query(`SELECT rating FROM players WHERE user_id = $1`, [userId]);
     if (!result.rows[0]) return null;
     return ratingToSkillScore(resolvePlayerRating(result.rows[0]));
   }
 
   async getPlayerPlacementBandByUserId(userId: string) {
     const result = await this.db.query(
-      `SELECT level, rating, category_status, extras
+      `SELECT rating, category_status, extras
        FROM players
        WHERE user_id = $1`,
       [userId],
@@ -765,7 +763,6 @@ export class MatchesRepository {
       `SELECT p.id AS player_id,
               p.user_id,
               u.name,
-              p.level,
               p.rating,
               p.photo_url,
               mp.created_at AS requested_at
@@ -781,7 +778,6 @@ export class MatchesRepository {
       userId: row.user_id,
       playerId: row.player_id,
       name: row.name,
-      level: row.level != null ? Number(row.level) : null,
       rating: row.rating != null ? Number(row.rating) : null,
       skillScore: ratingToSkillScore(resolvePlayerRating(row)),
       photo: row.photo_url,
@@ -941,7 +937,6 @@ export class MatchesRepository {
   async getParticipantsForRating(matchId: string) {
     const result = await this.db.query(
       `SELECT p.user_id,
-              p.level,
               p.rating,
               p.category_status,
               COALESCE(mp.slot_order, ROW_NUMBER() OVER (ORDER BY mp.created_at)) AS rnk
@@ -953,7 +948,6 @@ export class MatchesRepository {
     );
     return result.rows.map((row) => ({
       userId: row.user_id as string,
-      level: row.level != null ? Number(row.level) : null,
       rating: row.rating != null ? Number(row.rating) : null,
       categoryStatus: (row.category_status as string) ?? 'confirmed',
       rank: Number(row.rnk),

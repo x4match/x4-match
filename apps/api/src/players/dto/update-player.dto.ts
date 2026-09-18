@@ -1,10 +1,7 @@
 import {
   IsIn,
-  IsNumber,
   IsOptional,
   IsString,
-  Max,
-  Min,
 } from 'class-validator';
 
 export class UpdatePlayerDto {
@@ -15,12 +12,6 @@ export class UpdatePlayerDto {
   @IsOptional()
   @IsString()
   city?: string;
-
-  @IsOptional()
-  @IsNumber()
-  @Min(1)
-  @Max(7)
-  level?: number;
 
   @IsOptional()
   @IsIn(['drive', 'reves', 'ambos'])
