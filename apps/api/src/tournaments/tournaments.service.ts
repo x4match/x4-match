@@ -1092,9 +1092,18 @@ export class TournamentsService {
 
   private async loadTournamentRow(id: string) {
     const result = await this.db.query(
-      `SELECT t.*, c.name AS club_name
+      `SELECT t.*,
+              c.name AS club_name,
+              u.name AS organizer_name,
+              u.email AS organizer_email,
+              p.nickname AS organizer_nickname,
+              p.photo_url AS organizer_photo_url,
+              COALESCE(NULLIF(TRIM(p.nickname), ''), NULLIF(TRIM(u.name), ''), u.email)
+                AS organizer_display_name
        FROM tournaments t
        LEFT JOIN clubs c ON c.id = t.club_id
+       LEFT JOIN users u ON u.id = t.organizer_user_id
+       LEFT JOIN players p ON p.user_id = t.organizer_user_id
        WHERE t.id = $1`,
       [id],
     );
@@ -1347,11 +1356,17 @@ export class TournamentsService {
       `SELECT t.*,
               c.name AS club_name,
               u.name AS organizer_name,
+              u.email AS organizer_email,
+              p.nickname AS organizer_nickname,
+              p.photo_url AS organizer_photo_url,
+              COALESCE(NULLIF(TRIM(p.nickname), ''), NULLIF(TRIM(u.name), ''), u.email)
+                AS organizer_display_name,
               (SELECT COUNT(*)::int FROM tournament_registrations r
                  WHERE r.tournament_id = t.id) AS total_count
        FROM tournaments t
        LEFT JOIN clubs c ON c.id = t.club_id
        LEFT JOIN users u ON u.id = t.organizer_user_id
+       LEFT JOIN players p ON p.user_id = t.organizer_user_id
        WHERE t.club_id = $1
          AND t.modality = 'EXTERNAL'
          AND t.club_validation_status = 'PENDING'
