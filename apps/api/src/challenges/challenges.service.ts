@@ -44,28 +44,33 @@ export class ChallengesService {
   async getEligibility(clubId: string, userId: string) {
     await this.assertClubExists(clubId);
     const monthKey = getMonthKey();
-    const top = await this.getClubRankOne(clubId, monthKey);
-    const isNumberOne = top?.user_id === userId;
+    const myRank = await this.getClubMemberRank(clubId, userId, monthKey);
+    const canChallenge = Boolean(myRank);
     const me = await this.getPlayerProfile(userId);
-    const partners = isNumberOne
+    const myCategory = await this.getUserCategory(userId);
+    const partners = canChallenge
       ? await this.listPartnerCandidates(clubId, userId, me?.position ?? null)
       : [];
 
     return {
       clubId,
       monthKey,
-      isNumberOne,
-      anchor: top
+      /** @deprecated Usar `canChallenge`. Cualquiera del ranking puede desafiar. */
+      isNumberOne: myRank?.rank === 1,
+      canChallenge,
+      myRank: myRank
         ? {
-            userId: top.user_id,
-            name: top.name,
-            nickname: top.nickname,
-            photo: top.photo_url,
-            points: top.points,
-            rank: Number(top.rank),
-            position: top.position ?? null,
+            userId: myRank.user_id,
+            name: myRank.name,
+            nickname: myRank.nickname,
+            photo: myRank.photo_url,
+            points: myRank.points,
+            rank: Number(myRank.rank),
+            position: myRank.position ?? null,
+            levelCategory: myCategory,
           }
         : null,
+      myCategory,
       myPosition: me?.position ?? null,
       preferredPartnerSide: oppositePosition(me?.position ?? null),
       partners,
@@ -74,51 +79,96 @@ export class ChallengesService {
 
   async listChallengeableClubs(clubId: string, userId: string) {
     const eligibility = await this.getEligibility(clubId, userId);
-    if (!eligibility.isNumberOne) {
-      throw new ForbiddenException('Solo el #1 del ranking mensual del club puede desafiar');
+    if (!eligibility.canChallenge) {
+      throw new ForbiddenException(
+        'Tenés que figurar en el ranking mensual del club para desafiar',
+      );
     }
 
     const monthKey = getMonthKey();
-    const myCat = await this.getUserCategory(userId);
-    const clubs = await this.db.query(
-      `SELECT c.id, c.name, c.city, c.logo_url, c.interclub_wins
+    const myCat = eligibility.myCategory;
+    const result = await this.db.query(
+      `SELECT c.id AS club_id, c.name AS club_name, c.city, c.logo_url, c.interclub_wins,
+              cmmp.user_id, u.name, p.nickname, p.photo_url, p.position, p.rating, p.level,
+              cmmp.points, cmmp.matches_played,
+              RANK() OVER (
+                PARTITION BY c.id
+                ORDER BY cmmp.points DESC, cmmp.matches_played DESC
+              ) AS rank
        FROM clubs c
+       INNER JOIN club_member_monthly_points cmmp
+         ON cmmp.club_id = c.id AND cmmp.month_key = $2 AND cmmp.points > 0
+       INNER JOIN users u ON u.id = cmmp.user_id
+       LEFT JOIN players p ON p.user_id = cmmp.user_id
        WHERE c.id <> $1
-       ORDER BY c.name ASC
-       LIMIT 100`,
-      [clubId],
+       ORDER BY c.name ASC, cmmp.points DESC, cmmp.matches_played DESC`,
+      [clubId, monthKey],
     );
 
-    const rows = [];
-    for (const club of clubs.rows) {
-      const rankOne = await this.getClubRankOne(club.id, monthKey);
-      if (!rankOne) continue;
+    const byClub = new Map<
+      string,
+      {
+        clubId: string;
+        name: string;
+        city: string | null;
+        logoUrl: string | null;
+        interclubWins: number;
+        cooldownActive: boolean;
+        opponents: Array<{
+          userId: string;
+          name: string;
+          nickname: string | null;
+          photo: string | null;
+          points: number;
+          rank: number;
+          position: string | null;
+          levelCategory: string | null;
+        }>;
+      }
+    >();
+
+    for (const row of result.rows) {
+      if (row.user_id === userId) continue;
       const theirCat = getLevelCategory(
-        resolvePlayerRating({ rating: rankOne.rating, level: rankOne.level }),
+        resolvePlayerRating({ rating: row.rating, level: row.level }),
       );
       if (myCat && theirCat && !isCategoryWithinSearchSteps(myCat, theirCat)) continue;
 
-      const cooldown = await this.hasCooldown(clubId, club.id);
-      rows.push({
-        clubId: club.id,
-        name: club.name,
-        city: club.city,
-        logoUrl: club.logo_url,
-        interclubWins: Number(club.interclub_wins ?? 0),
-        cooldownActive: cooldown,
-        numberOne: {
-          userId: rankOne.user_id,
-          name: rankOne.name,
-          nickname: rankOne.nickname,
-          photo: rankOne.photo_url,
-          points: rankOne.points,
-          position: rankOne.position ?? null,
-          levelCategory: theirCat,
-        },
+      let club = byClub.get(row.club_id);
+      if (!club) {
+        club = {
+          clubId: row.club_id,
+          name: row.club_name,
+          city: row.city,
+          logoUrl: row.logo_url,
+          interclubWins: Number(row.interclub_wins ?? 0),
+          cooldownActive: await this.hasCooldown(clubId, row.club_id),
+          opponents: [],
+        };
+        byClub.set(row.club_id, club);
+      }
+
+      club.opponents.push({
+        userId: row.user_id,
+        name: row.name,
+        nickname: row.nickname,
+        photo: row.photo_url,
+        points: row.points,
+        rank: Number(row.rank),
+        position: row.position ?? null,
+        levelCategory: theirCat,
       });
     }
 
-    return { monthKey, clubs: rows };
+    const clubs = [...byClub.values()]
+      .filter((c) => c.opponents.length > 0)
+      .map((c) => ({
+        ...c,
+        /** Compat: primer oponente listado (antes siempre era el #1). */
+        numberOne: c.opponents[0] ?? null,
+      }));
+
+    return { monthKey, myCategory: myCat, clubs };
   }
 
   async create(userId: string, dto: CreateChallengeDto) {
@@ -128,25 +178,38 @@ export class ChallengesService {
     if (dto.partnerUserId === userId) {
       throw new BadRequestException('Elegí un compañero distinto a vos');
     }
+    if (dto.challengedUserId === userId) {
+      throw new BadRequestException('No podés desafiarte a vos mismo');
+    }
+    if (dto.challengedUserId === dto.partnerUserId) {
+      throw new BadRequestException('El rival y tu compañero no pueden ser la misma persona');
+    }
 
     const monthKey = getMonthKey();
-    const myRank = await this.getClubRankOne(dto.challengerClubId, monthKey);
-    if (!myRank || myRank.user_id !== userId) {
-      throw new ForbiddenException('Solo el #1 del ranking mensual puede crear el desafío');
+    const myRank = await this.getClubMemberRank(dto.challengerClubId, userId, monthKey);
+    if (!myRank) {
+      throw new ForbiddenException(
+        'Tenés que figurar en el ranking mensual del club para crear un desafío',
+      );
     }
 
-    const theirRank = await this.getClubRankOne(dto.challengedClubId, monthKey);
+    const theirRank = await this.getClubMemberRank(
+      dto.challengedClubId,
+      dto.challengedUserId,
+      monthKey,
+    );
     if (!theirRank) {
-      throw new BadRequestException('El club rival no tiene #1 este mes');
-    }
-    if (theirRank.user_id === userId) {
-      throw new BadRequestException('El #1 rival no puede ser el mismo jugador');
+      throw new BadRequestException(
+        'El rival debe figurar en el ranking mensual de su club',
+      );
     }
 
     const myCat = await this.getUserCategory(userId);
-    const theirCat = await this.getUserCategory(theirRank.user_id);
+    const theirCat = await this.getUserCategory(dto.challengedUserId);
     if (myCat && theirCat && !isCategoryWithinSearchSteps(myCat, theirCat)) {
-      throw new BadRequestException('Los #1 deben estar a lo sumo 1 categoría de diferencia');
+      throw new BadRequestException(
+        'Solo podés desafiar jugadores de tu categoría o ±1',
+      );
     }
 
     if (await this.hasCooldown(dto.challengerClubId, dto.challengedClubId)) {
@@ -178,15 +241,17 @@ export class ChallengesService {
          challenged_anchor_user_id,
          month_key, challenger_rank_snapshot, challenged_rank_snapshot,
          status, proposed_date, expires_at
-       ) VALUES ($1,$2,$3,$4,$5,$6,1,1,'PENDING_OPPONENT',$7,$8)
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'PENDING_OPPONENT',$9,$10)
        RETURNING *`,
       [
         dto.challengerClubId,
         dto.challengedClubId,
         userId,
         dto.partnerUserId,
-        theirRank.user_id,
+        dto.challengedUserId,
         monthKey,
+        Number(myRank.rank),
+        Number(theirRank.rank),
         proposedDate,
         expiresAt,
       ],
@@ -194,17 +259,17 @@ export class ChallengesService {
 
     const challenge = insert.rows[0];
     await this.notify(
-      theirRank.user_id,
+      dto.challengedUserId,
       'CLUB_CHALLENGE',
       '¡Te desafiaron!',
-      'El #1 de otro club te desafió a un 2v2 interclub. Aceptá y elegí compañero.',
+      'Un jugador de otro club te desafió a un 2v2 interclub. Aceptá y elegí compañero.',
       { challengeId: challenge.id },
     );
     await this.notify(
       dto.partnerUserId,
       'CLUB_CHALLENGE',
       'Te eligieron de compañero',
-      'El #1 de tu club te sumó a un desafío interclub 2v2.',
+      'Te sumaron a un desafío interclub 2v2.',
       { challengeId: challenge.id },
     );
 
@@ -224,7 +289,7 @@ export class ChallengesService {
       throw new BadRequestException('Este desafío ya no está pendiente de aceptación');
     }
     if (challenge.challenged_anchor_user_id !== userId) {
-      throw new ForbiddenException('Solo el #1 desafiado puede aceptar');
+      throw new ForbiddenException('Solo el jugador desafiado puede aceptar');
     }
     if (dto.partnerUserId === userId) {
       throw new BadRequestException('Elegí un compañero distinto a vos');
@@ -276,7 +341,7 @@ export class ChallengesService {
   async decline(challengeId: string, userId: string) {
     const challenge = await this.requireChallenge(challengeId);
     if (challenge.challenged_anchor_user_id !== userId) {
-      throw new ForbiddenException('Solo el #1 desafiado puede rechazar');
+      throw new ForbiddenException('Solo el jugador desafiado puede rechazar');
     }
     if (challenge.status !== 'PENDING_OPPONENT') {
       throw new BadRequestException('Este desafío ya no se puede rechazar');
@@ -293,7 +358,7 @@ export class ChallengesService {
       challenge.challenger_anchor_user_id,
       'CLUB_CHALLENGE',
       'Desafío rechazado',
-      'El #1 rival rechazó el desafío interclub.',
+      'El rival rechazó el desafío interclub.',
       { challengeId },
     );
 
@@ -486,7 +551,7 @@ export class ChallengesService {
         challenge.challenged_club_id,
         challenge.challenger_anchor_user_id,
         title,
-        'Desafío interclub 2v2 entre #1 de cada club.',
+        'Desafío interclub 2v2 entre jugadores del ranking de cada club.',
         matchDate,
         endsAt,
       ],
@@ -568,18 +633,25 @@ export class ChallengesService {
     }
   }
 
-  private async getClubRankOne(clubId: string, monthKey: string): Promise<RankRow | null> {
+  private async getClubMemberRank(
+    clubId: string,
+    userId: string,
+    monthKey: string,
+  ): Promise<RankRow | null> {
     const result = await this.db.query(
-      `SELECT cmmp.user_id, u.name, p.nickname, p.photo_url, p.position, p.rating, p.level,
-              cmmp.points,
-              RANK() OVER (ORDER BY cmmp.points DESC, cmmp.matches_played DESC) AS rank
-       FROM club_member_monthly_points cmmp
-       INNER JOIN users u ON u.id = cmmp.user_id
-       LEFT JOIN players p ON p.user_id = cmmp.user_id
-       WHERE cmmp.club_id = $1 AND cmmp.month_key = $2 AND cmmp.points > 0
-       ORDER BY cmmp.points DESC, cmmp.matches_played DESC
+      `SELECT ranked.*
+       FROM (
+         SELECT cmmp.user_id, u.name, p.nickname, p.photo_url, p.position, p.rating, p.level,
+                cmmp.points,
+                RANK() OVER (ORDER BY cmmp.points DESC, cmmp.matches_played DESC) AS rank
+         FROM club_member_monthly_points cmmp
+         INNER JOIN users u ON u.id = cmmp.user_id
+         LEFT JOIN players p ON p.user_id = cmmp.user_id
+         WHERE cmmp.club_id = $1 AND cmmp.month_key = $2 AND cmmp.points > 0
+       ) ranked
+       WHERE ranked.user_id = $3
        LIMIT 1`,
-      [clubId, monthKey],
+      [clubId, monthKey, userId],
     );
     return result.rows[0] ?? null;
   }

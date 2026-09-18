@@ -8,6 +8,10 @@ export class CreateChallengeDto {
   @IsUUID()
   challengedClubId: string;
 
+  /** Jugador rival (ancla) al que se desafía. */
+  @IsUUID()
+  challengedUserId: string;
+
   @IsUUID()
   partnerUserId: string;
 
