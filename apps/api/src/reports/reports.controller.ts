@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Param, UseGuards } from '@nestjs/common';
+import { Controller, Post, Body, Param, UseGuards, Get, Delete } from '@nestjs/common';
 import { ReportsService } from './reports.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -20,6 +20,11 @@ export class ReportsController {
     });
   }
 
+  @Get('blocked')
+  async listBlocked(@CurrentUser() user: { sub: string }) {
+    return this.reportsService.listBlockedUsers(user.sub);
+  }
+
   @Post('block/:userId')
   async blockUser(
     @CurrentUser() user: any,
@@ -27,5 +32,12 @@ export class ReportsController {
   ) {
     return this.reportsService.blockUser(user.sub, blockedId);
   }
-}
 
+  @Delete('block/:userId')
+  async unblockUser(
+    @CurrentUser() user: { sub: string },
+    @Param('userId') blockedId: string,
+  ) {
+    return this.reportsService.unblockUser(user.sub, blockedId);
+  }
+}

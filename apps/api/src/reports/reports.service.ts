@@ -80,6 +80,42 @@ export class ReportsService {
     return { blocked: true };
   }
 
+  async unblockUser(blockerId: string, blockedId: string) {
+    if (blockerId === blockedId) {
+      throw new BadRequestException('No podés desbloquearte a vos mismo');
+    }
+
+    const result = await this.db.query(
+      `DELETE FROM blocked_users
+       WHERE blocker_id = $1 AND blocked_id = $2
+       RETURNING id`,
+      [blockerId, blockedId],
+    );
+
+    if ((result.rowCount ?? 0) === 0) {
+      throw new NotFoundException('Este usuario no está en tu lista de bloqueados');
+    }
+
+    return { blocked: false };
+  }
+
+  async listBlockedUsers(blockerId: string) {
+    const result = await this.db.query(
+      `SELECT bu.blocked_id AS user_id,
+              bu.created_at AS blocked_at,
+              u.name,
+              p.nickname,
+              p.photo_url
+       FROM blocked_users bu
+       INNER JOIN users u ON u.id = bu.blocked_id
+       LEFT JOIN players p ON p.user_id = bu.blocked_id
+       WHERE bu.blocker_id = $1
+       ORDER BY bu.created_at DESC`,
+      [blockerId],
+    );
+    return result.rows;
+  }
+
   /** True si hay bloqueo en cualquier dirección entre ambos usuarios. */
   async areBlockedEitherWay(userA: string, userB: string): Promise<boolean> {
     if (!userA || !userB || userA === userB) return false;
