@@ -36,7 +36,6 @@ type ClubRow = {
   gap_fill_hours_before: number;
   gap_fill_auto_create_match: boolean;
   gap_fill_notify_enabled: boolean;
-  zone?: string | null;
 };
 
 @Injectable()
@@ -57,8 +56,7 @@ export class ClubGapFillService {
       `SELECT id, name, auto_fill_gaps_enabled,
               COALESCE(gap_fill_hours_before, 8)::int AS gap_fill_hours_before,
               COALESCE(gap_fill_auto_create_match, FALSE) AS gap_fill_auto_create_match,
-              COALESCE(gap_fill_notify_enabled, TRUE) AS gap_fill_notify_enabled,
-              zone
+              COALESCE(gap_fill_notify_enabled, TRUE) AS gap_fill_notify_enabled
        FROM clubs
        WHERE auto_fill_gaps_enabled = TRUE`,
     );
@@ -132,8 +130,7 @@ export class ClubGapFillService {
       `SELECT id, name, auto_fill_gaps_enabled,
               COALESCE(gap_fill_hours_before, 8)::int AS gap_fill_hours_before,
               COALESCE(gap_fill_auto_create_match, FALSE) AS gap_fill_auto_create_match,
-              COALESCE(gap_fill_notify_enabled, TRUE) AS gap_fill_notify_enabled,
-              zone
+              COALESCE(gap_fill_notify_enabled, TRUE) AS gap_fill_notify_enabled
        FROM clubs WHERE id = $1`,
       [clubId],
     );
@@ -303,10 +300,10 @@ export class ClubGapFillService {
 
     const inserted = await this.db.query<{ id: string }>(
       `INSERT INTO matches (
-         club_id, created_by_user_id, title, description, date, ends_at, zone,
+         club_id, created_by_user_id, title, description, date, ends_at,
          level_min, level_max, gender, mode, needed_players, court_slot_id,
          court_booking, status
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'open','friendly',4,$10,'in_app','OPEN')
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'open','friendly',4,$9,'in_app','OPEN')
        RETURNING id`,
       [
         club.id,
@@ -315,7 +312,6 @@ export class ClubGapFillService {
         description,
         startsAt,
         endsAt ?? null,
-        club.zone ?? null,
         0,
         1000,
         slot.id,

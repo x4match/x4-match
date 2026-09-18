@@ -159,9 +159,9 @@ export class MatchmakingService {
 
     const matchInsert = await this.db.query(
       `INSERT INTO matches (
-         club_id, created_by_user_id, title, description, date, ends_at, zone,
+         club_id, created_by_user_id, title, description, date, ends_at,
          level_min, level_max, gender, mode, needed_players, status
-       ) VALUES ($1, $2, $3, $4, $5, $6, NULL, $7, $8, $9, $10, 4, 'FULL')
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 4, 'FULL')
        RETURNING *`,
       [
         matchRequest.club_id ?? null,

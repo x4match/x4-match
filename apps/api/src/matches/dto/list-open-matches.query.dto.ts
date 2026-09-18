@@ -25,7 +25,7 @@ export class ListOpenMatchesQueryDto {
 
   @IsOptional()
   @IsString()
-  zone?: string;
+  location?: string;
 
   @IsOptional()
   @IsString()

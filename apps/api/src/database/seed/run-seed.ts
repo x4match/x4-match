@@ -12,7 +12,6 @@ const CLUBS = [
     id: 'a0000001-0001-4001-8001-000000000001',
     name: 'Pádel Center Palermo',
     city: 'CABA',
-    zone: 'Palermo',
     address: 'Av. Libertador 4100',
     phone: '+54 11 4000-0001',
     latitude: -34.5755,
@@ -22,7 +21,6 @@ const CLUBS = [
     id: 'a0000001-0001-4001-8001-000000000002',
     name: 'Club Deportivo Norte',
     city: 'Vicente López',
-    zone: 'Zona Norte',
     address: 'Av. del Libertador 6000',
     phone: '+54 11 4000-0002',
     latitude: -34.526,
@@ -38,7 +36,6 @@ const USERS = [
     role: 'PLAYER',
     nickname: 'JuanP',
     city: 'CABA',
-    zone: 'Palermo',
     level: 3.5,
   },
   {
@@ -48,7 +45,6 @@ const USERS = [
     role: 'PLAYER',
     nickname: 'MariaG',
     city: 'CABA',
-    zone: 'Palermo',
     level: 3.0,
   },
   {
@@ -58,7 +54,6 @@ const USERS = [
     role: 'CLUB_ADMIN',
     nickname: 'AdminClub',
     city: 'CABA',
-    zone: 'Palermo',
     level: 4.0,
   },
   {
@@ -68,7 +63,6 @@ const USERS = [
     role: 'ORGANIZER',
     nickname: 'OrgX4Match',
     city: 'CABA',
-    zone: 'Palermo',
     level: 4.0,
   },
   {
@@ -112,12 +106,11 @@ async function main() {
 
     for (const club of CLUBS) {
       await pool.query(
-        `INSERT INTO clubs (id, name, city, zone, address, phone, latitude, longitude)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        `INSERT INTO clubs (id, name, city, address, phone, latitude, longitude)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
          ON CONFLICT (id) DO UPDATE SET
            name = EXCLUDED.name,
            city = EXCLUDED.city,
-           zone = EXCLUDED.zone,
            address = EXCLUDED.address,
            phone = EXCLUDED.phone,
            latitude = EXCLUDED.latitude,
@@ -127,7 +120,6 @@ async function main() {
           club.id,
           club.name,
           club.city,
-          club.zone,
           club.address,
           club.phone,
           club.latitude,
@@ -204,19 +196,18 @@ async function main() {
 
       await pool.query(
         `INSERT INTO players (
-           user_id, nickname, city, zone, level, position,
+           user_id, nickname, city, level, position,
            category_status, placement_matches_played
          )
-         VALUES ($1, $2, $3, $4, $5, 'ambos', 'confirmed', 5)
+         VALUES ($1, $2, $3, $4, 'ambos', 'confirmed', 5)
          ON CONFLICT (user_id) DO UPDATE SET
            nickname = EXCLUDED.nickname,
            city = EXCLUDED.city,
-           zone = EXCLUDED.zone,
            level = EXCLUDED.level,
            category_status = 'confirmed',
            placement_matches_played = GREATEST(players.placement_matches_played, 5),
            updated_at = NOW()`,
-        [userId, user.nickname, user.city, user.zone, user.level],
+        [userId, user.nickname, user.city, user.level],
       );
     }
     console.log(`✅ ${USERS.length} usuarios + perfiles player`);

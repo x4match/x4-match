@@ -69,7 +69,6 @@ export class AuthRepository {
         u.role,
         p.nickname,
         p.city,
-        p.zone,
         p.level,
         p.rating,
         p.position,

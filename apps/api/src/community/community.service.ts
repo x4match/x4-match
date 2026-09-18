@@ -25,7 +25,7 @@ export class CommunityService {
       `SELECT m.id,
               m.title,
               m.date,
-              m.zone,
+              m.venue_note,
               m.needed_players,
               m.status,
               m.level_min,
@@ -101,7 +101,7 @@ export class CommunityService {
       return this.queryPlayersByDistance(viewerUserId, lat, lng, radiusKm);
     }
 
-    return this.queryPlayersByZoneFallback(viewerUserId);
+    return this.queryPlayersByCityFallback(viewerUserId);
   }
 
   private normalizeRadius(radiusKm?: number): number {
@@ -139,7 +139,6 @@ export class CommunityService {
       `SELECT p.id,
               p.nickname,
               p.city,
-              p.zone,
               p.level,
               p.rating,
               p.position,
@@ -189,15 +188,14 @@ export class CommunityService {
     return result.rows;
   }
 
-  private async queryPlayersByZoneFallback(viewerUserId: string) {
+  private async queryPlayersByCityFallback(viewerUserId: string) {
     const viewerProfile = await this.db.query(
-      `SELECT zone, city FROM players WHERE user_id = $1`,
+      `SELECT city FROM players WHERE user_id = $1`,
       [viewerUserId],
     );
-    const zone = viewerProfile.rows[0]?.zone ?? null;
     const city = viewerProfile.rows[0]?.city ?? null;
 
-    if (!zone && !city) {
+    if (!city) {
       return [];
     }
 
@@ -205,7 +203,6 @@ export class CommunityService {
       `SELECT p.id,
               p.nickname,
               p.city,
-              p.zone,
               p.level,
               p.rating,
               p.position,
@@ -217,13 +214,10 @@ export class CommunityService {
        INNER JOIN users u ON u.id = p.user_id
        WHERE p.user_id != $1
          AND u.role = 'PLAYER'
-         AND (
-           ($2::text IS NOT NULL AND p.zone ILIKE $2)
-           OR ($3::text IS NOT NULL AND p.city ILIKE $3)
-         )
+         AND p.city ILIKE $2
        ORDER BY p.updated_at DESC
        LIMIT 20`,
-      [viewerUserId, zone, city],
+      [viewerUserId, city],
     );
 
     return result.rows;

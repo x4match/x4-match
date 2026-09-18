@@ -15,10 +15,6 @@ export class UpdateClubDto {
 
   @IsOptional()
   @IsString()
-  zone?: string;
-
-  @IsOptional()
-  @IsString()
   address?: string;
 
   @IsOptional()

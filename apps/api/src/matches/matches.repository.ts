@@ -64,10 +64,10 @@ export class MatchesRepository {
   create(createdByUserId: string, dto: CreateMatchDto) {
     return this.db.query(
       `INSERT INTO matches (
-        club_id, created_by_user_id, title, description, date, ends_at, zone,
+        club_id, created_by_user_id, title, description, date, ends_at,
         level_min, level_max, gender, mode, needed_players, court_slot_id,
         court_booking, venue_note, status
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,'OPEN')
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'OPEN')
       RETURNING *`,
       [
         dto.clubId ?? null,
@@ -76,7 +76,6 @@ export class MatchesRepository {
         dto.description ?? null,
         dto.date,
         dto.endsAt ?? null,
-        dto.zone ?? null,
         dto.levelMin ?? null,
         dto.levelMax ?? null,
         dto.gender,
@@ -268,7 +267,7 @@ export class MatchesRepository {
     let club = null;
     if (match.club_id) {
       const clubResult = await this.db.query(
-        `SELECT id, name, city, zone, address, logo_url, cover_url,
+        `SELECT id, name, city, address, logo_url, cover_url,
                 ${clubCardPhotoSql('clubs')} AS card_photo_url
          FROM clubs WHERE id = $1`,
         [match.club_id],
@@ -507,13 +506,13 @@ export class MatchesRepository {
     lat?: number | null;
     lng?: number | null;
     radiusKm?: number | null;
-    zone?: string | null;
+    location?: string | null;
     limit?: number;
     viewerUserId?: string | null;
   }) {
     const hasCoords = params.lat != null && params.lng != null;
     const radiusKm = params.radiusKm ?? 30;
-    const zoneFilter = params.zone?.trim() ? `%${params.zone.trim()}%` : null;
+    const locationFilter = params.location?.trim() ? `%${params.location.trim()}%` : null;
     const limit = params.limit ?? 50;
     const viewerUserId = params.viewerUserId?.trim() || null;
 
@@ -545,7 +544,6 @@ export class MatchesRepository {
          SELECT m.*,
                 c.id AS club_id_joined,
                 c.name AS club_name,
-                c.zone AS club_zone,
                 c.city AS club_city,
                 c.logo_url AS club_logo_url,
                 c.cover_url AS club_cover_url,
@@ -588,10 +586,9 @@ export class MatchesRepository {
              ) < mp.needed_players
          AND (
            $5::text IS NULL
-           OR mp.zone ILIKE $5
            OR mp.venue_note ILIKE $5
-           OR mp.club_zone ILIKE $5
            OR mp.club_city ILIKE $5
+           OR mp.club_name ILIKE $5
          )
          AND (
            $6::boolean = false
@@ -620,7 +617,7 @@ export class MatchesRepository {
         params.categoryMax,
         hasCoords ? params.lat : null,
         hasCoords ? params.lng : null,
-        zoneFilter,
+        locationFilter,
         hasCoords,
         radiusKm,
         limit,

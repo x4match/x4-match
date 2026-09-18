@@ -75,9 +75,9 @@ export class MatchesService {
     }
 
     if (booking === 'external') {
-      const hasVenue = Boolean(dto.venueNote?.trim() || dto.zone?.trim());
+      const hasVenue = Boolean(dto.venueNote?.trim());
       if (!hasVenue) {
-        throw new BadRequestException('Indicá dónde reservaste la cancha (nota o zona)');
+        throw new BadRequestException('Indicá dónde reservaste la cancha (nota de sede)');
       }
     }
   }
@@ -203,7 +203,7 @@ export class MatchesService {
       lat,
       lng,
       radiusKm: lat != null && lng != null ? radiusKm : null,
-      zone: query.zone,
+      location: query.location,
       limit: 50,
       viewerUserId,
     });

@@ -26,18 +26,16 @@ export class PlayersRepository {
       `UPDATE players
        SET nickname = COALESCE($2, nickname),
            city = COALESCE($3, city),
-           zone = COALESCE($4, zone),
-           level = COALESCE($5, level),
-           position = COALESCE($6, position),
-           bio = COALESCE($7, bio),
-           photo_url = COALESCE($8, photo_url),
+           level = COALESCE($4, level),
+           position = COALESCE($5, position),
+           bio = COALESCE($6, bio),
+           photo_url = COALESCE($7, photo_url),
            updated_at = NOW()
        WHERE user_id = $1`,
       [
         userId,
         dto.nickname ?? null,
         dto.city ?? null,
-        dto.zone ?? null,
         dto.level ?? null,
         dto.position ?? null,
         dto.bio ?? null,
@@ -76,7 +74,7 @@ export class PlayersRepository {
   ): Promise<{
     competitiveMonthly: { monthKey: string; points: number; matchesPlayed: number };
     mainClubId?: string;
-    mainClub?: { id: string; name: string; zone?: string; city?: string };
+    mainClub?: { id: string; name: string; city?: string };
   }> {
     const monthKey = getMonthKey();
     const competitive = await this.db.query(
@@ -90,17 +88,16 @@ export class PlayersRepository {
     const mainClubId =
       typeof rawClubId === 'string' && UUID_RE.test(rawClubId) ? rawClubId : undefined;
 
-    let mainClub: { id: string; name: string; zone?: string; city?: string } | undefined;
+    let mainClub: { id: string; name: string; city?: string } | undefined;
     if (mainClubId) {
       const c = await this.db.query(
-        `SELECT id, name, zone, city FROM clubs WHERE id = $1`,
+        `SELECT id, name, city FROM clubs WHERE id = $1`,
         [mainClubId],
       );
       if (c.rows[0]) {
         mainClub = {
           id: c.rows[0].id,
           name: c.rows[0].name,
-          zone: c.rows[0].zone ?? undefined,
           city: c.rows[0].city ?? undefined,
         };
       }
@@ -127,7 +124,6 @@ export class PlayersRepository {
               p.level,
               p.rating,
               p.photo_url,
-              p.zone,
               p.city,
               p.extras,
               p.category_status,

@@ -50,7 +50,7 @@ export class ClubsService {
 
   async findAll() {
     const result = await this.db.query(
-      `SELECT id, name, city, zone, address, phone, logo_url, cover_url, latitude, longitude,
+      `SELECT id, name, city, address, phone, logo_url, cover_url, latitude, longitude,
               subscription_plan, created_at
        FROM clubs
        ORDER BY name ASC`,
@@ -90,7 +90,7 @@ export class ClubsService {
     }
 
     const result = await this.db.query(
-      `SELECT c.id, c.name, c.city, c.zone, c.address, c.phone, c.logo_url, c.cover_url,
+      `SELECT c.id, c.name, c.city, c.address, c.phone, c.logo_url, c.cover_url,
               c.latitude, c.longitude, c.subscription_plan, c.created_at
        FROM clubs c
        INNER JOIN club_admins ca ON ca.club_id = c.id
@@ -119,7 +119,6 @@ export class ClubsService {
       `SELECT c.id,
               c.name,
               c.city,
-              c.zone,
               c.address,
               cas.id AS slot_id,
               cas.court_label,
@@ -143,7 +142,6 @@ export class ClubsService {
         id: string;
         name: string;
         city?: string;
-        zone?: string;
         address?: string;
         openSlots: number;
         slots: {
@@ -164,7 +162,6 @@ export class ClubsService {
           id: row.id,
           name: row.name,
           city: row.city ?? undefined,
-          zone: row.zone ?? undefined,
           address: row.address ?? undefined,
           openSlots: 0,
           slots: [],
@@ -188,7 +185,7 @@ export class ClubsService {
   async findOne(id: string) {
     assertClubId(id);
     const result = await this.db.query(
-      `SELECT id, name, city, zone, address, phone, email, description, logo_url, cover_url, latitude, longitude,
+      `SELECT id, name, city, address, phone, email, description, logo_url, cover_url, latitude, longitude,
               subscription_plan, auto_fill_gaps_enabled, court_price_per_hour, deposit_percent,
               gap_fill_hours_before, gap_fill_auto_create_match, gap_fill_notify_enabled,
               created_at, updated_at
@@ -223,14 +220,13 @@ export class ClubsService {
   async create(userId: string, dto: CreateClubDto) {
     await this.assertClubRole(userId);
     const result = await this.db.query(
-      `INSERT INTO clubs (name, city, zone, address, phone, logo_url, latitude, longitude)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-       RETURNING id, name, city, zone, address, phone, logo_url, latitude, longitude,
+      `INSERT INTO clubs (name, city, address, phone, logo_url, latitude, longitude)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)
+       RETURNING id, name, city, address, phone, logo_url, latitude, longitude,
                  created_at, updated_at`,
       [
         dto.name,
         dto.city ?? null,
-        dto.zone ?? null,
         dto.address ?? null,
         dto.phone ?? null,
         dto.logoUrl ?? null,
@@ -272,27 +268,25 @@ export class ClubsService {
       `UPDATE clubs
        SET name = COALESCE($2, name),
            city = COALESCE($3, city),
-           zone = COALESCE($4, zone),
-           address = COALESCE($5, address),
-           phone = COALESCE($6, phone),
-           logo_url = COALESCE($7, logo_url),
-           subscription_plan = COALESCE($8, subscription_plan),
-           latitude = COALESCE($9, latitude),
-           longitude = COALESCE($10, longitude),
-           court_price_per_hour = COALESCE($11, court_price_per_hour),
-           deposit_percent = COALESCE($12, deposit_percent),
-           email = COALESCE($13, email),
-           description = COALESCE($14, description),
+           address = COALESCE($4, address),
+           phone = COALESCE($5, phone),
+           logo_url = COALESCE($6, logo_url),
+           subscription_plan = COALESCE($7, subscription_plan),
+           latitude = COALESCE($8, latitude),
+           longitude = COALESCE($9, longitude),
+           court_price_per_hour = COALESCE($10, court_price_per_hour),
+           deposit_percent = COALESCE($11, deposit_percent),
+           email = COALESCE($12, email),
+           description = COALESCE($13, description),
            updated_at = NOW()
        WHERE id = $1
-       RETURNING id, name, city, zone, address, phone, email, description, logo_url, latitude, longitude,
+       RETURNING id, name, city, address, phone, email, description, logo_url, latitude, longitude,
                  subscription_plan, auto_fill_gaps_enabled, court_price_per_hour, deposit_percent,
                  created_at, updated_at`,
       [
         clubId,
         dto.name ?? null,
         dto.city ?? null,
-        dto.zone ?? null,
         dto.address ?? null,
         dto.phone ?? null,
         dto.logoUrl ?? null,
@@ -339,7 +333,7 @@ export class ClubsService {
       `UPDATE clubs
        SET logo_url = $2, updated_at = NOW()
        WHERE id = $1
-       RETURNING id, name, city, zone, address, phone, logo_url, latitude, longitude,
+       RETURNING id, name, city, address, phone, logo_url, latitude, longitude,
                  subscription_plan, created_at, updated_at`,
       [clubId, upload.secure_url],
     );
@@ -373,7 +367,7 @@ export class ClubsService {
       `UPDATE clubs
        SET cover_url = $2, updated_at = NOW()
        WHERE id = $1
-       RETURNING id, name, city, zone, address, phone, logo_url, cover_url, latitude, longitude,
+       RETURNING id, name, city, address, phone, logo_url, cover_url, latitude, longitude,
                  subscription_plan, created_at, updated_at`,
       [clubId, upload.secure_url],
     );
@@ -1119,7 +1113,7 @@ export class ClubsService {
   }
 
   private async notifyPlayersAboutSlot(
-    club: { id: string; name: string; city?: string; zone?: string },
+    club: { id: string; name: string; city?: string },
     slot: {
       id: string;
       court_label: string;
@@ -1145,10 +1139,7 @@ export class ClubsService {
        CROSS JOIN clubs c
        WHERE c.id = $1
          AND u.role = 'PLAYER'
-         AND (
-           p.city = c.city
-           OR (c.zone IS NOT NULL AND p.zone = c.zone)
-         )`,
+         AND p.city = c.city`,
       [club.id],
     );
 

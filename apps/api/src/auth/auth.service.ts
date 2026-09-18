@@ -525,6 +525,10 @@ export class AuthService {
               }
             })()
           : {};
+    const prefs =
+      extras.preferences && typeof extras.preferences === 'object' && !Array.isArray(extras.preferences)
+        ? (extras.preferences as Record<string, unknown>)
+        : {};
     const rating = resolvePlayerRating(user ?? {});
     const declaredCategory =
       typeof extras.declaredCategory === 'string' ? extras.declaredCategory : undefined;
@@ -539,8 +543,17 @@ export class AuthService {
       (typeof extras.location === 'string' && extras.location.trim()
         ? extras.location.trim()
         : undefined) ||
-      [user.zone, user.city].filter(Boolean).join(', ') ||
-      undefined;
+      (user.city ? String(user.city) : undefined);
+
+    const preferredHand =
+      typeof prefs.preferredHand === 'string' && prefs.preferredHand.trim()
+        ? prefs.preferredHand
+        : undefined;
+    const courtPositionRaw =
+      (typeof prefs.courtPosition === 'string' && prefs.courtPosition.trim()
+        ? prefs.courtPosition
+        : undefined) ||
+      (typeof user.position === 'string' && user.position.trim() ? user.position : undefined);
 
     return {
       id: user.id,
@@ -571,6 +584,8 @@ export class AuthService {
       placementMatchesRequired: categoryStatus != null ? PLACEMENT_MATCHES_REQUIRED : undefined,
       mainClubId:
         typeof extras.mainClubId === 'string' ? extras.mainClubId : undefined,
+      preferredHand,
+      courtPosition: courtPositionRaw,
     };
   }
 }

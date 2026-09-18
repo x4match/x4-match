@@ -81,7 +81,7 @@ export class ChallengesService {
     const monthKey = getMonthKey();
     const myCat = await this.getUserCategory(userId);
     const clubs = await this.db.query(
-      `SELECT c.id, c.name, c.city, c.zone, c.logo_url, c.interclub_wins
+      `SELECT c.id, c.name, c.city, c.logo_url, c.interclub_wins
        FROM clubs c
        WHERE c.id <> $1
        ORDER BY c.name ASC
@@ -103,7 +103,6 @@ export class ChallengesService {
         clubId: club.id,
         name: club.name,
         city: club.city,
-        zone: club.zone,
         logoUrl: club.logo_url,
         interclubWins: Number(club.interclub_wins ?? 0),
         cooldownActive: cooldown,
@@ -479,9 +478,9 @@ export class ChallengesService {
     const endsAt = new Date(matchDate.getTime() + 90 * 60 * 1000);
     const matchInsert = await this.db.query(
       `INSERT INTO matches (
-         club_id, created_by_user_id, title, description, date, ends_at, zone,
+         club_id, created_by_user_id, title, description, date, ends_at,
          gender, mode, needed_players, court_booking, status
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,'open','competitive',4,'none','CONFIRMED')
+       ) VALUES ($1,$2,$3,$4,$5,$6,'open','competitive',4,'none','CONFIRMED')
        RETURNING id`,
       [
         challenge.challenged_club_id,
@@ -490,7 +489,6 @@ export class ChallengesService {
         'Desafío interclub 2v2 entre #1 de cada club.',
         matchDate,
         endsAt,
-        null,
       ],
     );
     const matchId = matchInsert.rows[0].id as string;

@@ -22,7 +22,6 @@ export interface PlayerEntity {
   user_id: string;
   nickname: string | null;
   city: string | null;
-  zone: string | null;
   level: number | null;
   position: 'drive' | 'reves' | 'ambos' | null;
   bio: string | null;
@@ -38,7 +37,6 @@ export interface MatchEntity {
   title: string;
   description: string | null;
   date: string;
-  zone: string | null;
   level_min: number | null;
   level_max: number | null;
   gender: 'male' | 'female' | 'mixed' | 'open';

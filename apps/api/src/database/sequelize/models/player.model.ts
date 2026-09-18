@@ -27,9 +27,6 @@ export class PlayerModel extends Model {
   @Column(DataType.STRING)
   declare city: string | null;
 
-  @Column(DataType.STRING)
-  declare zone: string | null;
-
   @Column(DataType.DECIMAL(3, 1))
   declare level: number | null;
 

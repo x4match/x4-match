@@ -17,10 +17,6 @@ export class UpdatePlayerDto {
   city?: string;
 
   @IsOptional()
-  @IsString()
-  zone?: string;
-
-  @IsOptional()
   @IsNumber()
   @Min(1)
   @Max(7)

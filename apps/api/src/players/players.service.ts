@@ -32,6 +32,30 @@ export class PlayersService {
     const placementMatchesPlayed = Number(
       player.placement_matches_played ?? player.placementMatchesPlayed ?? 0,
     );
+    const prefs =
+      extras.preferences && typeof extras.preferences === 'object' && !Array.isArray(extras.preferences)
+        ? (extras.preferences as Record<string, unknown>)
+        : {};
+    const preferredHand =
+      typeof prefs.preferredHand === 'string' && prefs.preferredHand.trim()
+        ? prefs.preferredHand.trim()
+        : undefined;
+    const courtPosition =
+      (typeof prefs.courtPosition === 'string' && prefs.courtPosition.trim()
+        ? prefs.courtPosition.trim()
+        : undefined) ||
+      (typeof player.position === 'string' && player.position.trim()
+        ? player.position.trim()
+        : undefined);
+    const birthDate =
+      typeof extras.birthDate === 'string' && extras.birthDate.trim()
+        ? extras.birthDate.trim()
+        : undefined;
+    const location =
+      (typeof extras.location === 'string' && extras.location.trim()
+        ? extras.location.trim()
+        : undefined) ||
+      (player.city ? String(player.city) : undefined);
     return {
       ...player,
       rating,
@@ -48,6 +72,11 @@ export class PlayersService {
       placementMatchesPlayed,
       placementMatchesRequired: PLACEMENT_MATCHES_REQUIRED,
       gender: typeof extras.gender === 'string' ? extras.gender : undefined,
+      birthDate,
+      preferredHand,
+      courtPosition,
+      position: courtPosition ?? player.position,
+      location,
     };
   }
 
@@ -117,7 +146,6 @@ export class PlayersService {
       name: row.name,
       nickname: row.nickname,
       photo: row.photo_url,
-      zone: row.zone,
       city: row.city,
     }));
   }

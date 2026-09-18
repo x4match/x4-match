@@ -31,7 +31,7 @@ const makeMatch = (overrides: Record<string, any> = {}) => ({
     makeParticipant({ id: 'p3', userId: 'u3', status: 'INVITED', team: 'B' }),
     makeParticipant({ id: 'p4', userId: 'u4', status: 'INVITED', team: 'B' }),
   ],
-  club: { id: 'club-1', name: 'Test Club', address: 'Test St', zone: 'Norte' },
+  club: { id: 'club-1', name: 'Test Club', address: 'Test St' },
   result: null,
   ...overrides,
 });

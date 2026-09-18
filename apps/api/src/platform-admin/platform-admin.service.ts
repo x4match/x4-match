@@ -115,7 +115,7 @@ export class PlatformAdminService {
     values.push(limit, offset);
 
     const result = await this.db.query(
-      `SELECT c.id, c.name, c.city, c.zone, c.subscription_plan, c.created_at,
+      `SELECT c.id, c.name, c.city, c.subscription_plan, c.created_at,
               cb.status AS billing_status, cb.trial_mode, cb.trial_ends_at,
               cpc.status AS mp_status
        FROM clubs c

@@ -21,9 +21,6 @@ export class ClubModel extends Model {
   declare city: string | null;
 
   @Column(DataType.STRING)
-  declare zone: string | null;
-
-  @Column(DataType.STRING)
   declare address: string | null;
 
   @CreatedAt

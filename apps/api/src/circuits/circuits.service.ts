@@ -88,7 +88,7 @@ export class CircuitsService {
         [id],
       ),
       this.db.query(
-        `SELECT cv.club_id, cl.name AS club_name, cl.city, cl.zone, cl.address,
+        `SELECT cv.club_id, cl.name AS club_name, cl.city, cl.address,
                 (SELECT COUNT(*)::int FROM circuit_stages cs WHERE cs.circuit_id = cv.circuit_id AND cs.club_id = cv.club_id) AS stage_count
          FROM circuit_venues cv
          INNER JOIN clubs cl ON cl.id = cv.club_id

@@ -24,7 +24,6 @@ type OpenMatchSeed = {
   daysFromNow: number;
   hour: number;
   minute?: number;
-  zone: string;
   category: string;
   mode: 'friendly' | 'competitive';
   gender: 'open' | 'mixed' | 'male' | 'female';
@@ -40,7 +39,6 @@ const OPEN_MATCHES: OpenMatchSeed[] = [
     description: 'Partido amistoso en Palermo. Sumate si sos 6ta.',
     daysFromNow: 0,
     hour: 20,
-    zone: 'Palermo',
     category: '6ta',
     mode: 'friendly',
     gender: 'open',
@@ -55,7 +53,6 @@ const OPEN_MATCHES: OpenMatchSeed[] = [
     daysFromNow: 1,
     hour: 18,
     minute: 30,
-    zone: 'Palermo',
     category: '6ta',
     mode: 'competitive',
     gender: 'mixed',
@@ -69,7 +66,6 @@ const OPEN_MATCHES: OpenMatchSeed[] = [
     description: 'Competitivo en Club Deportivo Norte.',
     daysFromNow: 1,
     hour: 21,
-    zone: 'Zona Norte',
     category: '5ta',
     mode: 'competitive',
     gender: 'open',
@@ -82,7 +78,6 @@ const OPEN_MATCHES: OpenMatchSeed[] = [
     description: 'Ya somos 3, buscamos el cuarto.',
     daysFromNow: 2,
     hour: 19,
-    zone: 'Palermo',
     category: '5ta',
     mode: 'friendly',
     gender: 'open',
@@ -96,7 +91,6 @@ const OPEN_MATCHES: OpenMatchSeed[] = [
     description: 'Partido relajado para arrancar el finde.',
     daysFromNow: 2,
     hour: 10,
-    zone: 'Zona Norte',
     category: '7ma',
     mode: 'friendly',
     gender: 'open',
@@ -110,7 +104,6 @@ const OPEN_MATCHES: OpenMatchSeed[] = [
     description: 'Buscamos jugadores de 4ta para partido exigente.',
     daysFromNow: 3,
     hour: 20,
-    zone: 'Palermo',
     category: '4ta',
     mode: 'competitive',
     gender: 'male',
@@ -123,7 +116,6 @@ const OPEN_MATCHES: OpenMatchSeed[] = [
     description: 'Ideal si estás empezando. Ambiente tranqui.',
     daysFromNow: 0,
     hour: 17,
-    zone: 'Zona Norte',
     category: '8va',
     mode: 'friendly',
     gender: 'open',
@@ -136,7 +128,6 @@ const OPEN_MATCHES: OpenMatchSeed[] = [
     description: 'Partido intenso para jugadores avanzados.',
     daysFromNow: 4,
     hour: 21,
-    zone: 'Palermo',
     category: '3ra',
     mode: 'competitive',
     gender: 'open',
@@ -185,14 +176,13 @@ async function main() {
 
       await pool.query(
         `INSERT INTO matches
-           (id, club_id, created_by_user_id, title, description, date, zone,
+           (id, club_id, created_by_user_id, title, description, date,
             level_min, level_max, gender, mode, needed_players, status)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 4, 'OPEN')
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 4, 'OPEN')
          ON CONFLICT (id) DO UPDATE SET
            title = EXCLUDED.title,
            description = EXCLUDED.description,
            date = EXCLUDED.date,
-           zone = EXCLUDED.zone,
            level_min = EXCLUDED.level_min,
            level_max = EXCLUDED.level_max,
            gender = EXCLUDED.gender,
@@ -206,7 +196,6 @@ async function main() {
           match.title,
           match.description,
           matchDate.toISOString(),
-          match.zone,
           range.min,
           range.max,
           match.gender,

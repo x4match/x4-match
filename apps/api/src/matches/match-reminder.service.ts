@@ -9,7 +9,8 @@ type ReminderMatch = {
   id: string;
   title: string;
   date: Date;
-  zone: string | null;
+  venue_note: string | null;
+  club_city: string | null;
 };
 
 @Injectable()
@@ -41,7 +42,8 @@ export class MatchReminderService {
       if (recipients.length === 0) continue;
 
       const whenLabel = this.formatMatchWhen(match.date);
-      const place = match.zone?.trim() ? ` · ${match.zone.trim()}` : '';
+      const placeRaw = match.venue_note?.trim() || match.club_city?.trim() || '';
+      const place = placeRaw ? ` · ${placeRaw}` : '';
       const isSoon = kind === '2h';
 
       await this.notifications.createMany(
@@ -69,8 +71,9 @@ export class MatchReminderService {
         : `m.date <= NOW() + INTERVAL '2 hours' AND m.date > NOW()`;
 
     const result = await this.db.query<ReminderMatch>(
-      `SELECT m.id, m.title, m.date, m.zone
+      `SELECT m.id, m.title, m.date, m.venue_note, c.city AS club_city
        FROM matches m
+       LEFT JOIN clubs c ON c.id = m.club_id
        WHERE m.status IN ('OPEN', 'FULL', 'CONFIRMED')
          AND ${windowSql}
          AND NOT EXISTS (

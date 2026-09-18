@@ -11,10 +11,6 @@ export class CreateClubDto {
 
   @IsOptional()
   @IsString()
-  zone?: string;
-
-  @IsOptional()
-  @IsString()
   address?: string;
 
   @IsOptional()

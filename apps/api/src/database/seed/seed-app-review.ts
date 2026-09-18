@@ -53,10 +53,10 @@ async function upsertUser(
 
   await pool.query(
     `INSERT INTO players (
-       user_id, nickname, city, zone, rating, extras,
+       user_id, nickname, city, rating, extras,
        category_status, placement_matches_played
      )
-     VALUES ($1, $2, 'CABA', 'Palermo', 0, '{"declaredCategory":"6ta"}'::jsonb, 'provisional', 0)
+     VALUES ($1, $2, 'CABA', 0, '{"declaredCategory":"6ta"}'::jsonb, 'provisional', 0)
      ON CONFLICT (user_id) DO UPDATE SET
        nickname = EXCLUDED.nickname,
        updated_at = NOW()`,
@@ -72,19 +72,17 @@ async function main() {
 
   try {
     await pool.query(
-      `INSERT INTO clubs (id, name, city, zone, address, phone)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO clubs (id, name, city, address, phone)
+       VALUES ($1, $2, $3, $4, $5)
        ON CONFLICT (id) DO UPDATE SET
          name = EXCLUDED.name,
          city = EXCLUDED.city,
-         zone = EXCLUDED.zone,
          address = EXCLUDED.address,
          updated_at = NOW()`,
       [
         CLUB_ID,
         'Club Review x4 match',
         'CABA',
-        'Palermo',
         'Av. Libertador 4100',
         '+54 11 4000-0099',
       ],
@@ -131,9 +129,9 @@ async function main() {
     await pool.query(
       `INSERT INTO matches (
          id, club_id, created_by_user_id, title, description, date,
-         zone, gender, mode, needed_players, status
+         gender, mode, needed_players, status
        )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'open', 'friendly', 4, 'OPEN')
+       VALUES ($1, $2, $3, $4, $5, $6, 'open', 'friendly', 4, 'OPEN')
        ON CONFLICT (id) DO UPDATE SET
          date = EXCLUDED.date,
          status = 'OPEN',
@@ -145,7 +143,6 @@ async function main() {
         'Partido abierto — App Review',
         'Partido de demostración para App Review.',
         matchDate.toISOString(),
-        'Palermo',
       ],
     );
 

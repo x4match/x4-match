@@ -130,12 +130,11 @@ async function cleanupDemoData(pool: Pool) {
 type BillingSeedOptions = {
   clubId: string;
   idPrefix: string;
-  zone: string;
   finishedMatchCount?: number;
 };
 
 async function seedBillingData(pool: Pool, options: BillingSeedOptions) {
-  const { clubId, idPrefix, zone, finishedMatchCount = 6 } = options;
+  const { clubId, idPrefix, finishedMatchCount = 6 } = options;
 
   const products = await pool.query<{ id: string; name: string; price: string }>(
     `SELECT id, name, price FROM club_shop_products WHERE club_id = $1 ORDER BY sort_order, name`,
@@ -156,8 +155,8 @@ async function seedBillingData(pool: Pool, options: BillingSeedOptions) {
 
     await pool.query(
       `INSERT INTO matches
-         (id, club_id, created_by_user_id, title, description, date, zone, level_min, level_max, gender, mode, needed_players, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 2.5, 4.5, 'mixed', 'competitive', 4, 'FINISHED')
+         (id, club_id, created_by_user_id, title, description, date, level_min, level_max, gender, mode, needed_players, status)
+       VALUES ($1, $2, $3, $4, $5, $6, 2.5, 4.5, 'mixed', 'competitive', 4, 'FINISHED')
        ON CONFLICT (id) DO UPDATE SET status = 'FINISHED', date = EXCLUDED.date`,
       [
         matchId,
@@ -166,7 +165,6 @@ async function seedBillingData(pool: Pool, options: BillingSeedOptions) {
         `Partido facturación #${i + 1}`,
         'Seña y tienda demo',
         matchDate.toISOString(),
-        zone,
       ],
     );
 
@@ -190,10 +188,10 @@ async function seedBillingData(pool: Pool, options: BillingSeedOptions) {
     const matchDate = timestampDaysFromNow(match.days, 20, 0);
     await pool.query(
       `INSERT INTO matches
-         (id, club_id, created_by_user_id, title, date, zone, gender, mode, needed_players, status)
-       VALUES ($1, $2, $3, $4, $5, $6, 'open', 'friendly', 4, $7::match_status)
+         (id, club_id, created_by_user_id, title, date, gender, mode, needed_players, status)
+       VALUES ($1, $2, $3, $4, $5, 'open', 'friendly', 4, $6::match_status)
        ON CONFLICT (id) DO UPDATE SET status = EXCLUDED.status, date = EXCLUDED.date`,
-      [match.id, clubId, PLAYERS[0].userId, match.title, matchDate.toISOString(), zone, match.status],
+      [match.id, clubId, PLAYERS[0].userId, match.title, matchDate.toISOString(), match.status],
     );
 
     const playerCount = match.status === 'OPEN' ? 2 : 4;
@@ -309,14 +307,13 @@ async function main() {
 
     await pool.query(
       `INSERT INTO players (
-         user_id, nickname, city, zone, level, position,
+         user_id, nickname, city, level, position,
          category_status, placement_matches_played
        )
-       VALUES ($1, 'FrancoClub', 'CABA', 'Palermo', 4.0, 'ambos', 'confirmed', 5)
+       VALUES ($1, 'FrancoClub', 'CABA', 4.0, 'ambos', 'confirmed', 5)
        ON CONFLICT (user_id) DO UPDATE SET
          nickname = EXCLUDED.nickname,
          city = EXCLUDED.city,
-         zone = EXCLUDED.zone,
          category_status = 'confirmed',
          placement_matches_played = GREATEST(players.placement_matches_played, 5),
          updated_at = NOW()`,
@@ -498,7 +495,6 @@ async function main() {
     await seedBillingData(pool, {
       clubId: PALERMO,
       idPrefix: DEMO_PREFIX,
-      zone: 'Palermo',
       finishedMatchCount,
     });
 
@@ -511,7 +507,6 @@ async function main() {
     await seedBillingData(pool, {
       clubId: NORTE,
       idPrefix: NORTE_DEMO_PREFIX,
-      zone: 'Zona Norte',
       finishedMatchCount: 6,
     });
 

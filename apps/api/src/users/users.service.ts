@@ -80,7 +80,7 @@ export class UsersService {
   async getProfile(userId: string) {
     const res = await this.db.query(
       `SELECT u.id, u.name, u.email, u.role,
-              p.id AS player_id, p.photo_url, p.city, p.zone, p.level, p.rating, p.position, p.bio, p.nickname,
+              p.id AS player_id, p.photo_url, p.city, p.level, p.rating, p.position, p.bio, p.nickname,
               p.extras, p.category_status, p.placement_matches_played
        FROM users u
        LEFT JOIN players p ON p.user_id = u.id
@@ -118,17 +118,17 @@ export class UsersService {
       )
         ? extras.mainClubId
         : undefined;
-    let mainClub: { id: string; name: string; zone?: string } | undefined;
+    let mainClub: { id: string; name: string; city?: string } | undefined;
     if (mainClubId) {
       const c = await this.db.query(
-        `SELECT id, name, zone FROM clubs WHERE id = $1`,
+        `SELECT id, name, city FROM clubs WHERE id = $1`,
         [mainClubId],
       );
       if (c.rows[0]) {
         mainClub = {
           id: c.rows[0].id,
           name: c.rows[0].name,
-          zone: c.rows[0].zone ?? undefined,
+          city: c.rows[0].city ?? undefined,
         };
       }
     }
@@ -137,13 +137,13 @@ export class UsersService {
       (typeof extras.location === 'string' && extras.location.trim()
         ? extras.location.trim()
         : undefined) ||
-      [row.zone, row.city].filter(Boolean).join(', ') ||
-      undefined;
+      (row.city ? String(row.city) : undefined);
 
     return {
       id: row.id,
       name: row.name,
       email: row.email,
+      nickname: row.nickname ?? undefined,
       phone: (extras.phone as string) || '',
       gender: (extras.gender as string) || '',
       birthDate: (extras.birthDate as string) || undefined,
@@ -151,7 +151,6 @@ export class UsersService {
       photo: row.photo_url ?? undefined,
       location,
       city: row.city || undefined,
-      zone: row.zone || undefined,
       dni: (extras.dni as string) || undefined,
       fejubaId: (extras.fejubaId as string) || undefined,
       fejubaCategory: (extras.fejubaCategory as string) || undefined,
@@ -444,7 +443,27 @@ export class UsersService {
     }
     if (dto.phone !== undefined) extras.phone = dto.phone;
     if (dto.gender !== undefined) extras.gender = dto.gender;
-    if (dto.birthDate !== undefined) extras.birthDate = dto.birthDate;
+    if (dto.birthDate !== undefined) {
+      if (dto.birthDate != null && dto.birthDate !== '') {
+        const birth = new Date(dto.birthDate);
+        if (Number.isNaN(birth.getTime())) {
+          throw new BadRequestException('Fecha de nacimiento inválida');
+        }
+        const today = new Date();
+        let age = today.getFullYear() - birth.getFullYear();
+        const monthDiff = today.getMonth() - birth.getMonth();
+        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+          age -= 1;
+        }
+        if (age < 16) {
+          throw new BadRequestException('Debés tener al menos 16 años');
+        }
+        if (age > 120) {
+          throw new BadRequestException('Fecha de nacimiento inválida');
+        }
+      }
+      extras.birthDate = dto.birthDate;
+    }
     if (dto.mainClubId !== undefined) extras.mainClubId = dto.mainClubId;
     if (dto.declaredCategory !== undefined) {
       const hasFederatedCategory = Boolean(extras.fejubaId || extras.fejubaCategory);
@@ -475,7 +494,7 @@ export class UsersService {
       dto.location !== undefined && typeof dto.location === 'string' && dto.location.trim()
         ? dto.location.trim()
         : null;
-    // location canónica en extras; zone/city se derivan para listados y compatibilidad.
+    // location canónica en extras; city se deriva para listados.
     if (locationLabel != null) {
       extras.location = locationLabel;
     } else if (dto.location === null) {
@@ -484,7 +503,6 @@ export class UsersService {
     const locationParts = locationLabel
       ? locationLabel.split(',').map((part) => part.trim()).filter(Boolean)
       : [];
-    const zoneHint = locationParts[0] || null;
     const cityHint =
       locationParts.length > 1 ? locationParts.slice(1).join(', ') : locationParts[0] || null;
     const city =
@@ -494,13 +512,12 @@ export class UsersService {
       `UPDATE players
        SET bio = $2,
            city = $3,
-           zone = CASE WHEN $8::text IS NOT NULL THEN $8 ELSE zone END,
            extras = $4::jsonb,
-           nickname = COALESCE($10::text, nickname),
+           nickname = COALESCE($9::text, nickname),
            latitude = CASE WHEN $5 THEN $6 ELSE latitude END,
            longitude = CASE WHEN $5 THEN $7 ELSE longitude END,
            location_updated_at = CASE WHEN $5 THEN NOW() ELSE location_updated_at END,
-           rating = CASE WHEN $9::int IS NOT NULL THEN $9 ELSE rating END,
+           rating = CASE WHEN $8::int IS NOT NULL THEN $8 ELSE rating END,
            updated_at = NOW()
        WHERE user_id = $1`,
       [
@@ -511,7 +528,6 @@ export class UsersService {
         hasCoords,
         hasCoords ? dto.latitude : null,
         hasCoords ? dto.longitude : null,
-        zoneHint,
         null,
         nickname,
       ],

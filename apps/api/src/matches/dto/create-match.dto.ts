@@ -43,10 +43,6 @@ export class CreateMatchDto {
   date: string;
 
   @IsOptional()
-  @IsString()
-  zone?: string;
-
-  @IsOptional()
   @IsInt()
   @Min(0)
   @Max(1000)
