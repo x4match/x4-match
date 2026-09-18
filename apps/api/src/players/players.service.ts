@@ -77,9 +77,19 @@ export class PlayersService {
     }
 
     const matchStats = await this.usersService.getMatchStats(player.user_id);
+    const extras =
+      player.extras && typeof player.extras === 'object' && !Array.isArray(player.extras)
+        ? player.extras
+        : {};
+    const profileExtras = await this.playersRepository.getPublicProfileExtras(
+      player.user_id,
+      extras,
+    );
+
     return {
       ...player,
       match_stats: matchStats,
+      ...profileExtras,
     };
   }
 

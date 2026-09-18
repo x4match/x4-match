@@ -1,6 +1,10 @@
 import { Injectable } from '@nestjs/common';
+import { getMonthKey } from '../common/utils';
 import { DatabaseService } from '../database/database.service';
 import { UpdatePlayerDto } from './dto/update-player.dto';
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 @Injectable()
 export class PlayersRepository {
@@ -64,6 +68,53 @@ export class PlayersRepository {
       [playerId],
     );
     return result.rows[0] ?? null;
+  }
+
+  async getPublicProfileExtras(
+    userId: string,
+    extras: Record<string, unknown>,
+  ): Promise<{
+    competitiveMonthly: { monthKey: string; points: number; matchesPlayed: number };
+    mainClubId?: string;
+    mainClub?: { id: string; name: string; zone?: string; city?: string };
+  }> {
+    const monthKey = getMonthKey();
+    const competitive = await this.db.query(
+      `SELECT points, matches_played FROM player_competitive_monthly_points
+       WHERE user_id = $1 AND month_key = $2`,
+      [userId, monthKey],
+    );
+    const competitiveRow = competitive.rows[0];
+
+    const rawClubId = extras.mainClubId;
+    const mainClubId =
+      typeof rawClubId === 'string' && UUID_RE.test(rawClubId) ? rawClubId : undefined;
+
+    let mainClub: { id: string; name: string; zone?: string; city?: string } | undefined;
+    if (mainClubId) {
+      const c = await this.db.query(
+        `SELECT id, name, zone, city FROM clubs WHERE id = $1`,
+        [mainClubId],
+      );
+      if (c.rows[0]) {
+        mainClub = {
+          id: c.rows[0].id,
+          name: c.rows[0].name,
+          zone: c.rows[0].zone ?? undefined,
+          city: c.rows[0].city ?? undefined,
+        };
+      }
+    }
+
+    return {
+      competitiveMonthly: {
+        monthKey,
+        points: Number(competitiveRow?.points ?? 0),
+        matchesPlayed: Number(competitiveRow?.matches_played ?? 0),
+      },
+      mainClubId,
+      mainClub,
+    };
   }
 
   searchPlayers(query: string, excludeUserId: string, limit = 20) {
