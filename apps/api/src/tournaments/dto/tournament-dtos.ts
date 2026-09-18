@@ -30,6 +30,11 @@ export class CreateTournamentDto {
   @IsString()
   format?: string;
 
+  /** Calendario: un día (fecha+hora) o largo (varias jornadas). Independiente del formato. */
+  @IsOptional()
+  @IsIn(['SINGLE_DAY', 'MULTI_DAY'])
+  scheduleType?: 'SINGLE_DAY' | 'MULTI_DAY';
+
   @IsOptional()
   @IsString()
   gender?: string;
@@ -104,6 +109,10 @@ export class UpdateTournamentDto {
   @IsOptional()
   @IsString()
   format?: string;
+
+  @IsOptional()
+  @IsIn(['SINGLE_DAY', 'MULTI_DAY'])
+  scheduleType?: 'SINGLE_DAY' | 'MULTI_DAY';
 
   @IsOptional()
   @IsString()

@@ -76,15 +76,20 @@ export class TournamentsService {
       clubValidationStatus = 'NOT_REQUIRED';
     }
 
+    const scheduleType = dto.scheduleType ?? 'SINGLE_DAY';
+    if (scheduleType === 'SINGLE_DAY' && !dto.startDate) {
+      throw new BadRequestException('Un torneo de un día requiere fecha y hora');
+    }
+
     const result = await this.db.query(
       `INSERT INTO tournaments
         (club_id, name, description, category, format, gender, start_date, max_teams,
          courts_available, price, payment_required, rules, prizes, status, organizer_user_id,
-         modality, invite_token, club_validation_status,
+         modality, invite_token, club_validation_status, schedule_type,
          circuit_id, circuit_stage_id, circuit_category_id)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::tournament_status,$15,
                $16::tournament_modality,$17,$18::tournament_club_validation_status,
-               $19,$20,$21)
+               $19::tournament_schedule_type,$20,$21,$22)
        RETURNING *`,
       [
         clubId,
@@ -105,12 +110,28 @@ export class TournamentsService {
         modality,
         inviteToken,
         clubValidationStatus,
+        scheduleType,
         dto.circuitId ?? null,
         dto.circuitStageId ?? null,
         dto.circuitCategoryId ?? null,
       ],
     );
-    return result.rows[0];
+    const tournament = result.rows[0];
+
+    // Si viene fecha, queda como jornada (única en un día; primera en torneo largo).
+    if (dto.startDate) {
+      await this.db.query(
+        `INSERT INTO tournament_dates (tournament_id, play_date, label)
+         VALUES ($1, $2, $3)`,
+        [
+          tournament.id,
+          dto.startDate,
+          scheduleType === 'SINGLE_DAY' ? 'Día del torneo' : 'Jornada 1',
+        ],
+      );
+    }
+
+    return tournament;
   }
 
   async list() {
@@ -223,6 +244,10 @@ export class TournamentsService {
     if (dto.description !== undefined) set('description', dto.description);
     if (dto.category !== undefined) set('category', dto.category);
     if (dto.format !== undefined) set('format', dto.format);
+    if (dto.scheduleType !== undefined) {
+      fields.push(`schedule_type = $${i++}::tournament_schedule_type`);
+      values.push(dto.scheduleType);
+    }
     if (dto.gender !== undefined) set('gender', dto.gender);
     if (dto.clubId !== undefined) set('club_id', dto.clubId);
     if (dto.startDate !== undefined) set('start_date', dto.startDate);
@@ -283,11 +308,37 @@ export class TournamentsService {
 
   async addDate(tournamentId: string, userId: string, dto: CreateTournamentDateDto) {
     await this.assertCanManageTournament(tournamentId, userId);
+    const tournament = await this.loadTournamentRow(tournamentId);
+    const scheduleType = tournament.schedule_type || 'SINGLE_DAY';
+    if (scheduleType === 'SINGLE_DAY') {
+      const existing = await this.db.query(
+        `SELECT COUNT(*)::int AS count FROM tournament_dates WHERE tournament_id = $1`,
+        [tournamentId],
+      );
+      if ((existing.rows[0]?.count ?? 0) >= 1) {
+        throw new BadRequestException(
+          'Este torneo es de un día. Quitá la fecha actual si querés cambiarla.',
+        );
+      }
+    }
+
     const result = await this.db.query(
       `INSERT INTO tournament_dates (tournament_id, play_date, label, notes)
        VALUES ($1, $2, $3, $4) RETURNING *`,
       [tournamentId, dto.playDate, dto.label ?? null, dto.notes ?? null],
     );
+
+    // Mantener start_date alineado con la jornada más temprana.
+    await this.db.query(
+      `UPDATE tournaments t
+       SET start_date = (
+             SELECT MIN(td.play_date) FROM tournament_dates td WHERE td.tournament_id = t.id
+           ),
+           updated_at = NOW()
+       WHERE t.id = $1`,
+      [tournamentId],
+    );
+
     return result.rows[0];
   }
 
