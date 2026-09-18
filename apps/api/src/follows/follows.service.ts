@@ -5,12 +5,14 @@ import {
 } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
 import { FriendsService } from '../friends/friends.service';
+import { ReportsService } from '../reports/reports.service';
 
 @Injectable()
 export class FollowsService {
   constructor(
     private readonly db: DatabaseService,
     private readonly friends: FriendsService,
+    private readonly reportsService: ReportsService,
   ) {}
 
   async getCounts(userIdOrPlayerId: string) {
@@ -74,6 +76,8 @@ export class FollowsService {
     }
     const userExists = await this.db.query(`SELECT id FROM users WHERE id = $1`, [targetId]);
     if (!userExists.rows[0]) throw new NotFoundException('Usuario no encontrado');
+
+    await this.reportsService.assertNotBlockedEitherWay(userId, targetId);
 
     await this.db.query(
       `INSERT INTO user_follows (follower_id, following_id)

@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -58,6 +59,60 @@ export class ReportsService {
       [blockerId, blockedId],
     );
 
+    // Cortar relaciones sociales existentes en ambas direcciones.
+    await this.db.query(
+      `DELETE FROM user_follows
+       WHERE (follower_id = $1 AND following_id = $2)
+          OR (follower_id = $2 AND following_id = $1)`,
+      [blockerId, blockedId],
+    );
+    await this.db.query(
+      `UPDATE friend_requests
+       SET status = 'rejected', updated_at = NOW()
+       WHERE status = 'pending'
+         AND (
+           (requester_id = $1 AND addressee_id = $2)
+           OR (requester_id = $2 AND addressee_id = $1)
+         )`,
+      [blockerId, blockedId],
+    );
+
     return { blocked: true };
+  }
+
+  /** True si hay bloqueo en cualquier dirección entre ambos usuarios. */
+  async areBlockedEitherWay(userA: string, userB: string): Promise<boolean> {
+    if (!userA || !userB || userA === userB) return false;
+    const result = await this.db.query(
+      `SELECT 1 FROM blocked_users
+       WHERE (blocker_id = $1 AND blocked_id = $2)
+          OR (blocker_id = $2 AND blocked_id = $1)
+       LIMIT 1`,
+      [userA, userB],
+    );
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async assertNotBlockedEitherWay(userA: string, userB: string | null | undefined) {
+    if (!userB) return;
+    if (await this.areBlockedEitherWay(userA, userB)) {
+      throw new ForbiddenException('No podés interactuar con este usuario');
+    }
+  }
+
+  async assertNotBlockedWithAny(userId: string, otherUserIds: Array<string | null | undefined>) {
+    const ids = [...new Set(otherUserIds.filter((id): id is string => !!id && id !== userId))];
+    if (!ids.length) return;
+
+    const result = await this.db.query(
+      `SELECT 1 FROM blocked_users
+       WHERE (blocker_id = $1 AND blocked_id = ANY($2::uuid[]))
+          OR (blocked_id = $1 AND blocker_id = ANY($2::uuid[]))
+       LIMIT 1`,
+      [userId, ids],
+    );
+    if ((result.rowCount ?? 0) > 0) {
+      throw new ForbiddenException('No podés interactuar con este usuario');
+    }
   }
 }

@@ -7,6 +7,7 @@ import {
 } from '../common/utils';
 import { ratingToSkillScore } from '../common/utils/player-rating.util';
 import { UsersService } from '../users/users.service';
+import { ReportsService } from '../reports/reports.service';
 import { UpdatePlayerDto } from './dto/update-player.dto';
 import { PlayersRepository } from './players.repository';
 
@@ -15,6 +16,7 @@ export class PlayersService {
   constructor(
     private readonly playersRepository: PlayersRepository,
     private readonly usersService: UsersService,
+    private readonly reportsService: ReportsService,
   ) {}
 
   private normalizePlayer<T extends Record<string, any> | null>(player: T): T {
@@ -96,13 +98,17 @@ export class PlayersService {
     return this.playersRepository.listPlayers().then((players) => players.map((player) => this.normalizePlayer(player)));
   }
 
-  async getById(playerId: string) {
+  async getById(playerId: string, viewerUserId?: string) {
     let player = this.normalizePlayer(await this.playersRepository.getById(playerId));
     if (!player) {
       player = this.normalizePlayer(await this.playersRepository.getByUserId(playerId));
     }
     if (!player) {
       throw new NotFoundException('Jugador no encontrado');
+    }
+
+    if (viewerUserId) {
+      await this.reportsService.assertNotBlockedEitherWay(viewerUserId, player.user_id);
     }
 
     const matchStats = await this.usersService.getMatchStats(player.user_id);
@@ -122,13 +128,16 @@ export class PlayersService {
     };
   }
 
-  async getMatchHistory(playerId: string, limit?: number) {
+  async getMatchHistory(playerId: string, limit?: number, viewerUserId?: string) {
     let player = await this.playersRepository.getById(playerId);
     if (!player) {
       player = await this.playersRepository.getByUserId(playerId);
     }
     if (!player) {
       throw new NotFoundException('Jugador no encontrado');
+    }
+    if (viewerUserId) {
+      await this.reportsService.assertNotBlockedEitherWay(viewerUserId, player.user_id);
     }
     return this.usersService.getMatchHistory(player.user_id, limit);
   }

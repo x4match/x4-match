@@ -11,6 +11,14 @@ type NearbyOptions = {
 const DEFAULT_RADIUS_KM = 30;
 const MAX_RADIUS_KM = 100;
 
+const notBlockedClause = (viewerParam: string, otherUserExpr: string) => `
+  NOT EXISTS (
+    SELECT 1 FROM blocked_users bu
+    WHERE (bu.blocker_id = ${viewerParam} AND bu.blocked_id = ${otherUserExpr})
+       OR (bu.blocker_id = ${otherUserExpr} AND bu.blocked_id = ${viewerParam})
+  )
+`;
+
 @Injectable()
 export class CommunityService {
   constructor(
@@ -167,6 +175,7 @@ export class CommunityService {
          AND p.latitude IS NOT NULL
          AND p.longitude IS NOT NULL
          AND u.role = 'PLAYER'
+         AND ${notBlockedClause('$1', 'p.user_id')}
          AND (
            6371 * acos(
              LEAST(
@@ -215,6 +224,7 @@ export class CommunityService {
        WHERE p.user_id != $1
          AND u.role = 'PLAYER'
          AND p.city ILIKE $2
+         AND ${notBlockedClause('$1', 'p.user_id')}
        ORDER BY p.updated_at DESC
        LIMIT 20`,
       [viewerUserId, city],

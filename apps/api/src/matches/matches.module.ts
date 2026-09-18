@@ -10,6 +10,7 @@ import { ChallengesModule } from '../challenges/challenges.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { RealtimeModule } from '../realtime/realtime.module';
 import { PaymentsModule } from '../payments/payments.module';
+import { ReportsModule } from '../reports/reports.module';
 import { MatchResultExpiryService } from './match-result-expiry.service';
 import { MatchReminderService } from './match-reminder.service';
 
@@ -18,6 +19,7 @@ import { MatchReminderService } from './match-reminder.service';
     ScheduleModule,
     RealtimeModule,
     NotificationsModule,
+    ReportsModule,
     forwardRef(() => ClubsModule),
     CompetitiveScoringModule,
     BadgesModule,

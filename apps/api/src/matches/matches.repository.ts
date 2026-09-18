@@ -610,6 +610,14 @@ export class MatchesRepository {
              ) <= $7
            )
          )
+         AND (
+           $9::uuid IS NULL
+           OR NOT EXISTS (
+             SELECT 1 FROM blocked_users bu
+             WHERE (bu.blocker_id = $9::uuid AND bu.blocked_id = mp.created_by_user_id)
+                OR (bu.blocker_id = mp.created_by_user_id AND bu.blocked_id = $9::uuid)
+           )
+         )
        ORDER BY distance_km ASC NULLS LAST, mp.date ASC
        LIMIT $8`,
       [

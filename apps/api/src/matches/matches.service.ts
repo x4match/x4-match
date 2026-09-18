@@ -34,6 +34,7 @@ import { PAYMENTS_SERVICE } from '../payments/payments.tokens';
 import type { PaymentsService } from '../payments/payments.service';
 import { parseBestOfThreeSets } from '../common/utils/match-result.util';
 import { computeMatchRatingChanges, splitParticipantsByTeam } from '../rating/engine';
+import { ReportsService } from '../reports/reports.service';
 
 const DEFAULT_SEARCH_RADIUS_KM = 30;
 const MAX_SEARCH_RADIUS_KM = 100;
@@ -48,6 +49,7 @@ export class MatchesService {
     private readonly competitiveScoringService: CompetitiveScoringService,
     private readonly badgesService: BadgesService,
     private readonly challengesService: ChallengesService,
+    private readonly reportsService: ReportsService,
     @Inject(PAYMENTS_SERVICE)
     private readonly paymentsService: PaymentsService,
   ) {}
@@ -372,6 +374,7 @@ export class MatchesService {
     if (invitedUserIds.includes(creatorUserId)) {
       throw new BadRequestException('No podés invitarte a vos mismo');
     }
+    await this.reportsService.assertNotBlockedWithAny(creatorUserId, invitedUserIds);
 
     const playerInvites: Array<{ playerId: string; slotOrder: number }> = [];
     const guestInvites: Array<{ name: string; role: 'partner' | 'opponent'; slotOrder: number }> = [];
@@ -498,6 +501,12 @@ export class MatchesService {
       throw new BadRequestException('Este partido ya no acepta jugadores');
     }
 
+    const participantUserIds = await this.matchesRepository.listActiveParticipantUserIds(matchId);
+    await this.reportsService.assertNotBlockedWithAny(userId, [
+      match.created_by_user_id,
+      ...participantUserIds,
+    ]);
+
     await this.assertPlayerGenderFitsMatch(userId, match.gender);
     await this.assertPlayerCategoryFitsMatch(userId, match);
 
@@ -555,6 +564,11 @@ export class MatchesService {
 
     await this.assertPlayerGenderFitsMatch(requestUserId, match.gender);
     await this.assertPlayerCategoryFitsMatch(requestUserId, match);
+
+    await this.reportsService.assertNotBlockedWithAny(requestUserId, [
+      match.created_by_user_id,
+      ...(await this.matchesRepository.listActiveParticipantUserIds(matchId)),
+    ]);
 
     const slotOrder = await this.nextAvailableSlotOrder(matchId);
     if (slotOrder == null) {
@@ -1226,6 +1240,7 @@ export class MatchesService {
         throw new BadRequestException('Uno de los jugadores ya forma parte del partido');
       }
     }
+    await this.reportsService.assertNotBlockedWithAny(inviterUserId, invitedUserIds);
 
     for (const invite of invites) {
       const slotOrder = await this.nextAvailableSlotOrder(matchId);

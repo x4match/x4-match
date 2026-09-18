@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Param, Patch, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { OptionalJwtAuthGuard } from '../common/guards/optional-jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { UpdatePlayerDto } from './dto/update-player.dto';
 import { PlayersService } from './players.service';
@@ -35,16 +36,20 @@ export class PlayersController {
   }
 
   @Get(':id/match-history')
-  getMatchHistory(@Param('id') id: string, @Query('limit') limit?: string) {
+  @UseGuards(OptionalJwtAuthGuard)
+  getMatchHistory(
+    @Param('id') id: string,
+    @Query('limit') limit?: string,
+    @CurrentUser() user?: { sub: string },
+  ) {
     const l = limit ? parseInt(limit, 10) : undefined;
-    if (l !== undefined && (Number.isNaN(l) || l < 0)) {
-      return this.playersService.getMatchHistory(id, undefined);
-    }
-    return this.playersService.getMatchHistory(id, l);
+    const safeLimit = l !== undefined && (Number.isNaN(l) || l < 0) ? undefined : l;
+    return this.playersService.getMatchHistory(id, safeLimit, user?.sub);
   }
 
   @Get(':id')
-  getById(@Param('id') id: string) {
-    return this.playersService.getById(id);
+  @UseGuards(OptionalJwtAuthGuard)
+  getById(@Param('id') id: string, @CurrentUser() user?: { sub: string }) {
+    return this.playersService.getById(id, user?.sub);
   }
 }

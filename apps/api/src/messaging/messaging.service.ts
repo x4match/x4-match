@@ -7,10 +7,11 @@ import {
 import { isClubRole } from '../common/roles';
 import { DatabaseService } from '../database/database.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { ReportsService } from '../reports/reports.service';
 
 type MessageAccessDenied = {
   canMessage: false;
-  reason: 'self' | 'need_request' | 'pending_outgoing' | 'pending_incoming' | 'rejected';
+  reason: 'self' | 'need_request' | 'pending_outgoing' | 'pending_incoming' | 'rejected' | 'blocked';
   canSendRequest?: boolean;
 };
 
@@ -23,6 +24,7 @@ export class MessagingService {
   constructor(
     private readonly db: DatabaseService,
     private readonly notifications: NotificationsService,
+    private readonly reportsService: ReportsService,
   ) {}
 
   private canonicalPair(userId: string, otherUserId: string): [string, string] {
@@ -72,6 +74,10 @@ export class MessagingService {
   async getAccess(userId: string, otherUserId: string): Promise<MessageAccess> {
     if (userId === otherUserId) {
       return { canMessage: false, reason: 'self' };
+    }
+
+    if (await this.reportsService.areBlockedEitherWay(userId, otherUserId)) {
+      return { canMessage: false, reason: 'blocked', canSendRequest: false };
     }
 
     const conv = await this.findConversation(userId, otherUserId);
@@ -151,6 +157,9 @@ export class MessagingService {
     }
     if (reason === 'rejected') {
       throw new BadRequestException('La solicitud de mensaje fue rechazada');
+    }
+    if (reason === 'blocked') {
+      throw new ForbiddenException('No podés enviar mensajes a este usuario');
     }
 
     const [userA, userB] = this.canonicalPair(userId, otherUserId);
@@ -362,6 +371,8 @@ export class MessagingService {
 
     const conv = await this.getConversationForUser(conversationId, userId);
     const otherUserId = conv.user_a_id === userId ? conv.user_b_id : conv.user_a_id;
+
+    await this.reportsService.assertNotBlockedEitherWay(userId, otherUserId);
 
     if (conv.status === 'pending') {
       throw new ForbiddenException('Esperá a que acepten tu solicitud de mensaje');

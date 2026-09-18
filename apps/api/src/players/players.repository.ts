@@ -137,6 +137,11 @@ export class PlayersRepository {
            OR COALESCE(p.nickname, '') ILIKE $2
            OR u.email ILIKE $2
          )
+         AND NOT EXISTS (
+           SELECT 1 FROM blocked_users bu
+           WHERE (bu.blocker_id = $1 AND bu.blocked_id = p.user_id)
+              OR (bu.blocker_id = p.user_id AND bu.blocked_id = $1)
+         )
        ORDER BY u.name ASC
        LIMIT $3`,
       [excludeUserId, pattern, limit],

@@ -5,12 +5,14 @@ import {
 } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { ReportsService } from '../reports/reports.service';
 
 @Injectable()
 export class FriendsService {
   constructor(
     private readonly db: DatabaseService,
     private readonly notifications: NotificationsService,
+    private readonly reportsService: ReportsService,
   ) {}
 
   async resolveUserId(playerOrUserId: string): Promise<string> {
@@ -68,6 +70,7 @@ export class FriendsService {
     if (userId === otherUserId) {
       throw new BadRequestException('No podés agregarte a vos mismo');
     }
+    await this.reportsService.assertNotBlockedEitherWay(userId, otherUserId);
     const existing = await this.db.query(
       `SELECT id, status, requester_id FROM friend_requests
        WHERE (requester_id = $1 AND addressee_id = $2)
