@@ -4,7 +4,7 @@ const CATEGORY_ORDER = ['1ra', '2da', '3ra', '4ta', '5ta', '6ta', '7ma', '8va'] 
 export type PlayerCategoryCode = (typeof CATEGORY_ORDER)[number];
 
 /** Pasos de categoría permitidos al buscar / crear partidos (arriba y abajo). */
-export const CATEGORY_SEARCH_STEPS = 2;
+export const CATEGORY_SEARCH_STEPS = 1;
 
 export function getCategoryLevelRange(category: string): { min: number; max: number } {
   switch (category) {
@@ -49,10 +49,10 @@ export function shiftCategoryStronger(category: string, steps = 1): string {
 }
 
 /**
- * Banda de skill para buscar/crear partidos: categoría propia ± `steps` (default 2).
+ * Banda de skill para buscar/crear partidos: categoría propia ± `steps` (default 1).
  * Clamp en extremos (8va / 1ra).
  *
- * Ejemplo: 5ta → 7ma–3ra → skill 160–759.
+ * Ejemplo: 5ta → 6ta–4ta → skill 280–639.
  */
 export function getCategorySearchRange(
   category: string,
@@ -92,7 +92,7 @@ export function getFemaleMixedLevelRange(category: string): { min: number; max: 
 }
 
 /**
- * Banda default al crear partido: búsqueda ±2, y en mixtos mujer
+ * Banda default al crear partido: búsqueda ±1, y en mixtos mujer
  * se une con la equivalencia damas↔caballeros (sin salir del piso más débil).
  */
 export function resolveMatchLevelBand(input: {

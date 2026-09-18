@@ -16,36 +16,37 @@ describe('shiftCategoryStronger / Weaker', () => {
 });
 
 describe('getCategorySearchRange', () => {
-  it('une ±2 categorías para 5ta → 7ma–3ra', () => {
-    expect(getCategorySearchRange('5ta')).toEqual({ min: 160, max: 759 });
+  it('une ±1 categoría para 5ta → 6ta–4ta', () => {
+    expect(getCategorySearchRange('5ta')).toEqual({ min: 280, max: 639 });
   });
 
   it('clampa en 8va (solo hacia arriba)', () => {
-    expect(getCategorySearchRange('8va')).toEqual({ min: 0, max: 399 });
+    expect(getCategorySearchRange('8va')).toEqual({ min: 0, max: 279 });
   });
 
   it('clampa en 1ra (solo hacia abajo)', () => {
-    expect(getCategorySearchRange('1ra')).toEqual({ min: 640, max: 1000 });
+    expect(getCategorySearchRange('1ra')).toEqual({ min: 760, max: 1000 });
   });
 });
 
 describe('isCategoryWithinSearchSteps', () => {
-  it('permite hasta ±2', () => {
-    expect(isCategoryWithinSearchSteps('5ta', '3ra')).toBe(true);
-    expect(isCategoryWithinSearchSteps('5ta', '7ma')).toBe(true);
-    expect(isCategoryWithinSearchSteps('5ta', '2da')).toBe(false);
-    expect(isCategoryWithinSearchSteps('5ta', '8va')).toBe(false);
+  it('permite hasta ±1', () => {
+    expect(isCategoryWithinSearchSteps('5ta', '4ta')).toBe(true);
+    expect(isCategoryWithinSearchSteps('5ta', '6ta')).toBe(true);
+    expect(isCategoryWithinSearchSteps('5ta', '3ra')).toBe(false);
+    expect(isCategoryWithinSearchSteps('5ta', '7ma')).toBe(false);
   });
 });
 
 describe('resolveMatchLevelBand', () => {
-  it('usa ±2 por defecto', () => {
-    expect(resolveMatchLevelBand({ category: '5ta' })).toEqual({ min: 160, max: 759 });
+  it('usa ±1 por defecto', () => {
+    expect(resolveMatchLevelBand({ category: '5ta' })).toEqual({ min: 280, max: 639 });
   });
 
-  it('en mixtos mujer no estrecha la banda ±2', () => {
+  it('en mixtos mujer une equivalencia damas↔caballeros con la banda ±1', () => {
     const band = resolveMatchLevelBand({ category: '5ta', femaleMixed: true });
+    // search ±1: 280–639; mixed −2: 160–519 → unión 160–639
     expect(band.min).toBe(160);
-    expect(band.max).toBe(759);
+    expect(band.max).toBe(639);
   });
 });

@@ -147,7 +147,7 @@ export class ChallengesService {
     const myCat = await this.getUserCategory(userId);
     const theirCat = await this.getUserCategory(theirRank.user_id);
     if (myCat && theirCat && !isCategoryWithinSearchSteps(myCat, theirCat)) {
-      throw new BadRequestException('Los #1 deben estar a lo sumo 2 categorías de diferencia');
+      throw new BadRequestException('Los #1 deben estar a lo sumo 1 categoría de diferencia');
     }
 
     if (await this.hasCooldown(dto.challengerClubId, dto.challengedClubId)) {
