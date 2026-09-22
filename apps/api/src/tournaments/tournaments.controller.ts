@@ -7,6 +7,7 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   Query,
   Res,
   UploadedFile,
@@ -20,6 +21,7 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { OptionalJwtAuthGuard } from '../common/guards/optional-jwt-auth.guard';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
+import { CircuitsService } from '../circuits/circuits.service';
 import { CreateTournamentPhotoDto } from './dto/create-tournament-photo.dto';
 import {
   CreateRegistrationDto,
@@ -39,6 +41,7 @@ export class TournamentsController {
   constructor(
     private readonly tournamentsService: TournamentsService,
     private readonly realtimeGateway: RealtimeGateway,
+    private readonly circuitsService: CircuitsService,
   ) {}
 
   // --- Rutas estáticas (deben ir antes de ':id') ---
@@ -284,6 +287,30 @@ export class TournamentsController {
     @CurrentUser() user: { sub: string },
   ) {
     return this.tournamentsService.removeRegistration(id, regId, user.sub);
+  }
+
+  @Put(':id/registrations/:regId/availability')
+  @UseGuards(JwtAuthGuard)
+  setRegistrationAvailability(
+    @Param('id') id: string,
+    @Param('regId') regId: string,
+    @CurrentUser() user: { sub: string },
+    @Body()
+    body: {
+      slots: Array<{
+        dayDate: string;
+        startHour: number;
+        endHour: number;
+        preferredClubId?: string;
+      }>;
+    },
+  ) {
+    return this.circuitsService.setRegistrationAvailability(
+      id,
+      regId,
+      user.sub,
+      body.slots || [],
+    );
   }
 
   // --- Pagos de inscripción ---

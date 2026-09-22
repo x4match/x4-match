@@ -79,7 +79,7 @@ export class CircuitsService {
       throw new NotFoundException('Circuito no encontrado');
     }
 
-    const [categories, venues, stages, rankings, pointRules] = await Promise.all([
+    const [categories, venues, stages, rankings, pointRules, events] = await Promise.all([
       this.db.query(
         `SELECT id, circuit_id, label, gender, sort_order, created_at
          FROM circuit_categories
@@ -132,6 +132,15 @@ export class CircuitsService {
          ORDER BY sort_order ASC, points DESC`,
         [id],
       ),
+      this.db.query(
+        `SELECT e.id, e.name, e.start_date, e.end_date, e.schedule_status, e.primary_club_id,
+                (SELECT COUNT(*)::int FROM circuit_stages cs WHERE cs.event_id = e.id) AS stage_count,
+                (SELECT COUNT(*)::int FROM circuit_event_venues cev WHERE cev.event_id = e.id) AS venue_count
+         FROM circuit_events e
+         WHERE e.circuit_id = $1
+         ORDER BY e.start_date DESC`,
+        [id],
+      ),
     ]);
 
     return {
@@ -141,6 +150,7 @@ export class CircuitsService {
       stages: stages.rows,
       rankings: rankings.rows,
       point_rules: pointRules.rows,
+      events: events.rows,
     };
   }
 
@@ -199,22 +209,30 @@ export class CircuitsService {
   }
 
   /**
-   * Crea una “ETAPA” WPE: una fila de stage por categoría (mismo nombre/fecha/sede).
+   * Crea una “ETAPA” WPE: evento multi-sede + una fila de stage por categoría.
    * Opcionalmente publica el torneo de cada categoría.
    */
   async createEvent(circuitId: string, userId: string, dto: CreateCircuitEventDto) {
     await this.assertCanManageCircuit(circuitId, userId);
     await this.ensureCircuit(circuitId);
 
-    const club = await this.db.query(`SELECT id, name FROM clubs WHERE id = $1`, [dto.clubId]);
-    if (!club.rows[0]) throw new NotFoundException('Club no encontrado');
+    const venuesInput =
+      dto.venues?.length
+        ? dto.venues
+        : dto.clubId
+          ? [{ clubId: dto.clubId, courtsCount: 4, isPrimary: true }]
+          : [];
+    if (!venuesInput.length) {
+      throw new BadRequestException('Indicá al menos una sede del evento');
+    }
 
-    await this.db.query(
-      `INSERT INTO circuit_venues (circuit_id, club_id)
-       VALUES ($1, $2)
-       ON CONFLICT (circuit_id, club_id) DO NOTHING`,
-      [circuitId, dto.clubId],
-    );
+    for (const v of venuesInput) {
+      const club = await this.db.query(`SELECT id, name FROM clubs WHERE id = $1`, [v.clubId]);
+      if (!club.rows[0]) throw new NotFoundException(`Club no encontrado: ${v.clubId}`);
+    }
+
+    const primary =
+      venuesInput.find((v) => v.isPrimary)?.clubId ?? venuesInput[0].clubId;
 
     let categories = await this.db.query(
       `SELECT id, label, gender FROM circuit_categories WHERE circuit_id = $1 ORDER BY sort_order, label`,
@@ -231,22 +249,76 @@ export class CircuitsService {
       throw new BadRequestException('Agregá categorías al circuito antes de crear la etapa');
     }
 
+    for (const v of venuesInput) {
+      await this.db.query(
+        `INSERT INTO circuit_venues (circuit_id, club_id)
+         VALUES ($1, $2)
+         ON CONFLICT (circuit_id, club_id) DO NOTHING`,
+        [circuitId, v.clubId],
+      );
+    }
+
+    const eventRes = await this.db.query(
+      `INSERT INTO circuit_events
+         (circuit_id, name, start_date, end_date, primary_club_id, created_by_user_id,
+          match_duration_minutes, day_start_hour, day_end_hour)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       ON CONFLICT (circuit_id, name) DO UPDATE
+         SET start_date = EXCLUDED.start_date,
+             end_date = EXCLUDED.end_date,
+             primary_club_id = EXCLUDED.primary_club_id,
+             match_duration_minutes = EXCLUDED.match_duration_minutes,
+             day_start_hour = EXCLUDED.day_start_hour,
+             day_end_hour = EXCLUDED.day_end_hour,
+             updated_at = NOW()
+       RETURNING *`,
+      [
+        circuitId,
+        dto.name.trim(),
+        dto.startDate,
+        dto.endDate ?? null,
+        primary,
+        userId,
+        dto.matchDurationMinutes ?? 90,
+        dto.dayStartHour ?? 9,
+        dto.dayEndHour ?? 22,
+      ],
+    );
+    const event = eventRes.rows[0];
+
+    await this.db.query(`DELETE FROM circuit_event_venues WHERE event_id = $1`, [event.id]);
+    for (let i = 0; i < venuesInput.length; i++) {
+      const v = venuesInput[i];
+      await this.db.query(
+        `INSERT INTO circuit_event_venues (event_id, club_id, courts_count, is_primary, sort_order)
+         VALUES ($1,$2,$3,$4,$5)`,
+        [
+          event.id,
+          v.clubId,
+          v.courtsCount ?? 2,
+          v.clubId === primary,
+          i,
+        ],
+      );
+    }
+
     const createdStages: any[] = [];
     for (let i = 0; i < categories.rows.length; i++) {
       const cat = categories.rows[i];
       const stage = await this.db.query(
         `INSERT INTO circuit_stages
-           (circuit_id, club_id, category_id, name, start_date, end_date, sort_order, status)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,'SCHEDULED')
+           (circuit_id, club_id, category_id, name, start_date, end_date, sort_order, status, event_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,'SCHEDULED',$8)
          RETURNING *`,
         [
           circuitId,
-          dto.clubId,
+          primary,
           cat.id,
           dto.name.trim(),
           dto.startDate,
           dto.endDate ?? null,
           i,
+          event.id,
         ],
       );
       let row = stage.rows[0];
@@ -260,7 +332,127 @@ export class CircuitsService {
       createdStages.push(row);
     }
 
-    return { eventName: dto.name.trim(), stages: createdStages };
+    return {
+      eventId: event.id,
+      eventName: event.name,
+      scheduleStatus: event.schedule_status,
+      venues: venuesInput,
+      stages: createdStages,
+    };
+  }
+
+  async listEvents(circuitId: string) {
+    await this.ensureCircuit(circuitId);
+    const events = await this.db.query(
+      `SELECT e.*,
+              (SELECT COUNT(*)::int FROM circuit_stages cs WHERE cs.event_id = e.id) AS stage_count,
+              (SELECT COUNT(*)::int FROM circuit_event_venues cev WHERE cev.event_id = e.id) AS venue_count
+       FROM circuit_events e
+       WHERE e.circuit_id = $1
+       ORDER BY e.start_date DESC`,
+      [circuitId],
+    );
+    return events.rows;
+  }
+
+  async getEvent(circuitId: string, eventId: string) {
+    await this.ensureCircuit(circuitId);
+    const event = await this.db.query(
+      `SELECT * FROM circuit_events WHERE id = $1 AND circuit_id = $2`,
+      [eventId, circuitId],
+    );
+    if (!event.rows[0]) throw new NotFoundException('Evento no encontrado');
+
+    const [venues, stages] = await Promise.all([
+      this.db.query(
+        `SELECT cev.club_id, cev.courts_count, cev.is_primary, cev.sort_order,
+                cl.name AS club_name, cl.city, cl.address, cl.logo_url
+         FROM circuit_event_venues cev
+         INNER JOIN clubs cl ON cl.id = cev.club_id
+         WHERE cev.event_id = $1
+         ORDER BY cev.is_primary DESC, cev.sort_order ASC`,
+        [eventId],
+      ),
+      this.db.query(
+        `SELECT cs.*, cc.label AS category_label, cc.gender AS category_gender,
+                t.status AS tournament_status, t.name AS tournament_name,
+                (SELECT COUNT(*)::int FROM tournament_matches tm WHERE tm.tournament_id = cs.tournament_id) AS matches_count,
+                (SELECT COUNT(*)::int FROM tournament_matches tm
+                  WHERE tm.tournament_id = cs.tournament_id AND tm.status = 'FINISHED') AS matches_finished
+         FROM circuit_stages cs
+         LEFT JOIN circuit_categories cc ON cc.id = cs.category_id
+         LEFT JOIN tournaments t ON t.id = cs.tournament_id
+         WHERE cs.event_id = $1
+         ORDER BY cs.sort_order ASC`,
+        [eventId],
+      ),
+    ]);
+
+    return {
+      ...event.rows[0],
+      venues: venues.rows,
+      stages: stages.rows,
+    };
+  }
+
+  async setRegistrationAvailability(
+    tournamentId: string,
+    registrationId: string,
+    userId: string,
+    slots: Array<{
+      dayDate: string;
+      startHour: number;
+      endHour: number;
+      preferredClubId?: string;
+    }>,
+  ) {
+    const reg = await this.db.query(
+      `SELECT id, player1_user_id, player2_user_id, created_by_user_id, tournament_id
+       FROM tournament_registrations WHERE id = $1 AND tournament_id = $2`,
+      [registrationId, tournamentId],
+    );
+    if (!reg.rows[0]) throw new NotFoundException('Inscripción no encontrada');
+    const row = reg.rows[0];
+    const allowed =
+      row.player1_user_id === userId ||
+      row.player2_user_id === userId ||
+      row.created_by_user_id === userId;
+    if (!allowed) {
+      const role = await this.db.query(`SELECT role FROM users WHERE id = $1`, [userId]);
+      if (role.rows[0]?.role !== 'SUPER_ADMIN') {
+        throw new ForbiddenException('No podés editar esta disponibilidad');
+      }
+    }
+
+    await this.db.query(
+      `DELETE FROM tournament_registration_availability WHERE registration_id = $1`,
+      [registrationId],
+    );
+    for (const slot of slots) {
+      if (slot.endHour <= slot.startHour) {
+        throw new BadRequestException('Franja inválida');
+      }
+      await this.db.query(
+        `INSERT INTO tournament_registration_availability
+           (registration_id, day_date, start_hour, end_hour, preferred_club_id)
+         VALUES ($1,$2::date,$3,$4,$5)`,
+        [
+          registrationId,
+          slot.dayDate,
+          slot.startHour,
+          slot.endHour,
+          slot.preferredClubId ?? null,
+        ],
+      );
+    }
+    const saved = await this.db.query(
+      `SELECT id, day_date, start_hour, end_hour, preferred_club_id
+       FROM tournament_registration_availability
+       WHERE registration_id = $1
+       ORDER BY day_date, start_hour`,
+      [registrationId],
+    );
+    return saved.rows;
   }
 
   async getPointRules(circuitId: string) {

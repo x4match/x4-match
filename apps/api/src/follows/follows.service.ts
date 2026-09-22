@@ -4,19 +4,27 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
-import { FriendsService } from '../friends/friends.service';
 import { ReportsService } from '../reports/reports.service';
 
 @Injectable()
 export class FollowsService {
   constructor(
     private readonly db: DatabaseService,
-    private readonly friends: FriendsService,
     private readonly reportsService: ReportsService,
   ) {}
 
+  async resolveUserId(playerOrUserId: string): Promise<string> {
+    const byUser = await this.db.query(`SELECT id FROM users WHERE id = $1`, [playerOrUserId]);
+    if (byUser.rows[0]) return playerOrUserId;
+    const byPlayer = await this.db.query(`SELECT user_id FROM players WHERE id = $1`, [
+      playerOrUserId,
+    ]);
+    if (byPlayer.rows[0]?.user_id) return byPlayer.rows[0].user_id;
+    throw new NotFoundException('Usuario no encontrado');
+  }
+
   async getCounts(userIdOrPlayerId: string) {
-    const userId = await this.friends.resolveUserId(userIdOrPlayerId);
+    const userId = await this.resolveUserId(userIdOrPlayerId);
     const result = await this.db.query(
       `SELECT
          (SELECT COUNT(*)::int FROM user_follows WHERE following_id = $1) AS followers,
@@ -30,7 +38,7 @@ export class FollowsService {
   }
 
   async listFollowers(userIdOrPlayerId: string, limit = 50) {
-    const userId = await this.friends.resolveUserId(userIdOrPlayerId);
+    const userId = await this.resolveUserId(userIdOrPlayerId);
     const result = await this.db.query(
       `SELECT u.id AS user_id, u.name, p.photo_url, p.nickname, f.created_at
        FROM user_follows f
@@ -45,7 +53,7 @@ export class FollowsService {
   }
 
   async listFollowing(userIdOrPlayerId: string, limit = 50) {
-    const userId = await this.friends.resolveUserId(userIdOrPlayerId);
+    const userId = await this.resolveUserId(userIdOrPlayerId);
     const result = await this.db.query(
       `SELECT u.id AS user_id, u.name, p.photo_url, p.nickname, f.created_at
        FROM user_follows f
@@ -60,7 +68,7 @@ export class FollowsService {
   }
 
   async getRelation(viewerId: string, targetIdOrPlayerId: string) {
-    const targetId = await this.friends.resolveUserId(targetIdOrPlayerId);
+    const targetId = await this.resolveUserId(targetIdOrPlayerId);
     if (viewerId === targetId) return { status: 'self' as const, following: false };
     const result = await this.db.query(
       `SELECT 1 FROM user_follows WHERE follower_id = $1 AND following_id = $2`,
@@ -70,7 +78,7 @@ export class FollowsService {
   }
 
   async follow(userId: string, targetIdOrPlayerId: string) {
-    const targetId = await this.friends.resolveUserId(targetIdOrPlayerId);
+    const targetId = await this.resolveUserId(targetIdOrPlayerId);
     if (userId === targetId) {
       throw new BadRequestException('No podés seguirte a vos mismo');
     }
@@ -89,7 +97,7 @@ export class FollowsService {
   }
 
   async unfollow(userId: string, targetIdOrPlayerId: string) {
-    const targetId = await this.friends.resolveUserId(targetIdOrPlayerId);
+    const targetId = await this.resolveUserId(targetIdOrPlayerId);
     await this.db.query(
       `DELETE FROM user_follows WHERE follower_id = $1 AND following_id = $2`,
       [userId, targetId],

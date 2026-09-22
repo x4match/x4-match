@@ -7,7 +7,6 @@ import { DatabaseModule } from './database/database.module';
 import { CircuitsModule } from './circuits/circuits.module';
 import { ClubPaymentConfigModule } from './clubs/club-payment-config.module';
 import { ClubsModule } from './clubs/clubs.module';
-import { FriendsModule } from './friends/friends.module';
 import { FollowsModule } from './follows/follows.module';
 import { MessagingModule } from './messaging/messaging.module';
 import { NotificationsModule } from './notifications/notifications.module';
@@ -54,7 +53,6 @@ import { HealthController } from './health/health.controller';
     ClubPaymentConfigModule,
     ClubsModule,
     CircuitsModule,
-    FriendsModule,
     FollowsModule,
     MessagingModule,
     NotificationsModule,

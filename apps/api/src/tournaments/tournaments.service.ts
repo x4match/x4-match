@@ -53,6 +53,34 @@ export class TournamentsService {
     await this.assertCanCreateEvents(userId);
     const modality = dto.modality;
     const price = dto.price ?? null;
+    const paymentRequired = price != null && Number(price) > 0;
+    const acceptTransfer = paymentRequired && Boolean(dto.acceptTransfer);
+    const acceptMercadopago = paymentRequired && Boolean(dto.acceptMercadopago);
+    const transferCbu = acceptTransfer ? dto.transferCbu?.trim() || null : null;
+    const transferAlias = acceptTransfer ? dto.transferAlias?.trim() || null : null;
+    const transferHolderName = acceptTransfer
+      ? dto.transferHolderName?.trim() || null
+      : null;
+
+    if (paymentRequired && !acceptTransfer && !acceptMercadopago) {
+      throw new BadRequestException(
+        'Indicá al menos un medio de pago: transferencia o Mercado Pago',
+      );
+    }
+    if (acceptTransfer && !transferCbu && !transferAlias) {
+      throw new BadRequestException('Para transferencia cargá CBU/CVU o alias');
+    }
+
+    const venueClubIds = Array.from(
+      new Set(
+        (dto.venueClubIds?.length
+          ? dto.venueClubIds
+          : dto.clubId
+            ? [dto.clubId]
+            : []
+        ).filter(Boolean),
+      ),
+    );
 
     let clubId: string | null = null;
     let status: string;
@@ -60,17 +88,26 @@ export class TournamentsService {
     let inviteToken: string | null = null;
 
     if (modality === 'EXTERNAL') {
-      if (!dto.clubId) {
-        throw new BadRequestException('Un torneo externo requiere un club registrado');
+      if (!venueClubIds.length) {
+        throw new BadRequestException('Un torneo externo requiere al menos una sede (club registrado)');
       }
-      const club = await this.db.query(`SELECT id FROM clubs WHERE id = $1`, [dto.clubId]);
-      if (!club.rows[0]) {
-        throw new BadRequestException('El club indicado no está registrado');
+      for (const id of venueClubIds) {
+        const club = await this.db.query(`SELECT id FROM clubs WHERE id = $1`, [id]);
+        if (!club.rows[0]) {
+          throw new BadRequestException(`El club indicado no está registrado: ${id}`);
+        }
       }
-      clubId = dto.clubId;
+      clubId = venueClubIds[0];
       status = 'DRAFT';
       clubValidationStatus = 'PENDING';
     } else {
+      for (const id of venueClubIds) {
+        const club = await this.db.query(`SELECT id FROM clubs WHERE id = $1`, [id]);
+        if (!club.rows[0]) {
+          throw new BadRequestException(`El club indicado no está registrado: ${id}`);
+        }
+      }
+      clubId = venueClubIds[0] ?? null;
       inviteToken = randomBytes(24).toString('hex');
       status = dto.status ?? 'OPEN_REGISTRATION';
       clubValidationStatus = 'NOT_REQUIRED';
@@ -86,10 +123,11 @@ export class TournamentsService {
         (club_id, name, description, category, format, gender, start_date, max_teams,
          courts_available, price, payment_required, rules, prizes, status, organizer_user_id,
          modality, invite_token, club_validation_status, schedule_type,
-         circuit_id, circuit_stage_id, circuit_category_id)
+         circuit_id, circuit_stage_id, circuit_category_id,
+         accept_transfer, accept_mercadopago, transfer_cbu, transfer_alias, transfer_holder_name)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::tournament_status,$15,
                $16::tournament_modality,$17,$18::tournament_club_validation_status,
-               $19::tournament_schedule_type,$20,$21,$22)
+               $19::tournament_schedule_type,$20,$21,$22,$23,$24,$25,$26,$27)
        RETURNING *`,
       [
         clubId,
@@ -102,7 +140,7 @@ export class TournamentsService {
         dto.maxTeams ?? 16,
         dto.courtsAvailable ?? 2,
         price,
-        price != null && Number(price) > 0,
+        paymentRequired,
         dto.rules ?? null,
         dto.prizes ?? null,
         status,
@@ -114,9 +152,23 @@ export class TournamentsService {
         dto.circuitId ?? null,
         dto.circuitStageId ?? null,
         dto.circuitCategoryId ?? null,
+        acceptTransfer,
+        acceptMercadopago,
+        transferCbu,
+        transferAlias,
+        transferHolderName,
       ],
     );
     const tournament = result.rows[0];
+
+    for (let i = 0; i < venueClubIds.length; i++) {
+      await this.db.query(
+        `INSERT INTO tournament_venues (tournament_id, club_id, is_primary, sort_order)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (tournament_id, club_id) DO NOTHING`,
+        [tournament.id, venueClubIds[i], i === 0, i],
+      );
+    }
 
     // Si viene fecha, queda como jornada (única en un día; primera en torneo largo).
     if (dto.startDate) {
@@ -131,7 +183,7 @@ export class TournamentsService {
       );
     }
 
-    return tournament;
+    return this.buildTournamentDetail(tournament);
   }
 
   async list() {
@@ -142,6 +194,9 @@ export class TournamentsService {
                  WHERE r.tournament_id = t.id AND r.status = 'APPROVED') AS approved_count,
               (SELECT COUNT(*)::int FROM tournament_registrations r
                  WHERE r.tournament_id = t.id AND r.status = 'PENDING') AS pending_count,
+              (
+                SELECT COUNT(*)::int FROM tournament_venues tv WHERE tv.tournament_id = t.id
+              ) AS venue_count,
               (
                 SELECT tp.photo_url
                 FROM tournament_photos tp
@@ -196,7 +251,19 @@ export class TournamentsService {
               (SELECT COUNT(*)::int FROM tournament_matches m
                  WHERE m.tournament_id = t.id) AS matches_count,
               (SELECT COUNT(*)::int FROM tournament_matches m
-                 WHERE m.tournament_id = t.id AND m.status = 'FINISHED') AS matches_finished_count
+                 WHERE m.tournament_id = t.id AND m.status = 'FINISHED') AS matches_finished_count,
+              (
+                SELECT COUNT(*)::int FROM tournament_venues tv WHERE tv.tournament_id = t.id
+              ) AS venue_count,
+              (
+                SELECT tp.photo_url
+                FROM tournament_photos tp
+                WHERE tp.tournament_id = t.id
+                ORDER BY
+                  CASE WHEN lower(COALESCE(tp.caption, '')) = 'flyer' THEN 0 ELSE 1 END,
+                  tp.created_at DESC
+                LIMIT 1
+              ) AS flyer_url
        FROM tournaments t
        LEFT JOIN clubs c ON c.id = t.club_id
        WHERE t.organizer_user_id = $1
@@ -256,11 +323,48 @@ export class TournamentsService {
     if (dto.price !== undefined) {
       set('price', dto.price);
       set('payment_required', dto.price != null && Number(dto.price) > 0);
+      if (dto.price == null || Number(dto.price) <= 0) {
+        set('accept_transfer', false);
+        set('accept_mercadopago', false);
+        set('transfer_cbu', null);
+        set('transfer_alias', null);
+        set('transfer_holder_name', null);
+      }
+    }
+    if (dto.acceptTransfer !== undefined) set('accept_transfer', Boolean(dto.acceptTransfer));
+    if (dto.acceptMercadopago !== undefined) {
+      set('accept_mercadopago', Boolean(dto.acceptMercadopago));
+    }
+    if (dto.transferCbu !== undefined) set('transfer_cbu', dto.transferCbu?.trim() || null);
+    if (dto.transferAlias !== undefined) set('transfer_alias', dto.transferAlias?.trim() || null);
+    if (dto.transferHolderName !== undefined) {
+      set('transfer_holder_name', dto.transferHolderName?.trim() || null);
     }
     if (dto.rules !== undefined) set('rules', dto.rules);
     if (dto.prizes !== undefined) set('prizes', dto.prizes);
 
-    if (fields.length === 0 && dto.status === undefined) {
+    if (dto.venueClubIds !== undefined) {
+      const venueClubIds = Array.from(new Set(dto.venueClubIds.filter(Boolean)));
+      for (const clubId of venueClubIds) {
+        const club = await this.db.query(`SELECT id FROM clubs WHERE id = $1`, [clubId]);
+        if (!club.rows[0]) {
+          throw new BadRequestException(`El club indicado no está registrado: ${clubId}`);
+        }
+      }
+      if (venueClubIds.length && dto.clubId === undefined) {
+        set('club_id', venueClubIds[0]);
+      }
+      await this.db.query(`DELETE FROM tournament_venues WHERE tournament_id = $1`, [id]);
+      for (let vi = 0; vi < venueClubIds.length; vi++) {
+        await this.db.query(
+          `INSERT INTO tournament_venues (tournament_id, club_id, is_primary, sort_order)
+           VALUES ($1, $2, $3, $4)`,
+          [id, venueClubIds[vi], vi === 0, vi],
+        );
+      }
+    }
+
+    if (fields.length === 0 && dto.status === undefined && dto.venueClubIds === undefined) {
       return this.getByIdUnchecked(id);
     }
 
@@ -269,13 +373,15 @@ export class TournamentsService {
       values.push(dto.status);
     }
 
-    fields.push(`updated_at = NOW()`);
-    values.push(id);
+    if (fields.length) {
+      fields.push(`updated_at = NOW()`);
+      values.push(id);
 
-    await this.db.query(
-      `UPDATE tournaments SET ${fields.join(', ')} WHERE id = $${i}`,
-      values,
-    );
+      await this.db.query(
+        `UPDATE tournaments SET ${fields.join(', ')} WHERE id = $${i}`,
+        values,
+      );
+    }
     const updated = await this.getByIdUnchecked(id);
     if (dto.status === 'FINISHED') {
       try {
@@ -600,6 +706,43 @@ export class TournamentsService {
 
     const amount = Number(reg.payment_amount);
     const currency = reg.payment_currency || 'ARS';
+    const tournament = await this.getByIdUnchecked(tournamentId);
+    // Compat: torneos viejos con precio pero sin medios → Mercado Pago por defecto.
+    const hasConfiguredMethods =
+      tournament.accept_transfer === true || tournament.accept_mercadopago === true;
+    const acceptTransfer = Boolean(tournament.accept_transfer);
+    const acceptMercadopago = hasConfiguredMethods
+      ? Boolean(tournament.accept_mercadopago)
+      : true;
+    const transfer =
+      acceptTransfer
+        ? {
+            cbu: tournament.transfer_cbu || null,
+            alias: tournament.transfer_alias || null,
+            holderName: tournament.transfer_holder_name || null,
+          }
+        : null;
+
+    // Solo transferencia: el organizador acredita a mano.
+    if (acceptTransfer && !acceptMercadopago) {
+      await this.db.query(
+        `UPDATE tournament_registrations
+         SET payment_status = 'PENDING', payment_provider = 'MANUAL'
+         WHERE id = $1`,
+        [reg.id],
+      );
+      return {
+        required: true,
+        paid: false,
+        amount,
+        currency,
+        provider: 'MANUAL',
+        methods: { transfer: true, mercadopago: false },
+        transfer,
+        message: 'Transferí el monto y el organizador acreditará el pago.',
+      };
+    }
+
     const externalReference = `treg:${reg.id}`;
 
     if (this.isMockMode()) {
@@ -619,10 +762,18 @@ export class TournamentsService {
         provider: 'MOCK',
         checkoutUrl: mockUrl,
         mock: true,
+        methods: { transfer: acceptTransfer, mercadopago: true },
+        transfer,
       };
     }
 
-    const tournament = await this.getByIdUnchecked(tournamentId);
+    // Si MP no está habilitado y tampoco transferencia, fallar claro.
+    if (!acceptMercadopago && !acceptTransfer) {
+      throw new BadRequestException(
+        'Este torneo no tiene medios de pago configurados. Pedile al organizador que los cargue.',
+      );
+    }
+
     const checkout = await this.createMercadoPagoPreference(
       externalReference,
       `Inscripción ${tournament.name}`,
@@ -644,6 +795,8 @@ export class TournamentsService {
       provider: 'MERCADOPAGO',
       checkoutUrl: checkout.initPoint,
       preferenceId: checkout.preferenceId,
+      methods: { transfer: acceptTransfer, mercadopago: true },
+      transfer,
     };
   }
 
@@ -1167,7 +1320,7 @@ export class TournamentsService {
 
   private async buildTournamentDetail(tournament: any) {
     const id = tournament.id as string;
-    const [photos, dates, regCounts] = await Promise.all([
+    const [photos, dates, regCounts, venues] = await Promise.all([
       this.db.query(
         `SELECT tp.id, tp.photo_url, tp.caption, tp.created_at, u.id AS uploaded_by_user_id, u.name AS uploaded_by_name
          FROM tournament_photos tp
@@ -1190,6 +1343,14 @@ export class TournamentsService {
          FROM tournament_registrations WHERE tournament_id = $1`,
         [id],
       ),
+      this.db.query(
+        `SELECT tv.club_id, c.name AS club_name, tv.is_primary, tv.sort_order
+         FROM tournament_venues tv
+         INNER JOIN clubs c ON c.id = tv.club_id
+         WHERE tv.tournament_id = $1
+         ORDER BY tv.is_primary DESC, tv.sort_order ASC, c.name ASC`,
+        [id],
+      ),
     ]);
 
     const approvedCount = regCounts.rows[0]?.approved_count ?? 0;
@@ -1197,10 +1358,24 @@ export class TournamentsService {
     const waitlistCount = regCounts.rows[0]?.waitlist_count ?? 0;
     const occupied = approvedCount + pendingCount;
 
+    let venueRows = venues.rows;
+    if (!venueRows.length && tournament.club_id) {
+      venueRows = [
+        {
+          club_id: tournament.club_id,
+          club_name: tournament.club_name,
+          is_primary: true,
+          sort_order: 0,
+        },
+      ];
+    }
+
     return {
       ...tournament,
       photos: photos.rows,
       dates: dates.rows,
+      venues: venueRows,
+      venue_count: venueRows.length,
       approved_count: approvedCount,
       pending_count: pendingCount,
       waitlist_count: waitlistCount,

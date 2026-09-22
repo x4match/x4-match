@@ -26,6 +26,10 @@ export class RealtimeGateway {
     this.server.emit('tournament:updated', payload);
   }
 
+  emitCircuitEventUpdated(payload: unknown) {
+    this.server.emit('circuit_event:updated', payload);
+  }
+
   emitMatchScoreUpdated(payload: unknown) {
     this.server.emit('match:score_updated', payload);
   }

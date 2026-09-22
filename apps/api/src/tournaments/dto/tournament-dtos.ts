@@ -43,6 +43,12 @@ export class CreateTournamentDto {
   @IsString()
   clubId?: string;
 
+  /** Sedes del torneo (multi-sede). El primero es la sede principal / validación. */
+  @IsOptional()
+  @IsArray()
+  @IsUUID('4', { each: true })
+  venueClubIds?: string[];
+
   @IsOptional()
   @IsString()
   startDate?: string;
@@ -60,6 +66,26 @@ export class CreateTournamentDto {
   @IsOptional()
   @IsNumber()
   price?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  acceptTransfer?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  acceptMercadopago?: boolean;
+
+  @IsOptional()
+  @IsString()
+  transferCbu?: string;
+
+  @IsOptional()
+  @IsString()
+  transferAlias?: string;
+
+  @IsOptional()
+  @IsString()
+  transferHolderName?: string;
 
   @IsOptional()
   @IsString()
@@ -123,6 +149,11 @@ export class UpdateTournamentDto {
   clubId?: string;
 
   @IsOptional()
+  @IsArray()
+  @IsUUID('4', { each: true })
+  venueClubIds?: string[];
+
+  @IsOptional()
   @IsString()
   startDate?: string;
 
@@ -139,6 +170,26 @@ export class UpdateTournamentDto {
   @IsOptional()
   @IsNumber()
   price?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  acceptTransfer?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  acceptMercadopago?: boolean;
+
+  @IsOptional()
+  @IsString()
+  transferCbu?: string;
+
+  @IsOptional()
+  @IsString()
+  transferAlias?: string;
+
+  @IsOptional()
+  @IsString()
+  transferHolderName?: string;
 
   @IsOptional()
   @IsString()

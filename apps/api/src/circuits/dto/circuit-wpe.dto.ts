@@ -2,11 +2,13 @@ import { Type } from 'class-transformer';
 import {
   ArrayMinSize,
   IsArray,
+  IsBoolean,
   IsInt,
   IsNumber,
   IsOptional,
   IsString,
   IsUUID,
+  Max,
   Min,
   ValidateNested,
 } from 'class-validator';
@@ -48,12 +50,35 @@ export class PublishCircuitStageDto {
   format?: string;
 }
 
+export class CircuitEventVenueDto {
+  @IsUUID()
+  clubId!: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(40)
+  courtsCount?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  isPrimary?: boolean;
+}
+
 export class CreateCircuitEventDto {
   @IsString()
   name!: string;
 
+  /** @deprecated Prefer venues[]. Kept for backwards compatibility. */
+  @IsOptional()
   @IsUUID()
-  clubId!: string;
+  clubId?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CircuitEventVenueDto)
+  venues?: CircuitEventVenueDto[];
 
   @IsString()
   startDate!: string;
@@ -84,4 +109,101 @@ export class CreateCircuitEventDto {
   /** Si true, crea torneo abierto por cada categoría al instante. */
   @IsOptional()
   publishTournaments?: boolean;
+
+  @IsOptional()
+  @IsInt()
+  @Min(30)
+  @Max(180)
+  matchDurationMinutes?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(23)
+  dayStartHour?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(24)
+  dayEndHour?: number;
+}
+
+export class PreviewEventScheduleDto {
+  @IsOptional()
+  @IsInt()
+  @Min(30)
+  @Max(180)
+  matchDurationMinutes?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(23)
+  dayStartHour?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(24)
+  dayEndHour?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  strictAvailability?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  resetExisting?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  publish?: boolean;
+}
+
+export class EnsureEventBracketsDto {
+  @IsOptional()
+  @IsString()
+  mode?: 'OPEN_COURT' | 'SINGLE_ELIMINATION' | 'ROUND_ROBIN';
+}
+
+export class UpdateMatchScheduleDto {
+  @IsUUID()
+  clubId!: string;
+
+  @IsString()
+  courtLabel!: string;
+
+  @IsString()
+  scheduledAt!: string;
+
+  @IsOptional()
+  @IsBoolean()
+  publish?: boolean;
+}
+
+export class RegistrationAvailabilitySlotDto {
+  @IsString()
+  dayDate!: string;
+
+  @IsInt()
+  @Min(0)
+  @Max(23)
+  startHour!: number;
+
+  @IsInt()
+  @Min(1)
+  @Max(24)
+  endHour!: number;
+
+  @IsOptional()
+  @IsUUID()
+  preferredClubId?: string;
+}
+
+export class SetRegistrationAvailabilityDto {
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => RegistrationAvailabilitySlotDto)
+  slots!: RegistrationAvailabilitySlotDto[];
 }

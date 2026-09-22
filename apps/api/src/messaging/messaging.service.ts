@@ -4,7 +4,6 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { isClubRole } from '../common/roles';
 import { DatabaseService } from '../database/database.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { ReportsService } from '../reports/reports.service';
@@ -31,44 +30,15 @@ export class MessagingService {
     return userId < otherUserId ? [userId, otherUserId] : [otherUserId, userId];
   }
 
-  async areFriends(userId: string, otherUserId: string): Promise<boolean> {
+  /** El otro usuario te sigue → podés mandarle mensaje directo. */
+  async isFollowedBy(userId: string, otherUserId: string): Promise<boolean> {
     const result = await this.db.query(
-      `SELECT 1 FROM friend_requests
-       WHERE status = 'accepted'
-         AND (
-           (requester_id = $1 AND addressee_id = $2)
-           OR (requester_id = $2 AND addressee_id = $1)
-         )
+      `SELECT 1 FROM user_follows
+       WHERE follower_id = $1 AND following_id = $2
        LIMIT 1`,
-      [userId, otherUserId],
+      [otherUserId, userId],
     );
     return (result.rowCount ?? 0) > 0;
-  }
-
-  async havePlayedTogether(userId: string, otherUserId: string): Promise<boolean> {
-    const queries = [
-      `SELECT EXISTS (
-         SELECT 1 FROM match_players mp1
-         INNER JOIN match_players mp2 ON mp1.match_id = mp2.match_id
-         INNER JOIN matches m ON m.id = mp1.match_id
-         WHERE mp1.user_id = $1 AND mp2.user_id = $2 AND m.status = 'FINISHED'
-       ) AS ok`,
-      `SELECT EXISTS (
-         SELECT 1 FROM "match_participants" mp1
-         INNER JOIN "match_participants" mp2 ON mp1."matchId" = mp2."matchId"
-         INNER JOIN matches m ON m.id = mp1."matchId"
-         WHERE mp1."userId" = $1 AND mp2."userId" = $2 AND m.status = 'FINISHED'
-       ) AS ok`,
-    ];
-    for (const sql of queries) {
-      try {
-        const result = await this.db.query<{ ok: boolean }>(sql, [userId, otherUserId]);
-        if (result.rows[0]?.ok) return true;
-      } catch {
-        // tabla con otro nombre de esquema
-      }
-    }
-    return false;
   }
 
   async getAccess(userId: string, otherUserId: string): Promise<MessageAccess> {
@@ -81,23 +51,13 @@ export class MessagingService {
     }
 
     const conv = await this.findConversation(userId, otherUserId);
-    const userIsClub = await this.isClubUser(userId);
-    const otherIsClub = await this.isClubUser(otherUserId);
 
-    if (userIsClub || otherIsClub) {
-      if (conv?.status === 'active') {
-        return { canMessage: true, conversationId: conv.id };
-      }
-      if (await this.areFriends(userId, otherUserId) || (await this.havePlayedTogether(userId, otherUserId))) {
-        return { canMessage: true, conversationId: conv?.id };
-      }
-      return this.resolveConversationAccess(userId, conv);
+    if (conv?.status === 'active') {
+      return { canMessage: true, conversationId: conv.id };
     }
 
-    if (await this.areFriends(userId, otherUserId)) {
-      return { canMessage: true, conversationId: conv?.id };
-    }
-    if (await this.havePlayedTogether(userId, otherUserId)) {
+    // Mensaje libre solo si el destinatario te sigue; si no, solicitud.
+    if (await this.isFollowedBy(userId, otherUserId)) {
       return { canMessage: true, conversationId: conv?.id };
     }
 
@@ -121,11 +81,6 @@ export class MessagingService {
       return { canMessage: false, reason: 'pending_outgoing' };
     }
     return { canMessage: false, reason: 'pending_incoming' };
-  }
-
-  private async isClubUser(userId: string): Promise<boolean> {
-    const result = await this.db.query(`SELECT role FROM users WHERE id = $1`, [userId]);
-    return isClubRole(result.rows[0]?.role);
   }
 
   private async findConversation(userId: string, otherUserId: string) {
@@ -383,7 +338,9 @@ export class MessagingService {
     if (conv.status !== 'active') {
       const access = await this.getAccess(userId, otherUserId);
       if (!access.canMessage) {
-        throw new ForbiddenException('Necesitás ser amigos o haber jugado un partido juntos para chatear');
+        throw new ForbiddenException(
+          'Solo podés chatear si te siguen, o enviá una solicitud de mensaje',
+        );
       }
       await this.db.query(
         `UPDATE dm_conversations SET status = 'active', updated_at = NOW() WHERE id = $1`,
