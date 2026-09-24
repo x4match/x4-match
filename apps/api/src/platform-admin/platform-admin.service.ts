@@ -505,4 +505,175 @@ export class PlatformAdminService {
     );
     return result.rows;
   }
+
+  async getUserDetail(userId: string) {
+    const userRes = await this.db.query(
+      `SELECT u.id, u.name, u.email, u.role, u.created_at, u.updated_at,
+              p.id AS player_id, p.photo_url, p.city, p.rating, p.position, p.bio, p.nickname,
+              p.category_status, p.placement_matches_played
+       FROM users u
+       LEFT JOIN players p ON p.user_id = u.id
+       WHERE u.id = $1`,
+      [userId],
+    );
+    const user = userRes.rows[0];
+    if (!user) return null;
+
+    const [clubsAdmin, sponsors, recentMatches, matchCount] = await Promise.all([
+      this.db.query(
+        `SELECT c.id, c.name, c.city
+         FROM club_admins ca
+         JOIN clubs c ON c.id = ca.club_id
+         WHERE ca.user_id = $1
+         ORDER BY c.name ASC`,
+        [userId],
+      ),
+      this.db.query(
+        `SELECT s.id, s.name, s.slug, m.role
+         FROM platform_sponsor_members m
+         JOIN platform_sponsors s ON s.id = m.sponsor_id
+         WHERE m.user_id = $1
+         ORDER BY s.name ASC`,
+        [userId],
+      ),
+      this.db.query(
+        `SELECT m.id, m.title, m.status, m.created_at, c.name AS club_name
+         FROM matches m
+         INNER JOIN match_players mp ON mp.match_id = m.id
+         INNER JOIN players p ON p.id = mp.player_id AND p.user_id = $1
+         LEFT JOIN clubs c ON c.id = m.club_id
+         ORDER BY m.created_at DESC
+         LIMIT 12`,
+        [userId],
+      ),
+      this.db.query<{ count: string }>(
+        `SELECT COUNT(*)::text AS count
+         FROM match_players mp
+         INNER JOIN players p ON p.id = mp.player_id AND p.user_id = $1
+         WHERE mp.status IN ('JOINED', 'CONFIRMED')`,
+        [userId],
+      ),
+    ]);
+
+    return {
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        created_at: user.created_at,
+        updated_at: user.updated_at,
+      },
+      player: user.player_id
+        ? {
+            id: user.player_id,
+            photo_url: user.photo_url,
+            city: user.city,
+            rating: user.rating,
+            position: user.position,
+            bio: user.bio,
+            nickname: user.nickname,
+            category_status: user.category_status,
+            placement_matches_played: user.placement_matches_played,
+          }
+        : null,
+      clubsAdmin: clubsAdmin.rows,
+      sponsors: sponsors.rows,
+      stats: {
+        matchesPlayed: Number(matchCount.rows[0]?.count ?? 0),
+      },
+      recentMatches: recentMatches.rows,
+    };
+  }
+
+  async getMatchDetail(matchId: string) {
+    const matchRes = await this.db.query(
+      `SELECT m.id, m.title, m.status, m.mode, m.gender, m.level_min, m.level_max,
+              m.needed_players, m.date, m.ends_at, m.created_at, m.updated_at,
+              m.club_id, m.created_by_user_id, m.court_slot_id, m.court_booking, m.venue_note,
+              c.name AS club_name, c.city AS club_city,
+              u.name AS creator_name, u.email AS creator_email
+       FROM matches m
+       LEFT JOIN clubs c ON c.id = m.club_id
+       LEFT JOIN users u ON u.id = m.created_by_user_id
+       WHERE m.id = $1`,
+      [matchId],
+    );
+    const match = matchRes.rows[0];
+    if (!match) return null;
+
+    const [players, guests, result] = await Promise.all([
+      this.db.query(
+        `SELECT p.user_id, u.name, u.email, p.rating, p.photo_url,
+                mp.status AS player_status, mp.slot_order
+         FROM match_players mp
+         INNER JOIN players p ON p.id = mp.player_id
+         INNER JOIN users u ON u.id = p.user_id
+         WHERE mp.match_id = $1
+         ORDER BY COALESCE(mp.slot_order, 999), mp.created_at ASC`,
+        [matchId],
+      ),
+      this.db.query(
+        `SELECT id, name, role, slot_order
+         FROM match_guests
+         WHERE match_id = $1
+         ORDER BY slot_order ASC, created_at ASC`,
+        [matchId],
+      ),
+      this.db.query(
+        `SELECT score, winner_team, result_status, created_at
+         FROM match_results
+         WHERE match_id = $1
+         ORDER BY created_at DESC
+         LIMIT 1`,
+        [matchId],
+      ),
+    ]);
+
+    return {
+      match,
+      players: players.rows,
+      guests: guests.rows,
+      result: result.rows[0] ?? null,
+    };
+  }
+
+  async getTournamentDetail(tournamentId: string) {
+    const tourRes = await this.db.query(
+      `SELECT t.id, t.name, t.description, t.status, t.category, t.format, t.gender,
+              t.start_date, t.max_teams, t.price, t.created_at, t.updated_at,
+              t.club_id, t.organizer_user_id, t.modality, t.schedule_type,
+              c.name AS club_name, c.city AS club_city,
+              ou.name AS organizer_name, ou.email AS organizer_email,
+              (SELECT COUNT(*)::int FROM tournament_registrations r
+               WHERE r.tournament_id = t.id) AS registrations_count,
+              (SELECT COUNT(*)::int FROM tournament_registrations r
+               WHERE r.tournament_id = t.id AND r.status = 'CONFIRMED') AS confirmed_count
+       FROM tournaments t
+       LEFT JOIN clubs c ON c.id = t.club_id
+       LEFT JOIN users ou ON ou.id = t.organizer_user_id
+       WHERE t.id = $1`,
+      [tournamentId],
+    );
+    const tournament = tourRes.rows[0];
+    if (!tournament) return null;
+
+    const registrations = await this.db.query(
+      `SELECT r.id, r.status, r.player1_name, r.player2_name, r.created_at,
+              u1.id AS player1_user_id, u1.email AS player1_email,
+              u2.id AS player2_user_id, u2.email AS player2_email
+       FROM tournament_registrations r
+       LEFT JOIN users u1 ON u1.id = r.player1_user_id
+       LEFT JOIN users u2 ON u2.id = r.player2_user_id
+       WHERE r.tournament_id = $1
+       ORDER BY r.created_at DESC
+       LIMIT 50`,
+      [tournamentId],
+    );
+
+    return {
+      tournament,
+      registrations: registrations.rows,
+    };
+  }
 }

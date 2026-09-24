@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { StatusBadge } from '@/components/StatusBadge';
 import { api } from '@/lib/api';
@@ -32,7 +33,14 @@ export default function MonitorPage() {
         Snapshot de la plataforma · {new Date(data.generatedAt).toLocaleString('es-AR')}
       </p>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 24 }}>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+          gap: 12,
+          marginBottom: 24,
+        }}
+      >
         <StatCard label="Usuarios" value={t.users} />
         <StatCard label="Clubes" value={t.clubs} />
         <StatCard label="Partidos" value={t.matches} />
@@ -47,13 +55,22 @@ export default function MonitorPage() {
           <h3 style={{ marginTop: 0 }}>Clubes recientes</h3>
           <table className="table">
             <thead>
-              <tr><th>Club</th><th>Estado</th></tr>
+              <tr>
+                <th>Club</th>
+                <th>Estado</th>
+              </tr>
             </thead>
             <tbody>
               {data.recentClubs.map((c: any) => (
                 <tr key={c.id}>
-                  <td>{c.name}</td>
-                  <td><StatusBadge value={c.billingStatus} category="billingStatus" /></td>
+                  <td>
+                    <Link href={`/clubs/${c.id}`} style={{ color: 'var(--primary)', fontWeight: 600 }}>
+                      {c.name}
+                    </Link>
+                  </td>
+                  <td>
+                    <StatusBadge value={c.billingStatus} category="billingStatus" />
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -63,13 +80,22 @@ export default function MonitorPage() {
           <h3 style={{ marginTop: 0 }}>Usuarios recientes</h3>
           <table className="table">
             <thead>
-              <tr><th>Nombre</th><th>Rol</th></tr>
+              <tr>
+                <th>Nombre</th>
+                <th>Rol</th>
+              </tr>
             </thead>
             <tbody>
               {data.recentUsers.map((u: any) => (
                 <tr key={u.id}>
-                  <td>{u.name}</td>
-                  <td><StatusBadge value={u.role} category="userRole" /></td>
+                  <td>
+                    <Link href={`/users/${u.id}`} style={{ color: 'var(--primary)', fontWeight: 600 }}>
+                      {u.name}
+                    </Link>
+                  </td>
+                  <td>
+                    <StatusBadge value={u.role} category="userRole" />
+                  </td>
                 </tr>
               ))}
             </tbody>

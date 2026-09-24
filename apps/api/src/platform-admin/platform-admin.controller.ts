@@ -157,6 +157,13 @@ export class PlatformAdminController {
     return this.platformAdminService.createOpsUser(dto);
   }
 
+  @Get('users/:id')
+  async getUser(@Param('id') id: string) {
+    const detail = await this.platformAdminService.getUserDetail(id);
+    if (!detail) throw new NotFoundException('Usuario no encontrado');
+    return detail;
+  }
+
   @Patch('users/:id/role')
   updateUserRole(
     @Param('id') id: string,
@@ -183,6 +190,13 @@ export class PlatformAdminController {
     });
   }
 
+  @Get('matches/:id')
+  async getMatch(@Param('id') id: string) {
+    const detail = await this.platformAdminService.getMatchDetail(id);
+    if (!detail) throw new NotFoundException('Partido no encontrado');
+    return detail;
+  }
+
   @Get('tournaments')
   listTournaments(
     @Query('q') q?: string,
@@ -198,6 +212,13 @@ export class PlatformAdminController {
       limit: limit ? parseInt(limit, 10) : undefined,
       offset: offset ? parseInt(offset, 10) : undefined,
     });
+  }
+
+  @Get('tournaments/:id')
+  async getTournament(@Param('id') id: string) {
+    const detail = await this.platformAdminService.getTournamentDetail(id);
+    if (!detail) throw new NotFoundException('Torneo no encontrado');
+    return detail;
   }
 
   @Get('payments')

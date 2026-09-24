@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import Link from 'next/link';
 import { Modal } from '@/components/Modal';
 import { StatusBadge } from '@/components/StatusBadge';
 import { TableFilters } from '@/components/TableFilters';
@@ -194,35 +195,44 @@ export default function UsersPage() {
             ) : (
               items.map((u: any) => (
               <tr key={u.id}>
-                <td>{u.name}</td>
+                <td>
+                  <Link href={`/users/${u.id}`} style={{ color: 'var(--primary)', fontWeight: 600 }}>
+                    {u.name}
+                  </Link>
+                </td>
                 <td>{u.email}</td>
                 <td><StatusBadge value={u.role} category="userRole" /></td>
                 <td>{new Date(u.created_at).toLocaleDateString('es-AR')}</td>
                 <td>
-                  {u.role !== 'SUPER_ADMIN' ? (
-                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                      <button
-                        className="btn btn-outline"
-                        type="button"
-                        disabled={promote.isPending}
-                        onClick={() => promote.mutate(u.id)}
-                      >
-                        Hacer ops
-                      </button>
-                      {u.role !== 'PARTNER' ? (
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                    <Link href={`/users/${u.id}`} style={{ color: 'var(--primary)', fontWeight: 700 }}>
+                      Ver
+                    </Link>
+                    {u.role !== 'SUPER_ADMIN' ? (
+                      <>
                         <button
                           className="btn btn-outline"
                           type="button"
-                          disabled={makePartner.isPending}
-                          onClick={() => makePartner.mutate(u.id)}
+                          disabled={promote.isPending}
+                          onClick={() => promote.mutate(u.id)}
                         >
-                          Hacer partner
+                          Hacer ops
                         </button>
-                      ) : null}
-                    </div>
-                  ) : (
-                    <span className="badge badge-success">Operador</span>
-                  )}
+                        {u.role !== 'PARTNER' ? (
+                          <button
+                            className="btn btn-outline"
+                            type="button"
+                            disabled={makePartner.isPending}
+                            onClick={() => makePartner.mutate(u.id)}
+                          >
+                            Hacer partner
+                          </button>
+                        ) : null}
+                      </>
+                    ) : (
+                      <span className="badge badge-success">Operador</span>
+                    )}
+                  </div>
                 </td>
               </tr>
               ))

@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { TableFilters } from '@/components/TableFilters';
 import { StatusText } from '@/components/StatusBadge';
 import { TablePagination } from '@/components/TablePagination';
@@ -55,12 +56,13 @@ export default function MatchesPage() {
                 <th>Club</th>
                 <th>Estado</th>
                 <th>Fecha</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
               {items.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="table-empty">
+                  <td colSpan={5} className="table-empty">
                     No hay partidos con esos filtros.
                   </td>
                 </tr>
@@ -69,8 +71,18 @@ export default function MatchesPage() {
                   <tr key={m.id}>
                     <td>{m.title}</td>
                     <td>{m.club_name || '—'}</td>
-                    <td><StatusText value={m.status} category="matchStatus" /></td>
+                    <td>
+                      <StatusText value={m.status} category="matchStatus" />
+                    </td>
                     <td>{new Date(m.created_at).toLocaleDateString('es-AR')}</td>
+                    <td>
+                      <Link
+                        href={`/matches/${m.id}`}
+                        style={{ color: 'var(--primary)', fontWeight: 700 }}
+                      >
+                        Ver
+                      </Link>
+                    </td>
                   </tr>
                 ))
               )}

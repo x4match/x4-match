@@ -10,6 +10,7 @@ import {
   IsUUID,
   Max,
   Min,
+  MinLength,
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -158,6 +159,21 @@ export class CreatePlatformSponsorDto {
   @IsOptional()
   @IsBoolean()
   active?: boolean;
+
+  /** Si se envían, crea el usuario OWNER con rol PARTNER. */
+  @IsOptional()
+  @IsEmail()
+  ownerEmail?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(6)
+  ownerPassword?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(2)
+  ownerName?: string;
 }
 
 export class UpdatePlatformSponsorDto {

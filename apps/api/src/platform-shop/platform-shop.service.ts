@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -686,6 +687,30 @@ export class PlatformShopService {
   }
 
   async createSponsor(dto: CreatePlatformSponsorDto) {
+    const wantsOwner = Boolean(dto.ownerEmail || dto.ownerPassword || dto.ownerName);
+    if (wantsOwner && (!dto.ownerEmail || !dto.ownerPassword || !dto.ownerName)) {
+      throw new BadRequestException(
+        'Para crear el acceso del partner enviá ownerName, ownerEmail y ownerPassword',
+      );
+    }
+
+    let owner: { id: string; email: string; name: string; role: string } | null = null;
+    if (wantsOwner) {
+      const email = dto.ownerEmail!.trim().toLowerCase();
+      const existing = await this.db.query(`SELECT id FROM users WHERE email = $1`, [email]);
+      if (existing.rows[0]) {
+        throw new ConflictException('Ya existe un usuario con ese email');
+      }
+      const passwordHash = await bcrypt.hash(dto.ownerPassword!, 10);
+      const userRes = await this.db.query(
+        `INSERT INTO users (email, password_hash, name, role)
+         VALUES ($1, $2, $3, 'PARTNER'::user_role)
+         RETURNING id, email, name, role`,
+        [email, passwordHash, dto.ownerName!.trim()],
+      );
+      owner = userRes.rows[0];
+    }
+
     let slug = slugify(dto.slug || dto.name);
     const exists = await this.db.query(`SELECT id FROM platform_sponsors WHERE slug = $1`, [slug]);
     if (exists.rows[0]) {
@@ -702,7 +727,23 @@ export class PlatformShopService {
        VALUES ($1) ON CONFLICT DO NOTHING`,
       [result.rows[0].id],
     );
-    return { ...result.rows[0], store_url: this.storeUrl(result.rows[0]) };
+
+    if (owner) {
+      await this.db.query(
+        `INSERT INTO platform_sponsor_members (sponsor_id, user_id, role)
+         VALUES ($1, $2, 'OWNER')
+         ON CONFLICT (sponsor_id, user_id) DO UPDATE SET role = EXCLUDED.role`,
+        [result.rows[0].id, owner.id],
+      );
+    }
+
+    return {
+      ...result.rows[0],
+      store_url: this.storeUrl(result.rows[0]),
+      owner: owner
+        ? { id: owner.id, email: owner.email, name: owner.name, role: owner.role }
+        : null,
+    };
   }
 
   async updateSponsor(sponsorId: string, dto: UpdatePlatformSponsorDto) {
