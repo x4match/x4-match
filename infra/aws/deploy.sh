@@ -10,6 +10,30 @@ if [[ ! -f apps/api/.env ]]; then
   exit 1
 fi
 
+# Asegura URLs públicas HTTPS para OAuth (MP clubs/sponsors). Evita redirect_uri=localhost.
+upsert_env() {
+  local key="$1" val="$2" file="apps/api/.env"
+  if grep -q "^${key}=" "$file" 2>/dev/null; then
+    sed -i "s|^${key}=.*|${key}=${val}|" "$file"
+  else
+    printf '\n%s=%s\n' "$key" "$val" >>"$file"
+  fi
+}
+fix_local_url_env() {
+  local key="$1" val="$2" file="apps/api/.env" cur=""
+  cur="$(grep -E "^${key}=" "$file" 2>/dev/null | head -1 | cut -d= -f2- || true)"
+  if [[ -z "$cur" || "$cur" == *"localhost"* || "$cur" == *"127.0.0.1"* || "$cur" == *"tudominio.com"* ]]; then
+    echo "==> ${key}=${val} (corrige valor local/placeholder)"
+    upsert_env "$key" "$val"
+  fi
+}
+fix_local_url_env API_PUBLIC_URL "https://api.x4match.com"
+fix_local_url_env WEB_SPONSORS_PUBLIC_URL "https://sponsor.x4match.com"
+fix_local_url_env WEB_SPONSORS_HOST "sponsor.x4match.com"
+fix_local_url_env MP_SPONSOR_REDIRECT_URI "https://api.x4match.com/sponsors/oauth/mercadopago/callback"
+# Si el redirect de clubs también quedó en placeholder/local, alinearlo.
+fix_local_url_env MP_REDIRECT_URI "https://api.x4match.com/clubs/oauth/mercadopago/callback"
+
 # shellcheck disable=SC1091
 set -a
 source apps/api/.env

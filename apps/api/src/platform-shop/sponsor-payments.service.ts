@@ -32,24 +32,59 @@ export class SponsorPaymentsService {
     return !!(process.env.MP_APP_ID?.trim() && process.env.MP_CLIENT_SECRET?.trim());
   }
 
+  private isLocalUrl(url: string): boolean {
+    return /localhost|127\.0\.0\.1/i.test(url);
+  }
+
+  /** Origen HTTPS público de la API (nunca localhost en prod). */
   private publicApiBase(): string {
-    return (process.env.API_PUBLIC_URL || process.env.APP_URL || 'http://localhost:5000').replace(
-      /\/$/,
-      '',
-    );
+    const candidates = [
+      process.env.API_PUBLIC_URL,
+      process.env.APP_URL,
+      process.env.MP_SPONSOR_REDIRECT_URI,
+      process.env.MP_REDIRECT_URI,
+    ];
+    for (const raw of candidates) {
+      const value = raw?.trim();
+      if (!value || this.isLocalUrl(value)) continue;
+      try {
+        return new URL(value).origin;
+      } catch {
+        return value.replace(/\/$/, '').replace(/\/(sponsors|clubs)\/oauth\/.*$/i, '');
+      }
+    }
+    if (process.env.NODE_ENV === 'production') {
+      return 'https://api.x4match.com';
+    }
+    return 'http://localhost:5000';
   }
 
   private webSponsorsBase(): string {
-    return (
-      process.env.WEB_SPONSORS_PUBLIC_URL ||
-      process.env.NEXT_PUBLIC_SPONSORS_URL ||
-      'http://localhost:3003'
-    ).replace(/\/$/, '');
+    const candidates = [
+      process.env.WEB_SPONSORS_PUBLIC_URL,
+      process.env.NEXT_PUBLIC_SPONSORS_URL,
+    ];
+    for (const raw of candidates) {
+      const value = raw?.trim();
+      if (!value || this.isLocalUrl(value)) continue;
+      return value.replace(/\/$/, '');
+    }
+    const host = (process.env.WEB_SPONSORS_HOST || process.env.NEXT_PUBLIC_SPONSORS_HOST || '')
+      .replace(/^https?:\/\//, '')
+      .replace(/\/$/, '');
+    if (host && !this.isLocalUrl(host)) {
+      return `https://${host}`;
+    }
+    if (process.env.NODE_ENV === 'production') {
+      return 'https://sponsor.x4match.com';
+    }
+    return 'http://localhost:3003';
   }
 
   private oauthRedirectUri(): string {
-    if (process.env.MP_SPONSOR_REDIRECT_URI?.trim()) {
-      return process.env.MP_SPONSOR_REDIRECT_URI.trim();
+    const explicit = process.env.MP_SPONSOR_REDIRECT_URI?.trim();
+    if (explicit && !this.isLocalUrl(explicit)) {
+      return explicit;
     }
     return `${this.publicApiBase()}/sponsors/oauth/mercadopago/callback`;
   }
@@ -132,12 +167,12 @@ export class SponsorPaymentsService {
       throw new BadRequestException('Mercado Pago OAuth no está configurado');
     }
     const redirectUri = this.oauthRedirectUri();
-    if (/localhost|127\.0\.0\.1/i.test(redirectUri) && process.env.NODE_ENV === 'production') {
+    if (this.isLocalUrl(redirectUri)) {
       this.logger.error(
         `MP OAuth redirect_uri apunta a local (${redirectUri}). Configurá API_PUBLIC_URL o MP_SPONSOR_REDIRECT_URI.`,
       );
       throw new BadRequestException(
-        'Mercado Pago OAuth mal configurado en el servidor (redirect_uri local). Pedile a ops que setee API_PUBLIC_URL.',
+        'Mercado Pago OAuth mal configurado en el servidor (redirect_uri local). Pedile a ops que setee API_PUBLIC_URL=https://api.x4match.com',
       );
     }
     const state = this.signOAuthState({

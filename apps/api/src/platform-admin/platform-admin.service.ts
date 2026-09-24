@@ -648,7 +648,7 @@ export class PlatformAdminService {
               (SELECT COUNT(*)::int FROM tournament_registrations r
                WHERE r.tournament_id = t.id) AS registrations_count,
               (SELECT COUNT(*)::int FROM tournament_registrations r
-               WHERE r.tournament_id = t.id AND r.status = 'CONFIRMED') AS confirmed_count
+               WHERE r.tournament_id = t.id AND r.status = 'APPROVED') AS confirmed_count
        FROM tournaments t
        LEFT JOIN clubs c ON c.id = t.club_id
        LEFT JOIN users ou ON ou.id = t.organizer_user_id
