@@ -27,9 +27,9 @@ NEXT_PUBLIC_API_URL=http://localhost:5000
 
 ## Rutas
 
-- `/` — landing pública (default)
-- `/precios` — planes BASIC / GROWTH / PRO
+- `/` — redirige a `/login`
 - `/login` — acceso club
+- `/register` — alta de cuenta club
 - `/panel` — Dashboard gerente (autenticado)
 - `/gestion` — canchas, turnos, promos, Smart Fill
 - `/facturacion` — movimientos, links MP, cobros

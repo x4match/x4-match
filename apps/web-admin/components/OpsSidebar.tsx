@@ -7,6 +7,7 @@ import {
   Building2,
   CalendarRange,
   CreditCard,
+  Handshake,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -27,6 +28,7 @@ const NAV = [
   { href: '/matches', label: 'Partidos', icon: Swords },
   { href: '/tournaments', label: 'Torneos', icon: Trophy },
   { href: '/payments', label: 'Pagos', icon: CreditCard },
+  { href: '/partners', label: 'Partners', icon: Handshake },
   { href: '/activity', label: 'Actividad', icon: Activity },
   { href: '/calendar', label: 'Agenda', icon: CalendarRange },
 ];

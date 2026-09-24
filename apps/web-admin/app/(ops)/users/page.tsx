@@ -77,6 +77,17 @@ export default function UsersPage() {
     },
   });
 
+  const makePartner = useMutation({
+    mutationFn: async (userId: string) =>
+      api.patch(`/platform/users/${userId}/role`, { role: 'PARTNER' }).then((r) => r.data),
+    meta: {
+      successMessage: 'Usuario promovido a PARTNER.',
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['platform-users'] });
+    },
+  });
+
   function onCreateOps(e: FormEvent) {
     e.preventDefault();
     createOps.mutate();
@@ -189,14 +200,26 @@ export default function UsersPage() {
                 <td>{new Date(u.created_at).toLocaleDateString('es-AR')}</td>
                 <td>
                   {u.role !== 'SUPER_ADMIN' ? (
-                    <button
-                      className="btn btn-outline"
-                      type="button"
-                      disabled={promote.isPending}
-                      onClick={() => promote.mutate(u.id)}
-                    >
-                      Hacer ops
-                    </button>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      <button
+                        className="btn btn-outline"
+                        type="button"
+                        disabled={promote.isPending}
+                        onClick={() => promote.mutate(u.id)}
+                      >
+                        Hacer ops
+                      </button>
+                      {u.role !== 'PARTNER' ? (
+                        <button
+                          className="btn btn-outline"
+                          type="button"
+                          disabled={makePartner.isPending}
+                          onClick={() => makePartner.mutate(u.id)}
+                        >
+                          Hacer partner
+                        </button>
+                      ) : null}
+                    </div>
                   ) : (
                     <span className="badge badge-success">Operador</span>
                   )}

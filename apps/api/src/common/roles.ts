@@ -8,7 +8,8 @@ export const EVENT_ORGANIZER_ROLES = [
   'CLUB_ADMIN',
   'SUPER_ADMIN',
 ] as const;
-export const PARTNER_ROLES = ['PARTNER', 'SUPER_ADMIN'] as const;
+/** Solo partners del SaaS de tiendas. SUPER_ADMIN opera vía web-admin /platform/*. */
+export const PARTNER_ROLES = ['PARTNER'] as const;
 
 export type StaffRole = (typeof CLUB_ROLES)[number] | (typeof ORGANIZER_ROLES)[number];
 

@@ -1,4 +1,4 @@
-export type UserRole = 'PLAYER' | 'CLUB_ADMIN' | 'ORGANIZER' | 'SUPER_ADMIN';
+export type UserRole = 'PLAYER' | 'CLUB_ADMIN' | 'ORGANIZER' | 'PARTNER' | 'SUPER_ADMIN';
 
 export function isPlatformAdmin(role?: string) {
   return role === 'SUPER_ADMIN';

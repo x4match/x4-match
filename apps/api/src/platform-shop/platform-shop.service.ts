@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { createHash, randomBytes } from 'crypto';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 import { JwtService } from '@nestjs/jwt';
 import { DatabaseService } from '../database/database.service';
 import {
@@ -617,18 +617,17 @@ export class PlatformShopService {
        WHERE m.user_id = $1 AND m.sponsor_id = $2`,
       [userId, sponsorId],
     );
-    const user = await this.db.query(`SELECT role FROM users WHERE id = $1`, [userId]);
-    if (user.rows[0]?.role === 'SUPER_ADMIN') {
-      return { role: 'OWNER', user_id: userId, sponsor_id: sponsorId };
-    }
     if (!result.rows[0]) throw new ForbiddenException('No tenés acceso a este partner');
+    if (result.rows[0].user_role !== 'PARTNER') {
+      throw new ForbiddenException('Se requiere rol PARTNER');
+    }
     return result.rows[0];
   }
 
   async listMySponsors(userId: string) {
     const user = await this.db.query(`SELECT role FROM users WHERE id = $1`, [userId]);
-    if (user.rows[0]?.role === 'SUPER_ADMIN') {
-      return this.listSponsors();
+    if (user.rows[0]?.role !== 'PARTNER') {
+      throw new ForbiddenException('Se requiere rol PARTNER');
     }
     const result = await this.db.query(
       `SELECT s.*, m.role AS member_role

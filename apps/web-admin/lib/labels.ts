@@ -4,6 +4,7 @@ export const USER_ROLE_LABELS: Record<string, string> = {
   PLAYER: 'Jugador',
   CLUB_ADMIN: 'Admin de club',
   ORGANIZER: 'Organizador',
+  PARTNER: 'Partner',
   SUPER_ADMIN: 'Super admin',
 };
 
