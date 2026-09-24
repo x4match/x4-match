@@ -42,10 +42,32 @@ function clientId() {
 }
 
 function redirectUri() {
+  // Prefer the current origin so production always uses https://club.x4match.com/...
+  // Env is mainly for local overrides; Apple rejects http:// except localhost.
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    const origin = window.location.origin.replace(/\/$/, '');
+    const isLocal =
+      origin.includes('localhost') || origin.includes('127.0.0.1');
+    if (!isLocal || !process.env.NEXT_PUBLIC_APPLE_REDIRECT_URI?.trim()) {
+      return `${origin}/login`;
+    }
+  }
   const fromEnv = process.env.NEXT_PUBLIC_APPLE_REDIRECT_URI?.trim();
-  if (fromEnv) return fromEnv;
-  if (typeof window === 'undefined') return '';
-  return `${window.location.origin}/login`;
+  if (fromEnv) {
+    try {
+      const url = new URL(fromEnv);
+      const isLocal =
+        url.hostname === 'localhost' || url.hostname === '127.0.0.1';
+      if (!isLocal && url.protocol === 'http:') {
+        url.protocol = 'https:';
+        return url.toString().replace(/\/$/, '') || fromEnv;
+      }
+    } catch {
+      // keep as-is
+    }
+    return fromEnv;
+  }
+  return '';
 }
 
 export function isAppleSignInConfigured() {

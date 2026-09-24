@@ -5,7 +5,25 @@ import { TOKEN_COOKIE } from '@/lib/auth-cookies';
 const SPONSORS_HOST = (process.env.NEXT_PUBLIC_SPONSORS_HOST || 'sponsor.x4match.com')
   .replace(/^https?:\/\//, '')
   .toLowerCase();
-const API_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000').replace(/\/$/, '');
+
+function resolveApiUrl() {
+  let url = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000').replace(/\/$/, '');
+  if (url.startsWith('http://')) {
+    try {
+      const parsed = new URL(url);
+      const isLocal = parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1';
+      if (!isLocal) {
+        parsed.protocol = 'https:';
+        url = parsed.toString().replace(/\/$/, '');
+      }
+    } catch {
+      url = url.replace(/^http:\/\//, 'https://');
+    }
+  }
+  return url;
+}
+
+const API_URL = resolveApiUrl();
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
