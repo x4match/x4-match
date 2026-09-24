@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { PoolClient } from 'pg';
 import {
   applyPointsMultiplier,
   getMatchScheduleContext,
@@ -15,6 +16,8 @@ export interface MatchPointsBreakdown {
   multiplier: number;
   totalPoints: number;
   inPromotion: boolean;
+  /** Bonus flat de la promo (solo canjeable; no ranking). */
+  promoBonusPoints: number;
   monthKey: string;
 }
 
@@ -49,18 +52,13 @@ export class ClubPointsService {
     );
 
     for (const row of players.rows) {
-      await this.addPoints(
+      await this.awardMatchReason(
         match.club_id,
         row.user_id,
-        breakdown.totalPoints,
-        'MATCH_PLAYED',
         matchId,
-        {
-          monthKey: breakdown.monthKey,
-          baseAmount: breakdown.basePoints,
-          multiplier: breakdown.multiplier,
-          countMatch: true,
-        },
+        'MATCH_PLAYED',
+        breakdown,
+        { countMatch: true },
       );
     }
 
@@ -72,20 +70,67 @@ export class ClubPointsService {
       for (const row of players.rows) {
         const team = userTeamFromRank(Number(row.rnk), neededPlayers);
         if (team !== normalizedWinner) continue;
+        await this.awardMatchReason(
+          match.club_id,
+          row.user_id,
+          matchId,
+          'MATCH_WON',
+          winBreakdown,
+          { countMatch: false },
+        );
+      }
+    }
+
+    // Bonus flat de promo: solo wallet canjeable (nunca ranking ni competitivos).
+    if (breakdown.promoBonusPoints > 0) {
+      for (const row of players.rows) {
         await this.addPoints(
           match.club_id,
           row.user_id,
-          winBreakdown.totalPoints,
-          'MATCH_WON',
+          breakdown.promoBonusPoints,
+          'PROMO_BONUS',
           matchId,
           {
-            monthKey: winBreakdown.monthKey,
-            baseAmount: winBreakdown.basePoints,
-            multiplier: winBreakdown.multiplier,
+            monthKey: breakdown.monthKey,
+            baseAmount: breakdown.promoBonusPoints,
+            multiplier: 1,
             countMatch: false,
+            affectMonthly: false,
           },
         );
       }
+    }
+  }
+
+  /**
+   * Base → wallet + ranking del club.
+   * Extra por multiplicador de promo → solo wallet canjeable.
+   */
+  private async awardMatchReason(
+    clubId: string,
+    userId: string,
+    matchId: string,
+    reason: 'MATCH_PLAYED' | 'MATCH_WON',
+    breakdown: MatchPointsBreakdown,
+    opts: { countMatch: boolean },
+  ) {
+    await this.addPoints(clubId, userId, breakdown.basePoints, reason, matchId, {
+      monthKey: breakdown.monthKey,
+      baseAmount: breakdown.basePoints,
+      multiplier: 1,
+      countMatch: opts.countMatch,
+      affectMonthly: true,
+    });
+
+    const promoExtra = breakdown.totalPoints - breakdown.basePoints;
+    if (promoExtra > 0) {
+      await this.addPoints(clubId, userId, promoExtra, 'PROMO_BONUS', matchId, {
+        monthKey: breakdown.monthKey,
+        baseAmount: breakdown.basePoints,
+        multiplier: breakdown.multiplier,
+        countMatch: false,
+        affectMonthly: false,
+      });
     }
   }
 
@@ -95,10 +140,10 @@ export class ClubPointsService {
     basePoints: number,
   ): Promise<MatchPointsBreakdown> {
     const schedule = getMatchScheduleContext(matchDate);
-    const inPromotion = await this.isMatchInPromotion(clubId, schedule.dayOfWeek, schedule.hour);
+    const promotion = await this.getActivePromotion(clubId, schedule.dayOfWeek, schedule.hour);
     let multiplier = 1;
 
-    if (inPromotion) {
+    if (promotion) {
       const planResult = await this.db.query(
         `SELECT subscription_plan FROM clubs WHERE id = $1`,
         [clubId],
@@ -110,21 +155,32 @@ export class ClubPointsService {
       basePoints,
       multiplier,
       totalPoints: applyPointsMultiplier(basePoints, multiplier),
-      inPromotion,
+      inPromotion: Boolean(promotion),
+      promoBonusPoints: Number(promotion?.bonus_points ?? 0),
       monthKey: schedule.monthKey,
     };
   }
 
   async isMatchInPromotion(clubId: string, dayOfWeek: number, hour: number): Promise<boolean> {
-    const result = await this.db.query(
-      `SELECT 1 FROM club_promotions
+    const promo = await this.getActivePromotion(clubId, dayOfWeek, hour);
+    return Boolean(promo);
+  }
+
+  private async getActivePromotion(
+    clubId: string,
+    dayOfWeek: number,
+    hour: number,
+  ): Promise<{ bonus_points: number } | null> {
+    const result = await this.db.query<{ bonus_points: number }>(
+      `SELECT bonus_points FROM club_promotions
        WHERE club_id = $1 AND active = TRUE
          AND start_hour <= $2 AND end_hour > $2
          AND (day_of_week IS NULL OR day_of_week = $3)
+       ORDER BY bonus_points DESC
        LIMIT 1`,
       [clubId, hour, dayOfWeek],
     );
-    return Boolean(result.rows[0]);
+    return result.rows[0] ?? null;
   }
 
   async addPoints(
@@ -138,7 +194,10 @@ export class ClubPointsService {
       baseAmount: number;
       multiplier: number;
       countMatch?: boolean;
+      /** Si false, solo acredita wallet canjeable (no ranking mensual del club). Default true. */
+      affectMonthly?: boolean;
     },
+    client?: PoolClient,
   ) {
     if (amount <= 0) return;
 
@@ -146,15 +205,18 @@ export class ClubPointsService {
     const baseAmount = meta?.baseAmount ?? amount;
     const multiplier = meta?.multiplier ?? 1;
     const countMatch = meta?.countMatch ?? reason === 'MATCH_PLAYED';
+    const affectMonthly = meta?.affectMonthly ?? true;
+    const q = <T = unknown>(sql: string, params?: unknown[]) =>
+      client ? client.query<T>(sql, params) : this.db.query<T>(sql, params);
 
-    await this.db.query(
+    await q(
       `INSERT INTO club_points_ledger (
          club_id, user_id, amount, reason, reference_id, month_key, base_amount, multiplier
        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
       [clubId, userId, amount, reason, referenceId ?? null, monthKey ?? null, baseAmount, multiplier],
     );
 
-    await this.db.query(
+    await q(
       `INSERT INTO club_member_points (club_id, user_id, points, matches_at_club, last_played_at, updated_at)
        VALUES ($1, $2, $3,
          CASE WHEN $4 THEN 1 ELSE 0 END,
@@ -173,8 +235,8 @@ export class ClubPointsService {
       [clubId, userId, amount, countMatch],
     );
 
-    if (monthKey) {
-      await this.db.query(
+    if (monthKey && affectMonthly) {
+      await q(
         `INSERT INTO club_member_monthly_points (
            club_id, user_id, month_key, points, matches_played, updated_at
          ) VALUES ($1, $2, $3, $4,

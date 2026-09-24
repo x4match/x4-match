@@ -31,11 +31,12 @@ describe('ClubPointsService', () => {
     expect(result.multiplier).toBe(1);
     expect(result.totalPoints).toBe(10);
     expect(result.inPromotion).toBe(false);
+    expect(result.promoBonusPoints).toBe(0);
   });
 
   it('aplica x1.5 en promo con plan GROWTH', async () => {
     query
-      .mockResolvedValueOnce({ rows: [{ '?column?': 1 }] })
+      .mockResolvedValueOnce({ rows: [{ bonus_points: 0 }] })
       .mockResolvedValueOnce({ rows: [{ subscription_plan: 'GROWTH' }] });
 
     const result = await service.resolveMatchPoints(
@@ -47,11 +48,12 @@ describe('ClubPointsService', () => {
     expect(result.inPromotion).toBe(true);
     expect(result.multiplier).toBe(1.5);
     expect(result.totalPoints).toBe(15);
+    expect(result.promoBonusPoints).toBe(0);
   });
 
-  it('aplica x2 en promo con plan PRO', async () => {
+  it('aplica x2 en promo con plan PRO y lee bonus flat', async () => {
     query
-      .mockResolvedValueOnce({ rows: [{ '?column?': 1 }] })
+      .mockResolvedValueOnce({ rows: [{ bonus_points: 20 }] })
       .mockResolvedValueOnce({ rows: [{ subscription_plan: 'PRO' }] });
 
     const result = await service.resolveMatchPoints(
@@ -62,5 +64,40 @@ describe('ClubPointsService', () => {
 
     expect(result.multiplier).toBe(2);
     expect(result.totalPoints).toBe(20);
+    expect(result.promoBonusPoints).toBe(20);
+  });
+
+  it('addPoints con affectMonthly=false no escribe ranking mensual', async () => {
+    query.mockResolvedValue({ rows: [] });
+
+    await service.addPoints('club-1', 'user-1', 50, 'COUPON_CLAIM', 'coupon-1', {
+      monthKey: '2026-09',
+      baseAmount: 50,
+      multiplier: 1,
+      countMatch: false,
+      affectMonthly: false,
+    });
+
+    expect(query).toHaveBeenCalledTimes(2);
+    expect(query.mock.calls[0][0]).toContain('club_points_ledger');
+    expect(query.mock.calls[1][0]).toContain('club_member_points');
+    expect(query.mock.calls.some((c: unknown[]) => String(c[0]).includes('club_member_monthly_points'))).toBe(
+      false,
+    );
+  });
+
+  it('addPoints con affectMonthly=true escribe ranking mensual', async () => {
+    query.mockResolvedValue({ rows: [] });
+
+    await service.addPoints('club-1', 'user-1', 10, 'MATCH_PLAYED', 'match-1', {
+      monthKey: '2026-09',
+      baseAmount: 10,
+      multiplier: 1,
+      countMatch: true,
+      affectMonthly: true,
+    });
+
+    expect(query).toHaveBeenCalledTimes(3);
+    expect(query.mock.calls[2][0]).toContain('club_member_monthly_points');
   });
 });

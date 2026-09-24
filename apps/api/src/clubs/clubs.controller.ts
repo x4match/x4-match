@@ -37,6 +37,7 @@ import { CreateCourtDto } from './dto/create-court.dto';
 import { CreateCourtScheduleDto } from './dto/create-court-schedule.dto';
 import { CreateCourtSlotDto } from './dto/create-court-slot.dto';
 import { CreateShopCouponDto } from './dto/create-shop-coupon.dto';
+import { ClaimShopCouponDto } from './dto/claim-shop-coupon.dto';
 import { CreateShopProductDto } from './dto/create-shop-product.dto';
 import { GenerateCourtSlotsDto } from './dto/generate-court-slots.dto';
 import { UpdateShopProductDto } from './dto/update-shop-product.dto';
@@ -687,6 +688,22 @@ export class ClubsController {
   @UseGuards(JwtAuthGuard)
   listShopCoupons(@Param('id') id: string, @CurrentUser() user: { sub: string }) {
     return this.clubsService.listShopCoupons(id, user.sub);
+  }
+
+  @Get(':id/shop/coupons/claimable')
+  @UseGuards(JwtAuthGuard)
+  listClaimableShopCoupons(@Param('id') id: string, @CurrentUser() user: { sub: string }) {
+    return this.clubsService.listClaimableShopCoupons(id, user.sub);
+  }
+
+  @Post(':id/shop/coupons/claim')
+  @UseGuards(JwtAuthGuard)
+  claimShopCoupon(
+    @Param('id') id: string,
+    @CurrentUser() user: { sub: string },
+    @Body() dto: ClaimShopCouponDto,
+  ) {
+    return this.clubsService.claimShopCoupon(id, user.sub, dto.code);
   }
 
   @Post(':id/shop/coupons')
