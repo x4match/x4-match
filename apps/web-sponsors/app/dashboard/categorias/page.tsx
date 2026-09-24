@@ -5,6 +5,14 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { useSponsor } from '@/contexts/SponsorContext';
 import { toast } from 'sonner';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import {
+  EmptyHint,
+  ListRow,
+  PageShell,
+  PanelCard,
+} from '@/components/layout/PageShell';
 
 export default function CategoriasPage() {
   const { activeSponsorId } = useSponsor();
@@ -22,6 +30,7 @@ export default function CategoriasPage() {
       toast.success('Categoría creada');
       qc.invalidateQueries({ queryKey: ['partner-cats', activeSponsorId] });
     },
+    onError: () => toast.error('No se pudo crear'),
   });
 
   function onSubmit(e: FormEvent) {
@@ -29,22 +38,39 @@ export default function CategoriasPage() {
     create.mutate();
   }
 
+  const items = (listQ.data || []) as Array<{ id: string; name: string; slug: string }>;
+
   return (
-    <div className="space-y-4">
-      <h1 className="text-2xl font-bold">Categorías</h1>
-      <form onSubmit={onSubmit} className="flex gap-2">
-        <input className="flex-1 rounded border px-3 py-2" value={name} onChange={(e) => setName(e.target.value)} placeholder="Nombre" required />
-        <button type="submit" className="rounded bg-teal-700 px-4 py-2 text-white">
-          Agregar
-        </button>
-      </form>
-      <ul className="space-y-2">
-        {(listQ.data || []).map((c: any) => (
-          <li key={c.id} className="rounded border bg-white px-3 py-2">
-            {c.name} <span className="text-xs text-slate-400">/{c.slug}</span>
-          </li>
-        ))}
-      </ul>
-    </div>
+    <PageShell
+      kicker="Catálogo"
+      title="Categorías"
+      description="Organizá productos para la navegación de la tienda."
+    >
+      <PanelCard>
+        <form onSubmit={onSubmit} className="mb-4 flex flex-col gap-2 sm:flex-row">
+          <Input
+            className="min-h-11 flex-1"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Nombre de categoría"
+            required
+          />
+          <Button type="submit" className="min-h-11 font-bold" disabled={create.isPending}>
+            Agregar
+          </Button>
+        </form>
+        {listQ.isLoading ? (
+          <p className="text-sm text-muted-foreground">Cargando…</p>
+        ) : items.length === 0 ? (
+          <EmptyHint>Sin categorías todavía.</EmptyHint>
+        ) : (
+          <div className="space-y-2">
+            {items.map((c) => (
+              <ListRow key={c.id} title={c.name} meta={`/${c.slug}`} />
+            ))}
+          </div>
+        )}
+      </PanelCard>
+    </PageShell>
   );
 }

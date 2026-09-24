@@ -5,6 +5,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { useSponsor } from '@/contexts/SponsorContext';
 import { toast } from 'sonner';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { PageShell, PanelCard } from '@/components/layout/PageShell';
 
 export default function ContactoDashPage() {
   const { activeSponsorId } = useSponsor();
@@ -36,6 +40,7 @@ export default function ContactoDashPage() {
       toast.success('Contacto guardado');
       qc.invalidateQueries({ queryKey: ['partner-sponsor', activeSponsorId] });
     },
+    onError: () => toast.error('No se pudo guardar'),
   });
 
   function onSubmit(e: FormEvent) {
@@ -44,14 +49,52 @@ export default function ContactoDashPage() {
   }
 
   return (
-    <form onSubmit={onSubmit} className="max-w-xl space-y-3">
-      <h1 className="text-2xl font-bold">Contacto</h1>
-      <input className="w-full rounded border px-3 py-2" placeholder="Email" value={form.contactEmail} onChange={(e) => setForm((f) => ({ ...f, contactEmail: e.target.value }))} />
-      <input className="w-full rounded border px-3 py-2" placeholder="WhatsApp" value={form.contactWhatsapp} onChange={(e) => setForm((f) => ({ ...f, contactWhatsapp: e.target.value }))} />
-      <input className="w-full rounded border px-3 py-2" placeholder="Dirección" value={form.contactAddress} onChange={(e) => setForm((f) => ({ ...f, contactAddress: e.target.value }))} />
-      <button type="submit" className="rounded bg-teal-700 px-4 py-2 text-white">
-        Guardar
-      </button>
-    </form>
+    <PageShell
+      kicker="Cuenta"
+      title="Contacto"
+      description="Datos visibles en la tienda pública."
+      narrow
+    >
+      <form onSubmit={onSubmit}>
+        <PanelCard>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="contactEmail">Email</Label>
+              <Input
+                id="contactEmail"
+                className="min-h-11"
+                type="email"
+                placeholder="hola@tienda.com"
+                value={form.contactEmail}
+                onChange={(e) => setForm((f) => ({ ...f, contactEmail: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="contactWhatsapp">WhatsApp</Label>
+              <Input
+                id="contactWhatsapp"
+                className="min-h-11"
+                placeholder="54911..."
+                value={form.contactWhatsapp}
+                onChange={(e) => setForm((f) => ({ ...f, contactWhatsapp: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="contactAddress">Dirección</Label>
+              <Input
+                id="contactAddress"
+                className="min-h-11"
+                placeholder="Calle, ciudad"
+                value={form.contactAddress}
+                onChange={(e) => setForm((f) => ({ ...f, contactAddress: e.target.value }))}
+              />
+            </div>
+            <Button type="submit" className="min-h-11 font-bold" disabled={save.isPending}>
+              {save.isPending ? 'Guardando…' : 'Guardar'}
+            </Button>
+          </div>
+        </PanelCard>
+      </form>
+    </PageShell>
   );
 }

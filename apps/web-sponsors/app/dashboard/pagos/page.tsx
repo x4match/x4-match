@@ -5,6 +5,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { useSponsor } from '@/contexts/SponsorContext';
 import { toast } from 'sonner';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { PageShell, PanelCard, StatusPill } from '@/components/layout/PageShell';
 
 export default function PagosPage() {
   const { activeSponsorId, sponsorsLoading, sponsors } = useSponsor();
@@ -33,8 +37,13 @@ export default function PagosPage() {
       if (data.authUrl) window.location.href = data.authUrl;
       else toast.error('No se recibió la URL de Mercado Pago');
     },
-    onError: (err: any) => {
-      toast.error(err.response?.data?.message || err.message || 'No se pudo conectar Mercado Pago');
+    onError: (err: unknown) => {
+      const message =
+        (err as { response?: { data?: { message?: string }; message?: string } })?.response?.data
+          ?.message ||
+        (err as { message?: string })?.message ||
+        'No se pudo conectar Mercado Pago';
+      toast.error(message);
     },
   });
 
@@ -47,8 +56,11 @@ export default function PagosPage() {
       toast.success('MP desconectado');
       qc.invalidateQueries({ queryKey: ['partner-pay', activeSponsorId] });
     },
-    onError: (err: any) => {
-      toast.error(err.response?.data?.message || 'No se pudo desconectar');
+    onError: (err: unknown) => {
+      toast.error(
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+          'No se pudo desconectar',
+      );
     },
   });
 
@@ -61,8 +73,11 @@ export default function PagosPage() {
       toast.success('WhatsApp actualizado');
       qc.invalidateQueries({ queryKey: ['partner-pay', activeSponsorId] });
     },
-    onError: (err: any) => {
-      toast.error(err.response?.data?.message || 'No se pudo guardar WhatsApp');
+    onError: (err: unknown) => {
+      toast.error(
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+          'No se pudo guardar WhatsApp',
+      );
     },
   });
 
@@ -73,76 +88,99 @@ export default function PagosPage() {
   }
 
   if (sponsorsLoading) {
-    return <p className="text-sm text-slate-500">Cargando tienda…</p>;
+    return <p className="text-sm text-muted-foreground">Cargando tienda…</p>;
   }
 
   if (!ready) {
     return (
-      <div className="max-w-xl space-y-2">
-        <h1 className="text-2xl font-bold">Pagos</h1>
-        <p className="text-sm text-slate-600">
-          {sponsors.length === 0
-            ? 'Tu usuario PARTNER no tiene una tienda asignada. Pedile a ops que te vincule desde web-admin.'
-            : 'No hay una tienda activa seleccionada.'}
-        </p>
-      </div>
+      <PageShell kicker="Ventas" title="Pagos" description="Conectá cobros para tu tienda.">
+        <PanelCard>
+          <p className="text-sm text-muted-foreground">
+            {sponsors.length === 0
+              ? 'Tu usuario PARTNER no tiene una tienda asignada. Pedile a ops que te vincule desde web-admin.'
+              : 'No hay una tienda activa seleccionada.'}
+          </p>
+        </PanelCard>
+      </PageShell>
     );
   }
 
   const busy = connectMp.isPending || disconnectMp.isPending || saveWa.isPending;
+  const mpStatus = statusQ.isLoading ? '…' : statusQ.data?.mpStatus || 'DISCONNECTED';
+  const mpConnected = String(mpStatus).toUpperCase() === 'CONNECTED';
 
   return (
-    <div className="max-w-xl space-y-8">
-      <h1 className="text-2xl font-bold">Pagos</h1>
-      <section className="rounded-xl border bg-white p-4">
-        <h2 className="font-semibold">Mercado Pago</h2>
-        <p className="mt-1 text-sm text-slate-500">
-          Estado: {statusQ.isLoading ? '…' : statusQ.data?.mpStatus || 'DISCONNECTED'}
-        </p>
+    <PageShell
+      kicker="Ventas"
+      title="Pagos"
+      description="Mercado Pago y WhatsApp para cobros."
+      narrow
+    >
+      <PanelCard
+        title="Mercado Pago"
+        description="Conectá tu cuenta para cobrar online en la tienda."
+      >
+        <div className="mb-4 flex items-center gap-2">
+          <span className="text-sm text-muted-foreground">Estado</span>
+          <StatusPill tone={mpConnected ? 'success' : 'warning'}>{mpStatus}</StatusPill>
+        </div>
         {!statusQ.data?.oauthConfigured ? (
-          <p className="mt-2 text-sm text-amber-700">
+          <p className="mb-4 rounded-xl border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-warning">
             OAuth de Mercado Pago no está configurado en el servidor (MP_APP_ID / secret).
           </p>
         ) : null}
-        <div className="mt-3 flex gap-2">
-          <button
+        <div className="flex flex-wrap gap-2">
+          <Button
             type="button"
+            className="min-h-11 font-bold"
             disabled={busy || !statusQ.data?.oauthConfigured}
-            className="rounded bg-teal-700 px-3 py-2 text-sm text-white disabled:opacity-50"
             onClick={() => connectMp.mutate()}
           >
             {connectMp.isPending ? 'Redirigiendo…' : 'Conectar MP'}
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
+            variant="outline"
+            className="min-h-11"
             disabled={busy}
-            className="rounded border px-3 py-2 text-sm disabled:opacity-50"
             onClick={() => disconnectMp.mutate()}
           >
             Desconectar
-          </button>
+          </Button>
         </div>
-      </section>
-      <form onSubmit={onWa} className="rounded-xl border bg-white p-4 space-y-3">
-        <h2 className="font-semibold">WhatsApp (pago manual)</h2>
-        <input
-          className="w-full rounded border px-3 py-2"
-          placeholder="54911..."
-          value={phone}
-          onChange={(e) => setPhone(e.target.value)}
-        />
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
-          Habilitado
-        </label>
-        <button
-          type="submit"
-          disabled={busy}
-          className="rounded bg-teal-700 px-3 py-2 text-sm text-white disabled:opacity-50"
+      </PanelCard>
+
+      <form onSubmit={onWa}>
+        <PanelCard
+          title="WhatsApp (pago manual)"
+          description="Los clientes pueden coordinar el pago por chat."
         >
-          Guardar WhatsApp
-        </button>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="wa-phone">Teléfono</Label>
+              <Input
+                id="wa-phone"
+                className="min-h-11"
+                placeholder="54911..."
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+              />
+            </div>
+            <label className="flex min-h-11 cursor-pointer items-center gap-3 text-sm">
+              <input
+                type="checkbox"
+                className="size-4 accent-[var(--primary)]"
+                checked={enabled}
+                onChange={(e) => setEnabled(e.target.checked)}
+              />
+              Habilitado
+            </label>
+            <Button type="submit" className="min-h-11 font-bold" disabled={busy}>
+              {saveWa.isPending ? 'Guardando…' : 'Guardar WhatsApp'}
+            </Button>
+          </div>
+        </PanelCard>
       </form>
-    </div>
+    </PageShell>
   );
 }

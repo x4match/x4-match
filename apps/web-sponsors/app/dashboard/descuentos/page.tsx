@@ -5,6 +5,15 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { useSponsor } from '@/contexts/SponsorContext';
 import { toast } from 'sonner';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import {
+  EmptyHint,
+  ListRow,
+  PageShell,
+  PanelCard,
+  StatusPill,
+} from '@/components/layout/PageShell';
 
 export default function DescuentosPage() {
   const { activeSponsorId } = useSponsor();
@@ -28,6 +37,7 @@ export default function DescuentosPage() {
       toast.success('Cupón creado');
       qc.invalidateQueries({ queryKey: ['partner-coupons', activeSponsorId] });
     },
+    onError: () => toast.error('No se pudo crear el cupón'),
   });
 
   function onSubmit(e: FormEvent) {
@@ -35,24 +45,65 @@ export default function DescuentosPage() {
     create.mutate();
   }
 
+  const items = (listQ.data || []) as Array<{
+    id: string;
+    code: string;
+    discount_percent?: number;
+    discount_amount?: number;
+    active?: boolean;
+  }>;
+
   return (
-    <div className="space-y-4">
-      <h1 className="text-2xl font-bold">Descuentos</h1>
-      <form onSubmit={onSubmit} className="flex flex-wrap gap-2">
-        <input className="rounded border px-3 py-2" placeholder="Código" value={code} onChange={(e) => setCode(e.target.value)} required />
-        <input className="w-24 rounded border px-3 py-2" placeholder="%" value={percent} onChange={(e) => setPercent(e.target.value)} required />
-        <button type="submit" className="rounded bg-teal-700 px-4 py-2 text-white">
-          Crear
-        </button>
-      </form>
-      <ul className="space-y-2">
-        {(listQ.data || []).map((c: any) => (
-          <li key={c.id} className="rounded border bg-white px-3 py-2 text-sm">
-            {c.code} · {c.discount_percent ? `${c.discount_percent}%` : `$${c.discount_amount}`} ·{' '}
-            {c.active ? 'activo' : 'inactivo'}
-          </li>
-        ))}
-      </ul>
-    </div>
+    <PageShell
+      kicker="Ventas"
+      title="Descuentos"
+      description="Cupones porcentuales para promociones."
+    >
+      <PanelCard>
+        <form onSubmit={onSubmit} className="mb-4 flex flex-wrap gap-2">
+          <Input
+            className="min-h-11 min-w-[160px] flex-1"
+            placeholder="Código"
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            required
+          />
+          <Input
+            className="min-h-11 w-24"
+            placeholder="%"
+            value={percent}
+            onChange={(e) => setPercent(e.target.value)}
+            required
+          />
+          <Button type="submit" className="min-h-11 font-bold" disabled={create.isPending}>
+            Crear
+          </Button>
+        </form>
+        {listQ.isLoading ? (
+          <p className="text-sm text-muted-foreground">Cargando…</p>
+        ) : items.length === 0 ? (
+          <EmptyHint>Sin cupones todavía.</EmptyHint>
+        ) : (
+          <div className="space-y-2">
+            {items.map((c) => (
+              <ListRow
+                key={c.id}
+                title={c.code}
+                meta={
+                  c.discount_percent
+                    ? `${c.discount_percent}%`
+                    : `$${c.discount_amount}`
+                }
+                actions={
+                  <StatusPill tone={c.active ? 'success' : 'neutral'}>
+                    {c.active ? 'activo' : 'inactivo'}
+                  </StatusPill>
+                }
+              />
+            ))}
+          </div>
+        )}
+      </PanelCard>
+    </PageShell>
   );
 }

@@ -96,6 +96,7 @@ export default function GerentePage() {
       <TrialStatusBanner trial={trialQuery.data} />
 
       <PageHeader
+        kicker="Operación"
         title={report.clubName || activeClub?.name || 'Gerente'}
         subtitle={report.intro}
         actions={
