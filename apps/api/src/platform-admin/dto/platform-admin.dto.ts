@@ -24,8 +24,8 @@ export class CreateOpsUserDto {
 }
 
 export class UpdateUserRoleDto {
-  @IsIn(['PLAYER', 'CLUB_ADMIN', 'ORGANIZER', 'SUPER_ADMIN'])
-  role!: 'PLAYER' | 'CLUB_ADMIN' | 'ORGANIZER' | 'SUPER_ADMIN';
+  @IsIn(['PLAYER', 'CLUB_ADMIN', 'ORGANIZER', 'PARTNER', 'SUPER_ADMIN'])
+  role!: 'PLAYER' | 'CLUB_ADMIN' | 'ORGANIZER' | 'PARTNER' | 'SUPER_ADMIN';
 }
 
 export class StartClubTrialDto {

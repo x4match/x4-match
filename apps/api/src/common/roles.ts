@@ -8,6 +8,7 @@ export const EVENT_ORGANIZER_ROLES = [
   'CLUB_ADMIN',
   'SUPER_ADMIN',
 ] as const;
+export const PARTNER_ROLES = ['PARTNER', 'SUPER_ADMIN'] as const;
 
 export type StaffRole = (typeof CLUB_ROLES)[number] | (typeof ORGANIZER_ROLES)[number];
 
@@ -21,4 +22,8 @@ export function isOrganizerRole(role: string | undefined): boolean {
 
 export function canOrganizeEvents(role: string | undefined): boolean {
   return !!role && (EVENT_ORGANIZER_ROLES as readonly string[]).includes(role);
+}
+
+export function isPartnerRole(role: string | undefined): boolean {
+  return !!role && (PARTNER_ROLES as readonly string[]).includes(role);
 }

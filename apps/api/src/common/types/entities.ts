@@ -1,4 +1,4 @@
-export type UserRole = 'PLAYER' | 'CLUB_ADMIN' | 'SUPER_ADMIN';
+export type UserRole = 'PLAYER' | 'CLUB_ADMIN' | 'ORGANIZER' | 'PARTNER' | 'SUPER_ADMIN';
 export type MatchStatus =
   | 'OPEN'
   | 'FULL'
