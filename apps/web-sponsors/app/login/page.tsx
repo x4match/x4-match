@@ -5,6 +5,9 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { isPartner } from '@/lib/roles';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
 function LoginForm() {
   const { login } = useAuth();
@@ -28,52 +31,77 @@ function LoginForm() {
       }
       login(access_token, user);
       router.replace(search.get('next') || '/dashboard/resumen');
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'No se pudo iniciar sesión');
+    } catch (err: unknown) {
+      const message =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+        'No se pudo iniciar sesión';
+      setError(message);
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-100 p-4">
+    <div className="dark relative flex min-h-screen items-center justify-center overflow-hidden bg-background p-4">
+      <div
+        className="pointer-events-none absolute inset-0"
+        aria-hidden
+        style={{
+          background:
+            'radial-gradient(circle at 20% 20%, rgba(215,255,0,0.16), transparent 40%), radial-gradient(circle at 80% 10%, rgba(3,172,14,0.12), transparent 35%)',
+        }}
+      />
       <form
         onSubmit={onSubmit}
-        className="w-full max-w-md space-y-4 rounded-2xl border bg-white p-8 shadow-sm"
+        className="relative w-full max-w-md space-y-5 rounded-2xl border border-border bg-card/90 p-8 shadow-2xl backdrop-blur-md"
       >
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-teal-700">x4 partners</p>
-          <h1 className="mt-1 text-2xl font-bold">Panel del partner</h1>
-          <p className="text-sm text-slate-500">Gestioná tu tienda, productos y pedidos.</p>
+        <div className="flex items-center gap-3">
+          <div
+            className="flex size-10 items-center justify-center rounded-xl bg-primary text-sm font-extrabold text-primary-foreground"
+            aria-hidden
+          >
+            x4
+          </div>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">x4 partners</p>
         </div>
-        {error ? <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
-        <label className="block text-sm">
-          Email
-          <input
-            className="mt-1 w-full rounded-lg border px-3 py-2"
+        <div>
+          <h1 className="text-2xl font-extrabold tracking-tight">Panel del partner</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Gestioná tu tienda, productos y pedidos.
+          </p>
+        </div>
+        {error ? (
+          <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-red-300">
+            {error}
+          </p>
+        ) : null}
+        <div className="space-y-2">
+          <Label htmlFor="email">Email</Label>
+          <Input
+            id="email"
+            className="min-h-11"
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            autoComplete="email"
             required
           />
-        </label>
-        <label className="block text-sm">
-          Contraseña
-          <input
-            className="mt-1 w-full rounded-lg border px-3 py-2"
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="password">Contraseña</Label>
+          <Input
+            id="password"
+            className="min-h-11"
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            autoComplete="current-password"
             required
           />
-        </label>
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full rounded-lg bg-teal-700 px-4 py-2.5 font-semibold text-white disabled:opacity-60"
-        >
+        </div>
+        <Button type="submit" disabled={loading} className="min-h-11 w-full font-bold">
           {loading ? 'Entrando…' : 'Entrar'}
-        </button>
+        </Button>
       </form>
     </div>
   );
@@ -81,7 +109,7 @@ function LoginForm() {
 
 export default function PartnerLoginPage() {
   return (
-    <Suspense fallback={<div className="p-8">Cargando…</div>}>
+    <Suspense fallback={<div className="dark min-h-screen bg-background p-8 text-muted-foreground">Cargando…</div>}>
       <LoginForm />
     </Suspense>
   );

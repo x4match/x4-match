@@ -7,9 +7,9 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-geist-sans);
+  --font-sans: var(--font-plus-jakarta), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --font-heading: var(--font-plus-jakarta), ui-sans-serif, system-ui, sans-serif;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -41,6 +41,7 @@
   --color-card: var(--card);
   --color-success: var(--success);
   --color-warning: var(--warning);
+  --color-commerce: var(--commerce);
   --color-surface-0: var(--surface-0);
   --color-surface-1: var(--surface-1);
   --color-surface-2: var(--surface-2);
@@ -52,49 +53,50 @@
   --radius-2xl: calc(var(--radius) * 1.8);
 }
 
-/* Bright Court (light) */
+/* Marketplace Light — Tokopedia-inspired storefront */
 :root {
-  --background: #f1f5f9;
+  --background: #f5f7f5;
   --foreground: #0b1220;
   --card: #ffffff;
   --card-foreground: #0b1220;
   --popover: #ffffff;
   --popover-foreground: #0b1220;
-  --primary: #0d9488;
+  --primary: #03ac0e;
   --primary-foreground: #ffffff;
-  --secondary: #e8eef5;
+  --secondary: #e8f5e9;
   --secondary-foreground: #0b1220;
-  --muted: #e8eef5;
+  --muted: #eef2ee;
   --muted-foreground: #64748b;
-  --accent: #84cc16;
-  --accent-foreground: #0b1220;
+  --accent: #d7ff00;
+  --accent-foreground: #0a0a0a;
   --destructive: #dc2626;
   --border: rgba(15, 23, 42, 0.08);
   --input: rgba(15, 23, 42, 0.1);
-  --ring: #0d9488;
-  --success: #16a34a;
+  --ring: #03ac0e;
+  --success: #03ac0e;
   --warning: #d97706;
-  --surface-0: #e8eef5;
+  --commerce: #03ac0e;
+  --surface-0: #eef2ee;
   --surface-1: #ffffff;
-  --surface-2: #f8fafc;
-  --surface-3: #e2e8f0;
-  --chart-1: #0d9488;
-  --chart-2: #84cc16;
+  --surface-2: #f8faf8;
+  --surface-3: #e2e8e2;
+  --chart-1: #03ac0e;
+  --chart-2: #d7ff00;
   --chart-3: #64748b;
   --chart-4: #d97706;
   --chart-5: #dc2626;
-  --radius: 1.25rem;
+  --radius: 1rem;
   --sidebar: #ffffff;
   --sidebar-foreground: #0b1220;
-  --sidebar-primary: #0d9488;
+  --sidebar-primary: #03ac0e;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #e8eef5;
+  --sidebar-accent: #e8f5e9;
   --sidebar-accent-foreground: #0b1220;
   --sidebar-border: rgba(15, 23, 42, 0.08);
-  --sidebar-ring: #0d9488;
+  --sidebar-ring: #03ac0e;
 }
 
-/* Night Match (dark, default) */
+/* Night Match — partner dashboard (Figma Versión 1) */
 .dark {
   --background: #000000;
   --foreground: #fafafa;
@@ -116,6 +118,7 @@
   --ring: #d7ff00;
   --success: #22c55e;
   --warning: #f59e0b;
+  --commerce: #03ac0e;
   --surface-0: #111111;
   --surface-1: #161616;
   --surface-2: #1c1c1c;
@@ -141,8 +144,44 @@
   }
   body {
     @apply bg-background text-foreground antialiased;
+    font-family: var(--font-sans);
   }
   html {
     @apply font-sans;
   }
+  button,
+  a,
+  [role='button'] {
+    @apply cursor-pointer;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Storefront Tokopedia patterns */
+.sf-sticky-header {
+  @apply sticky top-0 z-40 border-b border-border/80 bg-card/90 backdrop-blur-md;
+}
+
+.sf-category-chip {
+  @apply flex flex-col items-center justify-center gap-2 rounded-2xl border border-border bg-card p-4 text-center text-sm font-semibold transition-all duration-150 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md;
+}
+
+.sf-product-card {
+  @apply group overflow-hidden rounded-2xl border border-border bg-card shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md;
+}
+
+.sf-price {
+  @apply text-base font-extrabold text-commerce;
+}
+
+.sf-badge-deal {
+  @apply absolute left-2 top-2 rounded-md bg-destructive px-2 py-0.5 text-[11px] font-bold text-white;
 }

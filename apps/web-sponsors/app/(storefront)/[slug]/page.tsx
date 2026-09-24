@@ -23,26 +23,29 @@ export default function StoreHomePage() {
   });
 
   const sponsor = storeQ.data;
-  const color = sponsor?.primary_color || '#0f766e';
+  const color = sponsor?.primary_color || '#03ac0e';
 
   return (
     <div>
       <section
-        className="relative overflow-hidden px-4 py-16 text-white"
+        className="relative overflow-hidden px-4 py-16 text-white md:py-20"
         style={{
           background: sponsor?.banner_url
-            ? `linear-gradient(rgba(0,0,0,.45), rgba(0,0,0,.55)), url(${sponsor.banner_url}) center/cover`
-            : color,
+            ? `linear-gradient(rgba(0,0,0,.42), rgba(0,0,0,.55)), url(${sponsor.banner_url}) center/cover`
+            : `linear-gradient(135deg, ${color} 0%, #0b1220 100%)`,
         }}
       >
         <div className="mx-auto max-w-6xl">
-          <h1 className="text-4xl font-bold">{sponsor?.name || 'Tienda'}</h1>
-          <p className="mt-2 max-w-xl text-white/90">
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-white/80">Tienda oficial</p>
+          <h1 className="mt-2 max-w-2xl text-4xl font-extrabold tracking-tight md:text-5xl">
+            {sponsor?.name || 'Tienda'}
+          </h1>
+          <p className="mt-3 max-w-xl text-base text-white/90 md:text-lg">
             {sponsor?.tagline || sponsor?.home_intro || sponsor?.description || 'Productos oficiales'}
           </p>
           <Link
             href={`/${slug}/productos`}
-            className="mt-6 inline-block rounded-full bg-white px-5 py-2.5 text-sm font-bold text-slate-900"
+            className="mt-8 inline-flex min-h-11 items-center rounded-full bg-white px-6 text-sm font-extrabold text-slate-900 transition-transform duration-150 hover:scale-[1.02]"
           >
             Ver productos
           </Link>
@@ -50,34 +53,53 @@ export default function StoreHomePage() {
       </section>
 
       <section className="mx-auto max-w-6xl px-4 py-10">
-        <h2 className="text-xl font-bold">Categorías</h2>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 md:grid-cols-4">
+        <div className="flex items-end justify-between gap-3">
+          <div>
+            <h2 className="text-xl font-extrabold tracking-tight">Categorías</h2>
+            <p className="mt-1 text-sm text-muted-foreground">Explorá por tipo de producto</p>
+          </div>
+        </div>
+        <div className="mt-5 grid gap-3 grid-cols-2 md:grid-cols-4">
           {(catsQ.data || []).map((c) => (
             <Link
               key={c.id}
               href={`/${slug}/productos?categoria=${c.slug || c.id}`}
-              className="rounded-xl border bg-white p-4 font-semibold hover:border-teal-600"
+              className="sf-category-chip"
             >
+              <span
+                className="flex size-10 items-center justify-center rounded-full text-sm font-bold text-white"
+                style={{ background: color }}
+                aria-hidden
+              >
+                {c.name.slice(0, 1).toUpperCase()}
+              </span>
               {c.name}
             </Link>
           ))}
           {!catsQ.data?.length ? (
-            <p className="text-sm text-slate-500">Pronto vas a ver categorías acá.</p>
+            <p className="col-span-full text-sm text-muted-foreground">Pronto vas a ver categorías acá.</p>
           ) : null}
         </div>
       </section>
 
       {(offersQ.data || []).length > 0 ? (
         <section className="mx-auto max-w-6xl px-4 py-6">
-          <h2 className="text-xl font-bold">Ofertas</h2>
+          <h2 className="text-xl font-extrabold tracking-tight">Ofertas</h2>
+          <p className="mt-1 text-sm text-muted-foreground">Descuentos activos ahora</p>
           <ProductGrid slug={slug} products={offersQ.data!} color={color} />
         </section>
       ) : null}
 
       <section className="mx-auto max-w-6xl px-4 py-6 pb-16">
         <div className="flex items-center justify-between">
-          <h2 className="text-xl font-bold">Productos</h2>
-          <Link href={`/${slug}/productos`} className="text-sm font-semibold text-teal-700">
+          <div>
+            <h2 className="text-xl font-extrabold tracking-tight">Productos</h2>
+            <p className="mt-1 text-sm text-muted-foreground">Lo más reciente de la tienda</p>
+          </div>
+          <Link
+            href={`/${slug}/productos`}
+            className="text-sm font-bold text-commerce transition-opacity hover:opacity-80"
+          >
             Ver todos
           </Link>
         </div>
@@ -93,44 +115,41 @@ function ProductGrid({
   color,
 }: {
   slug: string;
-  products: any[];
+  products: Array<Record<string, unknown>>;
   color: string;
 }) {
   return (
-    <div className="mt-4 grid gap-4 sm:grid-cols-2 md:grid-cols-4">
+    <div className="mt-5 grid gap-4 grid-cols-2 md:grid-cols-4">
       {products.map((p) => {
         const compare = Number(p.compare_at_price || p.compareAtPrice || 0);
         const price = Number(p.price);
         const off = compare > price ? Math.round(((compare - price) / compare) * 100) : 0;
-        const img = productImageUrl(p) || p.photo_url;
+        const img = productImageUrl(p as never) || (p.photo_url as string | undefined);
         return (
-          <Link
-            key={p.id}
-            href={`/${slug}/productos/${p.id}`}
-            className="overflow-hidden rounded-xl border bg-white"
-          >
-            <div className="relative aspect-square bg-slate-100">
+          <Link key={String(p.id)} href={`/${slug}/productos/${p.id}`} className="sf-product-card">
+            <div className="relative aspect-square bg-muted">
               {img ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={img} alt="" className="h-full w-full object-cover" />
-              ) : null}
-              {off > 0 ? (
-                <span
-                  className="absolute left-2 top-2 rounded px-2 py-0.5 text-xs font-bold text-white"
-                  style={{ background: color }}
-                >
-                  {off}% OFF
-                </span>
-              ) : null}
+                <img
+                  src={img}
+                  alt=""
+                  className="size-full object-cover transition-transform duration-200 group-hover:scale-[1.03]"
+                />
+              ) : (
+                <div className="flex size-full items-center justify-center text-sm text-muted-foreground">
+                  Sin imagen
+                </div>
+              )}
+              {off > 0 ? <span className="sf-badge-deal">{off}% OFF</span> : null}
             </div>
-            <div className="p-3">
-              <p className="line-clamp-2 text-sm font-semibold">{p.name}</p>
-              <div className="mt-2 flex items-baseline gap-2">
-                <span className="font-bold" style={{ color }}>
+            <div className="space-y-1.5 p-3">
+              <p className="line-clamp-2 min-h-[2.5rem] text-sm font-semibold leading-snug">{String(p.name)}</p>
+              <div className="flex items-baseline gap-2">
+                <span className="sf-price" style={{ color }}>
                   {formatMoney(price)}
                 </span>
                 {off > 0 ? (
-                  <span className="text-xs text-slate-400 line-through">{formatMoney(compare)}</span>
+                  <span className="text-xs text-muted-foreground line-through">{formatMoney(compare)}</span>
                 ) : null}
               </div>
             </div>

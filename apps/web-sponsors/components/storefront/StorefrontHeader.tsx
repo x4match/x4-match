@@ -36,26 +36,30 @@ export function StorefrontHeader({ sponsor }: { sponsor: StorefrontSponsor }) {
   ];
 
   return (
-    <header className="border-b bg-card">
-      <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-4">
-        <Link href={`/${slug}`} className="flex items-center gap-3">
+    <header className="sf-sticky-header">
+      <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
+        <Link href={`/${slug}`} className="flex min-h-11 items-center gap-3">
           {logo ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={logo} alt={sponsor.name} className="size-9 rounded-lg object-cover" />
+            <img src={logo} alt={sponsor.name} className="size-9 rounded-xl object-cover" />
           ) : (
-            <div className="flex size-9 items-center justify-center rounded-lg bg-primary text-sm font-bold text-primary-foreground">
+            <div className="flex size-9 items-center justify-center rounded-xl bg-primary text-sm font-extrabold text-primary-foreground">
               {sponsor.name.slice(0, 1).toUpperCase()}
             </div>
           )}
           <div>
-            <p className="font-semibold leading-tight">{sponsor.name}</p>
+            <p className="font-extrabold leading-tight tracking-tight">{sponsor.name}</p>
             <p className="text-xs text-muted-foreground">Tienda oficial</p>
           </div>
         </Link>
 
-        <nav className="hidden items-center gap-4 text-sm md:flex">
+        <nav className="hidden items-center gap-5 text-sm font-medium md:flex" aria-label="Tienda">
           {links.map((l) => (
-            <Link key={l.href} href={l.href} className="text-muted-foreground hover:text-foreground">
+            <Link
+              key={l.href}
+              href={l.href}
+              className="text-muted-foreground transition-colors hover:text-foreground"
+            >
               {l.label}
             </Link>
           ))}
@@ -64,15 +68,15 @@ export function StorefrontHeader({ sponsor }: { sponsor: StorefrontSponsor }) {
         <div className="flex items-center gap-2">
           <Link
             href={`/${slug}/cuenta/login`}
-            className="hidden text-sm text-muted-foreground hover:text-foreground sm:inline"
+            className="hidden min-h-11 items-center text-sm font-medium text-muted-foreground transition-colors hover:text-foreground sm:inline-flex"
           >
             Cuenta
           </Link>
           <Link
             href={`/${slug}/carrito`}
-            className="relative inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium"
+            className="relative inline-flex min-h-11 items-center gap-2 rounded-full border border-border bg-card px-4 text-sm font-bold transition-colors hover:border-primary/40"
           >
-            <ShoppingCart className="size-4" />
+            <ShoppingCart className="size-4" aria-hidden />
             Carrito
             {count > 0 ? (
               <span className="absolute -right-1.5 -top-1.5 flex size-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">

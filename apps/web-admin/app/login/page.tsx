@@ -42,24 +42,57 @@ export default function LoginPage() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 24 }}>
-      <form onSubmit={onSubmit} className="card" style={{ width: '100%', maxWidth: 420 }}>
-        <p style={{ color: 'var(--primary)', fontSize: 12, fontWeight: 700, letterSpacing: '0.2em' }}>
-          X4 MATCH OPS
-        </p>
-        <h1 style={{ margin: '8px 0 4px', fontSize: 28 }}>Backoffice interno</h1>
-        <p style={{ color: 'var(--muted)', marginBottom: 20, fontSize: 14 }}>
+    <div className="login-shell">
+      <form onSubmit={onSubmit} className="login-card">
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 8 }}>
+          <div className="ops-brand-mark" aria-hidden>
+            x4
+          </div>
+          <p
+            style={{
+              color: 'var(--primary)',
+              fontSize: 12,
+              fontWeight: 700,
+              letterSpacing: '0.18em',
+              margin: 0,
+            }}
+          >
+            X4 MATCH OPS
+          </p>
+        </div>
+        <h1 style={{ margin: '8px 0 4px', fontSize: 28, fontWeight: 800, letterSpacing: '-0.03em' }}>
+          Backoffice interno
+        </h1>
+        <p style={{ color: 'var(--muted-strong)', marginBottom: 20, fontSize: 14 }}>
           Monitoreo, trials, clubes y módulos de la plataforma.
         </p>
-        <label style={{ display: 'block', marginBottom: 12 }}>
-          <span style={{ fontSize: 13, color: 'var(--muted)' }}>Email</span>
-          <input className="input" style={{ marginTop: 6 }} type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+        <label className="login-field">
+          <span>Email</span>
+          <input
+            className="input"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            autoComplete="email"
+            required
+          />
         </label>
-        <label style={{ display: 'block', marginBottom: 16 }}>
-          <span style={{ fontSize: 13, color: 'var(--muted)' }}>Contraseña</span>
-          <input className="input" style={{ marginTop: 6 }} type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+        <label className="login-field">
+          <span>Contraseña</span>
+          <input
+            className="input"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            autoComplete="current-password"
+            required
+          />
         </label>
-        {error ? <p style={{ color: '#fca5a5', fontSize: 13, marginBottom: 12 }}>{error}</p> : null}
+        {error ? (
+          <p role="alert" style={{ color: '#fca5a5', fontSize: 13, marginBottom: 12 }}>
+            {error}
+          </p>
+        ) : null}
         <button className="btn btn-primary" style={{ width: '100%' }} disabled={loading}>
           {loading ? 'Ingresando…' : 'Ingresar'}
         </button>
