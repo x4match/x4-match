@@ -51,11 +51,30 @@ const NAV = [
 
 function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
+  const { clubs, clubsLoading } = useClub();
+  const hasClub = clubs.length > 0;
+
   return (
     <nav className="flex flex-col gap-1">
       {NAV.map(({ href, label, icon: Icon }) => {
         const active =
           href === '/panel' ? pathname === '/panel' : pathname.startsWith(href);
+        const locked = !clubsLoading && !hasClub && href !== '/perfil';
+
+        if (locked) {
+          return (
+            <span
+              key={href}
+              aria-disabled="true"
+              title="Creá tu club en Perfil para desbloquear el panel"
+              className="flex cursor-not-allowed items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-sidebar-foreground/35"
+            >
+              <Icon className="size-4 shrink-0" />
+              {label}
+            </span>
+          );
+        }
+
         return (
           <Link
             key={href}
@@ -79,7 +98,7 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
 
 function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
   const { user, logout } = useAuth();
-  const { clubs, activeClubId, setSelectedClubId } = useClub();
+  const { clubs, clubsLoading, activeClubId, setSelectedClubId } = useClub();
   const { theme, setTheme, resolvedTheme } = useTheme();
   const router = useRouter();
 
@@ -115,6 +134,13 @@ function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
       )}
 
       <NavLinks onNavigate={onNavigate} />
+
+      {!clubsLoading && clubs.length === 0 ? (
+        <p className="rounded-xl bg-sidebar-accent/60 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
+          Creá tu club en <span className="font-semibold text-foreground">Perfil</span> para
+          desbloquear el resto del panel.
+        </p>
+      ) : null}
 
       <div className="mt-auto space-y-3">
         <Separator />

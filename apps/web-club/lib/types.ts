@@ -15,15 +15,18 @@ export type MineClub = {
   id: string;
   name: string;
   city?: string;
-  zone?: string;
   logoUrl?: string | null;
   logo_url?: string | null;
   coverUrl?: string | null;
   cover_url?: string | null;
+  cardPhotoUrl?: string | null;
+  card_photo_url?: string | null;
   address?: string;
   phone?: string;
   email?: string;
   description?: string;
+  latitude?: number | string | null;
+  longitude?: number | string | null;
   subscriptionPlan?: string;
   subscription_plan?: string;
   currency?: string;
@@ -54,4 +57,16 @@ export function clubLogoUrl(club?: MineClub | null): string | null {
 
 export function clubCoverUrl(club?: MineClub | null): string | null {
   return club?.coverUrl ?? club?.cover_url ?? null;
+}
+
+export type ClubPhoto = {
+  id: string;
+  clubId?: string;
+  photoUrl: string;
+  isPrimary?: boolean;
+  sortOrder?: number;
+};
+
+export function clubCardPhotoUrl(club?: MineClub | null): string | null {
+  return club?.cardPhotoUrl ?? club?.card_photo_url ?? clubCoverUrl(club) ?? clubLogoUrl(club);
 }

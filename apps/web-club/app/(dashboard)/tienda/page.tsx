@@ -169,7 +169,8 @@ function ShopInner() {
 
   const [couponCode, setCouponCode] = useState('');
   const [couponLabel, setCouponLabel] = useState('');
-  const [couponPercent, setCouponPercent] = useState('10');
+  const [couponPercent, setCouponPercent] = useState('');
+  const [couponPoints, setCouponPoints] = useState('');
 
   const [rewardOpen, setRewardOpen] = useState(false);
   const [editingRewardId, setEditingRewardId] = useState<string | null>(null);
@@ -293,20 +294,27 @@ function ShopInner() {
 
   const createCoupon = useMutation({
     mutationFn: async () => {
+      const points = couponPoints.trim() ? Number(couponPoints) : undefined;
+      const percent = couponPercent.trim() ? Number(couponPercent) : undefined;
+      if (!couponCode.trim()) throw new Error('Indicá un código');
+      if (!percent && !points) throw new Error('Indicá descuento % o puntos canjeables');
       await api.post(`/clubs/${activeClubId}/shop/coupons`, {
         code: couponCode.trim().toUpperCase(),
         label: couponLabel.trim() || couponCode.trim().toUpperCase(),
-        discountPercent: Number(couponPercent) || 10,
+        discountPercent: percent || undefined,
+        pointsCost: points || undefined,
       });
     },
     onSuccess: async () => {
       setCouponCode('');
       setCouponLabel('');
+      setCouponPercent('');
+      setCouponPoints('');
       await queryClient.invalidateQueries({ queryKey: ['club-shop-coupons', activeClubId] });
       toast.success('Cupón creado');
     },
-    onError: (err: { response?: { data?: { message?: string } } }) => {
-      toast.error(err.response?.data?.message || 'Error al crear cupón');
+    onError: (err: { message?: string; response?: { data?: { message?: string } } }) => {
+      toast.error(err.response?.data?.message || err.message || 'Error al crear cupón');
     },
   });
 
@@ -647,8 +655,11 @@ function ShopInner() {
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Nuevo cupón</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Descuento en tienda y/o puntos canjeables de regalo (no suman al ranking competitivo).
+              </p>
             </CardHeader>
-            <CardContent className="grid gap-3 sm:grid-cols-4">
+            <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
               <Input
                 placeholder="Código"
                 value={couponCode}
@@ -656,15 +667,21 @@ function ShopInner() {
                 className="rounded-xl"
               />
               <Input
-                placeholder="Nombre (ej. 20% en tienda)"
+                placeholder="Nombre (ej. 100 pts de regalo)"
                 value={couponLabel}
                 onChange={(e) => setCouponLabel(e.target.value)}
                 className="rounded-xl"
               />
               <Input
-                placeholder="% descuento"
+                placeholder="% descuento (opcional)"
                 value={couponPercent}
                 onChange={(e) => setCouponPercent(e.target.value)}
+                className="rounded-xl"
+              />
+              <Input
+                placeholder="Pts canjeables (opcional)"
+                value={couponPoints}
+                onChange={(e) => setCouponPoints(e.target.value)}
                 className="rounded-xl"
               />
               <Button className="rounded-xl" onClick={() => createCoupon.mutate()}>
@@ -681,7 +698,12 @@ function ShopInner() {
                     {c.label ? `${c.label} · ` : ''}
                     {(c.discountPercent ?? c.discount_percent) != null
                       ? `${c.discountPercent ?? c.discount_percent}%`
-                      : formatCurrency(c.discountAmount ?? c.discount_amount ?? 0)}
+                      : null}
+                    {(c.pointsCost ?? c.points_cost)
+                      ? `${(c.discountPercent ?? c.discount_percent) != null ? ' · ' : ''}+${c.pointsCost ?? c.points_cost} pts canjeables`
+                      : (c.discountPercent ?? c.discount_percent) == null
+                        ? formatCurrency(c.discountAmount ?? c.discount_amount ?? 0)
+                        : ''}
                   </p>
                 </div>
                 <Button

@@ -34,6 +34,8 @@ type TournamentValidation = {
   status?: string;
   club_validation_status?: string;
   organizer_name?: string;
+  organizer_nickname?: string;
+  organizer_display_name?: string;
   start_date?: string;
   startDate?: string;
 };
@@ -173,7 +175,14 @@ export default function RankingPage() {
                 <div>
                   <p className="font-semibold">{v.name || v.title || 'Torneo'}</p>
                   <p className="text-sm text-muted-foreground">
-                    {v.organizer_name || 'Organizador'} ·{' '}
+                    Organiza{' '}
+                    <span className="font-medium text-foreground">
+                      {v.organizer_display_name ||
+                        v.organizer_nickname ||
+                        v.organizer_name ||
+                        'Sin organizador'}
+                    </span>
+                    {' · '}
                     {v.club_validation_status || v.status || 'PENDING'}
                   </p>
                 </div>

@@ -8,16 +8,16 @@ export default function LandingPage() {
     <div className="dark min-h-screen bg-black text-[#FAFAFA]">
       {/* Full-bleed atmosphere — court + light */}
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_90%_70%_at_50%_-20%,rgba(245,197,24,0.28),transparent_55%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_90%_70%_at_50%_-20%,rgba(215,255,0,0.28),transparent_55%)]" />
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_40%_50%_at_100%_100%,rgba(255,229,102,0.1),transparent_45%)]" />
         {/* Court lines — edge to edge */}
         <div className="absolute inset-0 opacity-[0.12]">
-          <div className="absolute left-[8%] right-[8%] top-[22%] h-px bg-[#F5C518]" />
-          <div className="absolute bottom-[18%] left-[8%] right-[8%] h-px bg-[#F5C518]" />
-          <div className="absolute bottom-[18%] left-[8%] top-[22%] w-px bg-[#F5C518]" />
-          <div className="absolute bottom-[18%] right-[8%] top-[22%] w-px bg-[#F5C518]" />
-          <div className="absolute left-1/2 top-[22%] h-[60%] w-px -translate-x-1/2 bg-[#F5C518]" />
-          <div className="absolute left-[8%] top-1/2 h-px w-[84%] -translate-y-1/2 bg-[#F5C518]/70" />
+          <div className="absolute left-[8%] right-[8%] top-[22%] h-px bg-[#D7FF00]" />
+          <div className="absolute bottom-[18%] left-[8%] right-[8%] h-px bg-[#D7FF00]" />
+          <div className="absolute bottom-[18%] left-[8%] top-[22%] w-px bg-[#D7FF00]" />
+          <div className="absolute bottom-[18%] right-[8%] top-[22%] w-px bg-[#D7FF00]" />
+          <div className="absolute left-1/2 top-[22%] h-[60%] w-px -translate-x-1/2 bg-[#D7FF00]" />
+          <div className="absolute left-[8%] top-1/2 h-px w-[84%] -translate-y-1/2 bg-[#D7FF00]/70" />
         </div>
         <div
           className="absolute inset-0 opacity-[0.03]"
@@ -30,7 +30,7 @@ export default function LandingPage() {
       </div>
 
       <header className="relative z-20 mx-auto flex max-w-6xl items-center justify-between px-5 py-6 sm:px-8">
-        <p className="text-sm font-extrabold tracking-tight text-[#F5C518] sm:text-base">
+        <p className="text-sm font-extrabold tracking-tight text-[#D7FF00] sm:text-base">
           x4 match
         </p>
         <nav className="flex items-center gap-2 sm:gap-3">
@@ -48,7 +48,7 @@ export default function LandingPage() {
           </Link>
           <Link
             href="/register"
-            className="rounded-full bg-[#FFE566] px-4 py-2 text-sm font-bold text-[#0A0A0A] transition-transform hover:scale-[1.03] active:scale-[0.97]"
+            className="rounded-full bg-[#E8FF66] px-4 py-2 text-sm font-bold text-[#0A0A0A] transition-transform hover:scale-[1.03] active:scale-[0.97]"
           >
             Registrarse
           </Link>
@@ -60,7 +60,7 @@ export default function LandingPage() {
         <section className="relative mx-auto flex min-h-[calc(100vh-5.5rem)] max-w-6xl flex-col justify-center px-5 pb-20 pt-6 sm:px-8">
           <div className="max-w-4xl">
             <h1 className="animate-in fade-in slide-in-from-bottom-3 duration-700 fill-mode-both">
-              <span className="block text-[clamp(3.25rem,12vw,7rem)] font-extrabold leading-[0.88] tracking-[-0.045em] text-[#F5C518]">
+              <span className="block text-[clamp(3.25rem,12vw,7rem)] font-extrabold leading-[0.88] tracking-[-0.045em] text-[#D7FF00]">
                 x4 match
               </span>
               <span className="mt-4 block max-w-2xl text-[clamp(1.5rem,4.5vw,2.75rem)] font-bold leading-[1.1] tracking-[-0.03em] text-[#FAFAFA]">
@@ -74,7 +74,7 @@ export default function LandingPage() {
             <div className="mt-10 flex flex-wrap items-center gap-3 animate-in fade-in slide-in-from-bottom-3 fill-mode-both duration-700 [animation-delay:220ms]">
               <Link
                 href="/register"
-                className="group inline-flex items-center gap-2 rounded-full bg-[#FFE566] px-7 py-3.5 text-sm font-bold text-[#0A0A0A] shadow-[0_0_40px_rgba(245,197,24,0.25)] transition-transform hover:scale-[1.03] active:scale-[0.97]"
+                className="group inline-flex items-center gap-2 rounded-full bg-[#E8FF66] px-7 py-3.5 text-sm font-bold text-[#0A0A0A] shadow-[0_0_40px_rgba(215,255,0,0.25)] transition-transform hover:scale-[1.03] active:scale-[0.97]"
               >
                 Empezar ahora
                 <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
@@ -106,7 +106,7 @@ export default function LandingPage() {
               },
             ].map((item, i) => (
               <div key={item.title}>
-                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#F5C518]">
+                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#D7FF00]">
                   0{i + 1}
                 </p>
                 <h2 className="mt-3 text-xl font-bold tracking-tight">{item.title}</h2>
@@ -129,7 +129,7 @@ export default function LandingPage() {
             <div className="flex shrink-0 flex-wrap gap-3">
               <Link
                 href="/register"
-                className="inline-flex items-center gap-2 rounded-full bg-[#F5C518] px-6 py-3.5 text-sm font-bold text-[#0A0A0A] transition-transform hover:scale-[1.02] active:scale-[0.97]"
+                className="inline-flex items-center gap-2 rounded-full bg-[#D7FF00] px-6 py-3.5 text-sm font-bold text-[#0A0A0A] transition-transform hover:scale-[1.02] active:scale-[0.97]"
               >
                 Registrarse
                 <ArrowRight className="size-4" />

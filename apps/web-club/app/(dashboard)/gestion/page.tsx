@@ -234,6 +234,24 @@ function GestionInner() {
   const [courtOpen, setCourtOpen] = useState(false);
   const [newCourtName, setNewCourtName] = useState('');
   const [expandedCourtId, setExpandedCourtId] = useState<string | null>(null);
+  const [scheduleDay, setScheduleDay] = useState('1');
+  const [scheduleStart, setScheduleStart] = useState('09:00');
+  const [scheduleEnd, setScheduleEnd] = useState('22:00');
+
+  const DAY_OPTIONS = [
+    { value: '0', label: 'Domingo' },
+    { value: '1', label: 'Lunes' },
+    { value: '2', label: 'Martes' },
+    { value: '3', label: 'Miércoles' },
+    { value: '4', label: 'Jueves' },
+    { value: '5', label: 'Viernes' },
+    { value: '6', label: 'Sábado' },
+  ] as const;
+
+  const dayLabel = (day: number | string | null | undefined) => {
+    const n = Number(day);
+    return DAY_OPTIONS.find((d) => Number(d.value) === n)?.label || `Día ${day ?? '?'}`;
+  };
 
   const schedulesQuery = useQuery({
     queryKey: ['court-schedules', activeClubId, expandedCourtId],
@@ -428,10 +446,15 @@ function GestionInner() {
 
   const addSchedule = useMutation({
     mutationFn: async () => {
+      const start = hourToMinutes(scheduleStart) / 60;
+      const end = hourToMinutes(scheduleEnd) / 60;
+      if (!Number.isFinite(start) || !Number.isFinite(end) || start >= end) {
+        throw new Error('El horario de fin tiene que ser después del de inicio');
+      }
       await api.post(`/clubs/${activeClubId}/courts/${expandedCourtId}/schedules`, {
-        dayOfWeek: 1,
-        startHour: '09:00',
-        endHour: '22:00',
+        dayOfWeek: Number(scheduleDay),
+        startHour: start,
+        endHour: end,
       });
     },
     onSuccess: async () => {
@@ -439,6 +462,12 @@ function GestionInner() {
         queryKey: ['court-schedules', activeClubId, expandedCourtId],
       });
       toast.success('Horario fijo agregado');
+    },
+    onError: (err: { response?: { data?: { message?: string | string[] } }; message?: string }) => {
+      const msg = err.response?.data?.message;
+      toast.error(
+        Array.isArray(msg) ? msg.join(' · ') : msg || err.message || 'Error al agregar horario',
+      );
     },
   });
 
@@ -460,8 +489,8 @@ function GestionInner() {
       await api.post(`/clubs/${activeClubId}/promotions`, {
         label: promoLabel.trim() || 'Horario valle',
         dayOfWeek: Number(promoDay),
-        startHour: promoStart,
-        endHour: promoEnd,
+        startHour: hourToMinutes(promoStart) / 60,
+        endHour: hourToMinutes(promoEnd) / 60,
         bonusPoints: 0,
       });
     },
@@ -469,8 +498,9 @@ function GestionInner() {
       await queryClient.invalidateQueries({ queryKey: ['club-promotions', activeClubId] });
       toast.success('Promoción creada');
     },
-    onError: (err: { response?: { data?: { message?: string } } }) => {
-      toast.error(err.response?.data?.message || 'Error');
+    onError: (err: { response?: { data?: { message?: string | string[] } } }) => {
+      const msg = err.response?.data?.message;
+      toast.error(Array.isArray(msg) ? msg.join(' · ') : msg || 'Error');
     },
   });
 
@@ -691,16 +721,16 @@ function GestionInner() {
                 </div>
               </CardHeader>
               {expandedCourtId === court.id ? (
-                <CardContent className="space-y-2">
+                <CardContent className="space-y-3">
                   {(schedulesQuery.data || []).map((s) => (
                     <div
                       key={s.id}
                       className="flex items-center justify-between rounded-xl bg-surface-0 px-3 py-2 text-sm"
                     >
                       <span>
-                        Día {s.dayOfWeek ?? s.day_of_week} ·{' '}
-                        {String(s.startHour ?? s.start_hour)}–
-                        {String(s.endHour ?? s.end_hour)}
+                        {dayLabel(s.dayOfWeek ?? s.day_of_week)} ·{' '}
+                        {formatHourLabel(hourToMinutes(s.startHour ?? s.start_hour ?? 0) / 60)}–
+                        {formatHourLabel(hourToMinutes(s.endHour ?? s.end_hour ?? 0) / 60)}
                       </span>
                       <Button
                         variant="ghost"
@@ -711,9 +741,57 @@ function GestionInner() {
                       </Button>
                     </div>
                   ))}
-                  <Button variant="secondary" size="sm" className="rounded-xl" onClick={() => addSchedule.mutate()}>
-                    Agregar Lun 09–22
-                  </Button>
+                  {(schedulesQuery.data || []).length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      Todavía no hay horarios fijos. Agregá uno para poder generar slots.
+                    </p>
+                  ) : null}
+                  <div className="grid gap-3 rounded-xl border border-border/60 p-3 sm:grid-cols-4">
+                    <div className="space-y-1">
+                      <Label>Día</Label>
+                      <Select value={scheduleDay} onValueChange={setScheduleDay}>
+                        <SelectTrigger className="rounded-xl">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {DAY_OPTIONS.map((d) => (
+                            <SelectItem key={d.value} value={d.value}>
+                              {d.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Desde</Label>
+                      <Input
+                        type="time"
+                        step={1800}
+                        value={scheduleStart}
+                        onChange={(e) => setScheduleStart(e.target.value)}
+                        className="rounded-xl"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Hasta</Label>
+                      <Input
+                        type="time"
+                        step={1800}
+                        value={scheduleEnd}
+                        onChange={(e) => setScheduleEnd(e.target.value)}
+                        className="rounded-xl"
+                      />
+                    </div>
+                    <div className="flex items-end">
+                      <Button
+                        className="w-full rounded-xl"
+                        disabled={addSchedule.isPending}
+                        onClick={() => addSchedule.mutate()}
+                      >
+                        Agregar horario
+                      </Button>
+                    </div>
+                  </div>
                 </CardContent>
               ) : null}
             </Card>
@@ -724,6 +802,9 @@ function GestionInner() {
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Nueva promoción valle</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Boost de puntos canjeables en esa franja (según el plan). No afecta ranking competitivo ni del club.
+              </p>
             </CardHeader>
             <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <div className="space-y-1">

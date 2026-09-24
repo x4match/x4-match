@@ -303,7 +303,7 @@ export const accountDeletion: LegalDocument = {
       title: '2. Datos que se eliminan',
       paragraphs: [
         'Al eliminar tu cuenta, borramos o anonimizamos tu perfil (nombre, email, teléfono, foto, preferencias de juego, ubicación guardada y credenciales de acceso).',
-        'También eliminamos tu lista de amigos, conversaciones privadas, notificaciones y tokens de sesión activos.',
+        'También eliminamos tus seguidores/seguidos, conversaciones privadas, notificaciones y tokens de sesión activos.',
         'Si tenías una cuenta de club (gerente), se desvincula tu acceso; los datos operativos del club pueden conservarse según el contrato con la sede.',
       ],
     },

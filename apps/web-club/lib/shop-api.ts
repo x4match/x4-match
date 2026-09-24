@@ -40,6 +40,12 @@ export type ShopCoupon = {
   discount_percent?: number | null;
   discountAmount?: number | null;
   discount_amount?: number | null;
+  pointsCost?: number | null;
+  points_cost?: number | null;
+  maxUses?: number | null;
+  max_uses?: number | null;
+  usesCount?: number;
+  uses_count?: number;
   maxRedemptions?: number | null;
   redeemedCount?: number;
   isActive?: boolean;
