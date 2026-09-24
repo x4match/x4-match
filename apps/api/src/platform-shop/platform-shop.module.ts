@@ -13,6 +13,7 @@ import { SponsorPaymentsService } from './sponsor-payments.service';
 @Module({
   controllers: [
     PlatformShopController,
+    // Partner antes que Public: evita que GET /sponsors/:slug capture "me".
     SponsorsPartnerController,
     SponsorsPublicController,
     PlatformShopAdminController,

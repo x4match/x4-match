@@ -125,8 +125,20 @@ export class SponsorPaymentsService {
   }
 
   async startOAuth(sponsorId: string, userId: string) {
+    if (!sponsorId || sponsorId === 'null' || sponsorId === 'undefined') {
+      throw new BadRequestException('sponsorId inválido');
+    }
     if (!this.isOAuthConfigured()) {
       throw new BadRequestException('Mercado Pago OAuth no está configurado');
+    }
+    const redirectUri = this.oauthRedirectUri();
+    if (/localhost|127\.0\.0\.1/i.test(redirectUri) && process.env.NODE_ENV === 'production') {
+      this.logger.error(
+        `MP OAuth redirect_uri apunta a local (${redirectUri}). Configurá API_PUBLIC_URL o MP_SPONSOR_REDIRECT_URI.`,
+      );
+      throw new BadRequestException(
+        'Mercado Pago OAuth mal configurado en el servidor (redirect_uri local). Pedile a ops que setee API_PUBLIC_URL.',
+      );
     }
     const state = this.signOAuthState({
       sponsorId,
@@ -138,7 +150,7 @@ export class SponsorPaymentsService {
       response_type: 'code',
       platform_id: 'mp',
       state,
-      redirect_uri: this.oauthRedirectUri(),
+      redirect_uri: redirectUri,
     });
     return {
       authUrl: `https://auth.mercadopago.com/authorization?${params.toString()}`,

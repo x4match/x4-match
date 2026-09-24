@@ -54,9 +54,11 @@ export function SponsorProvider({ children }: { children: ReactNode }) {
     queryFn: async () => {
       const res = await api.get('/sponsors/me');
       const data = res.data;
-      return (Array.isArray(data) ? data : data?.sponsors ?? data?.items ?? []) as MineSponsor[];
+      const list = (Array.isArray(data) ? data : data?.sponsors ?? data?.items ?? []) as MineSponsor[];
+      return list.filter((s) => typeof s?.id === 'string' && s.id.length > 0);
     },
     enabled: canManage,
+    retry: 2,
   });
 
   const sponsors = sponsorsQuery.data ?? [];
