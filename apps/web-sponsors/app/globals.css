@@ -96,7 +96,7 @@
   --sidebar-ring: #03ac0e;
 }
 
-/* Night Match — partner dashboard (Figma Versión 1) */
+/* Night Match — partner dashboard */
 .dark {
   --background: #000000;
   --foreground: #fafafa;
@@ -165,17 +165,44 @@
   }
 }
 
-/* Storefront Tokopedia patterns */
+/* Dashboard v0 canvas */
+.dash-canvas {
+  @apply min-h-screen bg-[radial-gradient(900px_420px_at_0%_0%,rgba(215,255,0,0.08),transparent_55%),radial-gradient(700px_360px_at_100%_0%,rgba(3,172,14,0.08),transparent_50%),#000];
+}
+
+.dash-topbar {
+  @apply sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-border/80 bg-background/80 px-4 backdrop-blur-md lg:px-6;
+}
+
+.dash-bento {
+  @apply grid gap-4;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.dash-stat {
+  @apply relative overflow-hidden rounded-2xl border border-border bg-card p-5 transition-colors duration-150 hover:border-primary/30;
+}
+
+.dash-stat::after {
+  content: '';
+  @apply pointer-events-none absolute -right-6 -top-6 size-24 rounded-full bg-primary/10;
+}
+
+/* Storefront Tokopedia / v0 commerce */
 .sf-sticky-header {
   @apply sticky top-0 z-40 border-b border-border/80 bg-card/90 backdrop-blur-md;
 }
 
 .sf-category-chip {
-  @apply flex flex-col items-center justify-center gap-2 rounded-2xl border border-border bg-card p-4 text-center text-sm font-semibold transition-all duration-150 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md;
+  @apply flex shrink-0 flex-col items-center justify-center gap-2 rounded-2xl border border-border bg-card p-4 text-center text-sm font-semibold transition-all duration-150 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md;
+}
+
+.sf-category-rail {
+  @apply flex gap-3 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden;
 }
 
 .sf-product-card {
-  @apply group overflow-hidden rounded-2xl border border-border bg-card shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md;
+  @apply overflow-hidden rounded-2xl border border-border bg-card shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md;
 }
 
 .sf-price {

@@ -2,7 +2,8 @@
 
 import { useAuth } from '@/contexts/AuthContext';
 import { useSponsor } from '@/contexts/SponsorContext';
-import { PageShell, PanelCard, StatusPill } from '@/components/layout/PageShell';
+import { PageShell, StatusPill } from '@/components/layout/PageShell';
+import { FormSection } from '@/components/layout/FormSection';
 
 export default function AjustesPage() {
   const { user } = useAuth();
@@ -13,9 +14,9 @@ export default function AjustesPage() {
       kicker="Cuenta"
       title="Ajustes"
       description="Información de la sesión y la tienda activa."
-      narrow
+      variant="form"
     >
-      <PanelCard title="Usuario">
+      <FormSection title="Usuario">
         <dl className="space-y-3 text-sm">
           <div className="flex justify-between gap-4">
             <dt className="text-muted-foreground">Nombre</dt>
@@ -32,8 +33,8 @@ export default function AjustesPage() {
             </dd>
           </div>
         </dl>
-      </PanelCard>
-      <PanelCard title="Partner activo">
+      </FormSection>
+      <FormSection title="Partner activo">
         <dl className="space-y-3 text-sm">
           <div className="flex justify-between gap-4">
             <dt className="text-muted-foreground">Nombre</dt>
@@ -44,7 +45,7 @@ export default function AjustesPage() {
             <dd className="font-mono text-xs font-semibold">{activeSponsor?.slug || '—'}</dd>
           </div>
         </dl>
-      </PanelCard>
+      </FormSection>
     </PageShell>
   );
 }

@@ -771,6 +771,13 @@ export class PlatformShopService {
            contact_address = COALESCE($12, contact_address),
            free_shipping_threshold = COALESCE($13, free_shipping_threshold),
            active = COALESCE($14, active),
+           secondary_color = COALESCE($15, secondary_color),
+           accent_color = COALESCE($16, accent_color),
+           favicon_url = COALESCE($17, favicon_url),
+           store_theme = CASE
+             WHEN $18::jsonb IS NULL THEN store_theme
+             ELSE COALESCE(store_theme, '{}'::jsonb) || $18::jsonb
+           END,
            updated_at = NOW()
        WHERE id = $1
        RETURNING *`,
@@ -789,6 +796,10 @@ export class PlatformShopService {
         dto.contactAddress ?? null,
         dto.freeShippingThreshold === undefined ? null : dto.freeShippingThreshold,
         dto.active ?? null,
+        dto.secondaryColor ?? null,
+        dto.accentColor ?? null,
+        dto.faviconUrl ?? null,
+        dto.storeTheme ? JSON.stringify(dto.storeTheme) : null,
       ],
     );
     if (!result.rows[0]) throw new NotFoundException('Partner no encontrado');

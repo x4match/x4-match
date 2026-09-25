@@ -8,7 +8,8 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { PageShell, PanelCard } from '@/components/layout/PageShell';
+import { PageShell } from '@/components/layout/PageShell';
+import { FormSection } from '@/components/layout/FormSection';
 
 export default function ContactoDashPage() {
   const { activeSponsorId } = useSponsor();
@@ -53,10 +54,10 @@ export default function ContactoDashPage() {
       kicker="Cuenta"
       title="Contacto"
       description="Datos visibles en la tienda pública."
-      narrow
+      variant="form"
     >
       <form onSubmit={onSubmit}>
-        <PanelCard>
+        <FormSection>
           <div className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="contactEmail">Email</Label>
@@ -93,7 +94,7 @@ export default function ContactoDashPage() {
               {save.isPending ? 'Guardando…' : 'Guardar'}
             </Button>
           </div>
-        </PanelCard>
+        </FormSection>
       </form>
     </PageShell>
   );

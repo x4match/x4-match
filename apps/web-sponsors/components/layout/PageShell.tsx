@@ -9,6 +9,7 @@ export function PageShell({
   children,
   className,
   narrow,
+  variant = 'default',
 }: {
   kicker?: string;
   title: string;
@@ -17,9 +18,17 @@ export function PageShell({
   children: ReactNode;
   className?: string;
   narrow?: boolean;
+  variant?: 'default' | 'bento' | 'table' | 'form';
 }) {
   return (
-    <div className={cn('space-y-6', narrow && 'max-w-xl', className)}>
+    <div
+      className={cn(
+        'space-y-6',
+        narrow && 'max-w-xl',
+        variant === 'form' && 'max-w-2xl',
+        className,
+      )}
+    >
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-primary">{kicker}</p>
@@ -28,7 +37,7 @@ export function PageShell({
         </div>
         {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
       </header>
-      {children}
+      {variant === 'bento' ? <div className="dash-bento">{children}</div> : children}
     </div>
   );
 }
@@ -84,9 +93,9 @@ export function ListRow({
 
 export function EmptyHint({ children }: { children: ReactNode }) {
   return (
-    <p className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
-      {children}
-    </p>
+    <div className="rounded-2xl border border-dashed border-border bg-card/40 px-4 py-12 text-center">
+      <p className="text-sm text-muted-foreground">{children}</p>
+    </div>
   );
 }
 

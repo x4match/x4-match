@@ -7,12 +7,11 @@ import { useSponsor } from '@/contexts/SponsorContext';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import {
-  EmptyHint,
-  ListRow,
-  PageShell,
-  PanelCard,
-} from '@/components/layout/PageShell';
+import { PageShell } from '@/components/layout/PageShell';
+import { FormSection } from '@/components/layout/FormSection';
+import { DataTable, type DataTableColumn } from '@/components/layout/DataTable';
+
+type Category = { id: string; name: string; slug: string };
 
 export default function CategoriasPage() {
   const { activeSponsorId } = useSponsor();
@@ -38,16 +37,21 @@ export default function CategoriasPage() {
     create.mutate();
   }
 
-  const items = (listQ.data || []) as Array<{ id: string; name: string; slug: string }>;
+  const items = (listQ.data || []) as Category[];
+  const columns: DataTableColumn<Category>[] = [
+    { key: 'name', header: 'Nombre', cell: (c) => <span className="font-semibold">{c.name}</span> },
+    { key: 'slug', header: 'Slug', cell: (c) => <span className="font-mono text-xs">/{c.slug}</span> },
+  ];
 
   return (
     <PageShell
       kicker="Catálogo"
       title="Categorías"
       description="Organizá productos para la navegación de la tienda."
+      variant="table"
     >
-      <PanelCard>
-        <form onSubmit={onSubmit} className="mb-4 flex flex-col gap-2 sm:flex-row">
+      <FormSection title="Nueva categoría">
+        <form onSubmit={onSubmit} className="flex flex-col gap-2 sm:flex-row">
           <Input
             className="min-h-11 flex-1"
             value={name}
@@ -59,18 +63,13 @@ export default function CategoriasPage() {
             Agregar
           </Button>
         </form>
-        {listQ.isLoading ? (
-          <p className="text-sm text-muted-foreground">Cargando…</p>
-        ) : items.length === 0 ? (
-          <EmptyHint>Sin categorías todavía.</EmptyHint>
-        ) : (
-          <div className="space-y-2">
-            {items.map((c) => (
-              <ListRow key={c.id} title={c.name} meta={`/${c.slug}`} />
-            ))}
-          </div>
-        )}
-      </PanelCard>
+      </FormSection>
+      <DataTable
+        columns={columns}
+        rows={items}
+        loading={listQ.isLoading}
+        empty="Sin categorías todavía."
+      />
     </PageShell>
   );
 }

@@ -7,7 +7,8 @@ import { useSponsor } from '@/contexts/SponsorContext';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { PageShell, PanelCard, StatusPill } from '@/components/layout/PageShell';
+import { PageShell, StatusPill } from '@/components/layout/PageShell';
+import { FormSection } from '@/components/layout/FormSection';
 
 export default function DominioPage() {
   const { activeSponsorId } = useSponsor();
@@ -57,22 +58,21 @@ export default function DominioPage() {
   });
 
   const s = sponsorQ.data;
+  const status = s?.custom_domain_status || 'NONE';
 
   function onSubmit(e: FormEvent) {
     e.preventDefault();
     setDomainMut.mutate();
   }
 
-  const status = s?.custom_domain_status || 'NONE';
-
   return (
     <PageShell
       kicker="Cuenta"
       title="Dominio"
       description="URL pública y dominio propio de la tienda."
-      narrow
+      variant="form"
     >
-      <PanelCard title="URL de la tienda">
+      <FormSection title="URL de la tienda">
         <p className="text-sm text-muted-foreground">
           Default:{' '}
           <a
@@ -89,9 +89,9 @@ export default function DominioPage() {
           <span className="font-semibold">{s?.custom_domain || '—'}</span>
           <StatusPill tone={status === 'VERIFIED' ? 'success' : 'warning'}>{status}</StatusPill>
         </div>
-      </PanelCard>
+      </FormSection>
 
-      <PanelCard title="Configurar dominio">
+      <FormSection title="Configurar dominio">
         <form onSubmit={onSubmit} className="flex flex-col gap-2 sm:flex-row">
           <Input
             className="min-h-11 flex-1"
@@ -130,7 +130,7 @@ export default function DominioPage() {
             Quitar dominio
           </Button>
         </div>
-      </PanelCard>
+      </FormSection>
     </PageShell>
   );
 }

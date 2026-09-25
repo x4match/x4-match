@@ -1,39 +1,23 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import {
   Boxes,
   Contact,
   CreditCard,
   Globe,
   LayoutDashboard,
-  LogOut,
-  Menu,
   Package,
   Palette,
   Percent,
   Settings,
   ShoppingBag,
-  Tag,
   Truck,
 } from 'lucide-react';
-import { useState } from 'react';
 import { cn } from '@/lib/utils';
-import { useAuth } from '@/contexts/AuthContext';
-import { useSponsor } from '@/contexts/SponsorContext';
-import { Button } from '@/components/ui/button';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Separator } from '@/components/ui/separator';
-import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 
-const NAV_GROUPS = [
+export const NAV_GROUPS = [
   {
     label: 'Tienda',
     items: [
@@ -62,7 +46,13 @@ const NAV_GROUPS = [
   },
 ];
 
-function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
+export function SidebarNav({
+  onNavigate,
+  pendingOrders,
+}: {
+  onNavigate?: () => void;
+  pendingOrders?: number;
+}) {
   const pathname = usePathname();
 
   return (
@@ -74,6 +64,7 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
           </p>
           {group.items.map(({ href, label, icon: Icon }) => {
             const active = pathname === href || pathname.startsWith(`${href}/`);
+            const showBadge = href === '/dashboard/pedidos' && (pendingOrders ?? 0) > 0;
             return (
               <Link
                 key={href}
@@ -88,7 +79,17 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
                 )}
               >
                 <Icon className="size-4 shrink-0" aria-hidden />
-                {label}
+                <span className="flex-1">{label}</span>
+                {showBadge ? (
+                  <span
+                    className={cn(
+                      'rounded-full px-1.5 py-0.5 text-[10px] font-bold',
+                      active ? 'bg-primary-foreground/20' : 'bg-primary text-primary-foreground',
+                    )}
+                  >
+                    {pendingOrders}
+                  </span>
+                ) : null}
               </Link>
             );
           })}
@@ -98,104 +99,24 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
   );
 }
 
-function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
-  const { user, logout } = useAuth();
-  const { sponsors, activeSponsorId, setSelectedSponsorId } = useSponsor();
-  const router = useRouter();
-  const activeSponsor = sponsors.find((s) => s.id === activeSponsorId);
-
+export function AppSidebar({ pendingOrders }: { pendingOrders?: number }) {
   return (
-    <div className="flex h-full flex-col gap-6 p-4">
-      <div className="flex items-start gap-3">
+    <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-sidebar-border bg-sidebar/90 backdrop-blur-md lg:flex">
+      <div className="flex h-14 items-center gap-3 border-b border-sidebar-border px-4">
         <div
-          className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary text-sm font-extrabold text-primary-foreground"
+          className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary text-xs font-extrabold text-primary-foreground"
           aria-hidden
         >
           x4
         </div>
         <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">x4 match</p>
-          <h1 className="mt-0.5 text-lg font-extrabold tracking-tight">Panel Partner</h1>
-          <p className="mt-1 truncate text-sm text-muted-foreground">{user?.name}</p>
+          <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-primary">x4 match</p>
+          <p className="truncate text-sm font-extrabold tracking-tight">Commerce OS</p>
         </div>
       </div>
-
-      {sponsors.length > 0 && (
-        <div className="space-y-2">
-          <p className="text-xs font-medium text-muted-foreground">Sponsor activo</p>
-          <Select
-            value={activeSponsorId || undefined}
-            onValueChange={(v) => setSelectedSponsorId(v)}
-          >
-            <SelectTrigger className="w-full min-h-11 bg-surface-1">
-              <SelectValue placeholder="Elegir sponsor" />
-            </SelectTrigger>
-            <SelectContent>
-              {sponsors.map((sponsor) => (
-                <SelectItem key={sponsor.id} value={sponsor.id}>
-                  {sponsor.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      )}
-
-      <NavLinks onNavigate={onNavigate} />
-
-      <div className="mt-auto space-y-3">
-        <Separator />
-        {activeSponsor?.slug ? (
-          <Button variant="outline" className="w-full min-h-11 justify-start gap-2" asChild>
-            <Link href={`/${activeSponsor.slug}`} target="_blank" onClick={onNavigate}>
-              <Tag className="size-4" aria-hidden />
-              Ver tienda
-            </Link>
-          </Button>
-        ) : null}
-        <Button
-          type="button"
-          variant="ghost"
-          className="w-full min-h-11 justify-start gap-2 text-muted-foreground"
-          onClick={() => {
-            logout();
-            router.replace('/login');
-            onNavigate?.();
-          }}
-        >
-          <LogOut className="size-4" aria-hidden />
-          Cerrar sesión
-        </Button>
+      <div className="flex-1 overflow-y-auto p-3">
+        <SidebarNav pendingOrders={pendingOrders} />
       </div>
-    </div>
-  );
-}
-
-export function AppSidebar() {
-  const [open, setOpen] = useState(false);
-
-  return (
-    <>
-      <aside className="sticky top-0 hidden h-screen w-64 shrink-0 border-r border-sidebar-border bg-sidebar/90 backdrop-blur-md lg:block">
-        <SidebarBody />
-      </aside>
-
-      <div className="fixed left-0 right-0 top-0 z-40 flex items-center gap-3 border-b border-border bg-background/90 px-4 py-3 backdrop-blur-md lg:hidden">
-        <Sheet open={open} onOpenChange={setOpen}>
-          <SheetTrigger asChild>
-            <Button type="button" variant="outline" size="icon" className="size-11" aria-label="Menú">
-              <Menu className="size-4" aria-hidden />
-            </Button>
-          </SheetTrigger>
-          <SheetContent side="left" className="w-72 border-sidebar-border bg-sidebar p-0">
-            <SidebarBody onNavigate={() => setOpen(false)} />
-          </SheetContent>
-        </Sheet>
-        <div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-primary">x4 match</p>
-          <p className="font-semibold">Panel Partner</p>
-        </div>
-      </div>
-    </>
+    </aside>
   );
 }

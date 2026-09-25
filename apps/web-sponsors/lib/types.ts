@@ -47,6 +47,10 @@ export type StorefrontSponsor = {
   contact_address?: string | null;
   primaryColor?: string | null;
   primary_color?: string | null;
+  secondary_color?: string | null;
+  accent_color?: string | null;
+  favicon_url?: string | null;
+  store_theme?: import('./store-theme').StoreTheme | null;
   free_shipping_threshold?: number | null;
   payment_options?: {
     mpEnabled: boolean;

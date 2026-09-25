@@ -7,13 +7,17 @@ import { useSponsor } from '@/contexts/SponsorContext';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import {
-  EmptyHint,
-  ListRow,
-  PageShell,
-  PanelCard,
-  StatusPill,
-} from '@/components/layout/PageShell';
+import { PageShell, StatusPill } from '@/components/layout/PageShell';
+import { FormSection } from '@/components/layout/FormSection';
+import { DataTable, type DataTableColumn } from '@/components/layout/DataTable';
+
+type Coupon = {
+  id: string;
+  code: string;
+  discount_percent?: number;
+  discount_amount?: number;
+  active?: boolean;
+};
 
 export default function DescuentosPage() {
   const { activeSponsorId } = useSponsor();
@@ -45,22 +49,35 @@ export default function DescuentosPage() {
     create.mutate();
   }
 
-  const items = (listQ.data || []) as Array<{
-    id: string;
-    code: string;
-    discount_percent?: number;
-    discount_amount?: number;
-    active?: boolean;
-  }>;
+  const items = (listQ.data || []) as Coupon[];
+  const columns: DataTableColumn<Coupon>[] = [
+    { key: 'code', header: 'Código', cell: (c) => <span className="font-bold">{c.code}</span> },
+    {
+      key: 'discount',
+      header: 'Descuento',
+      cell: (c) =>
+        c.discount_percent ? `${c.discount_percent}%` : `$${c.discount_amount}`,
+    },
+    {
+      key: 'active',
+      header: 'Estado',
+      cell: (c) => (
+        <StatusPill tone={c.active ? 'success' : 'neutral'}>
+          {c.active ? 'activo' : 'inactivo'}
+        </StatusPill>
+      ),
+    },
+  ];
 
   return (
     <PageShell
       kicker="Ventas"
       title="Descuentos"
       description="Cupones porcentuales para promociones."
+      variant="table"
     >
-      <PanelCard>
-        <form onSubmit={onSubmit} className="mb-4 flex flex-wrap gap-2">
+      <FormSection title="Crear cupón">
+        <form onSubmit={onSubmit} className="flex flex-wrap gap-2">
           <Input
             className="min-h-11 min-w-[160px] flex-1"
             placeholder="Código"
@@ -79,31 +96,8 @@ export default function DescuentosPage() {
             Crear
           </Button>
         </form>
-        {listQ.isLoading ? (
-          <p className="text-sm text-muted-foreground">Cargando…</p>
-        ) : items.length === 0 ? (
-          <EmptyHint>Sin cupones todavía.</EmptyHint>
-        ) : (
-          <div className="space-y-2">
-            {items.map((c) => (
-              <ListRow
-                key={c.id}
-                title={c.code}
-                meta={
-                  c.discount_percent
-                    ? `${c.discount_percent}%`
-                    : `$${c.discount_amount}`
-                }
-                actions={
-                  <StatusPill tone={c.active ? 'success' : 'neutral'}>
-                    {c.active ? 'activo' : 'inactivo'}
-                  </StatusPill>
-                }
-              />
-            ))}
-          </div>
-        )}
-      </PanelCard>
+      </FormSection>
+      <DataTable columns={columns} rows={items} loading={listQ.isLoading} empty="Sin cupones todavía." />
     </PageShell>
   );
 }

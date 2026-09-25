@@ -7,12 +7,11 @@ import { useSponsor } from '@/contexts/SponsorContext';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import {
-  EmptyHint,
-  ListRow,
-  PageShell,
-  PanelCard,
-} from '@/components/layout/PageShell';
+import { PageShell } from '@/components/layout/PageShell';
+import { FormSection } from '@/components/layout/FormSection';
+import { DataTable, type DataTableColumn } from '@/components/layout/DataTable';
+
+type Shipping = { id: string; name: string; type: string; price: number | string };
 
 export default function EnviosPage() {
   const { activeSponsorId } = useSponsor();
@@ -46,21 +45,26 @@ export default function EnviosPage() {
     create.mutate();
   }
 
-  const items = (listQ.data || []) as Array<{
-    id: string;
-    name: string;
-    type: string;
-    price: number | string;
-  }>;
+  const items = (listQ.data || []) as Shipping[];
+  const columns: DataTableColumn<Shipping>[] = [
+    { key: 'name', header: 'Método', cell: (m) => <span className="font-semibold">{m.name}</span> },
+    { key: 'type', header: 'Tipo', cell: (m) => m.type },
+    {
+      key: 'price',
+      header: 'Precio',
+      cell: (m) => `$${Number(m.price).toLocaleString('es-AR')}`,
+    },
+  ];
 
   return (
     <PageShell
       kicker="Ventas"
       title="Envíos"
       description="Retiro en local, tarifa fija o gratis sobre monto."
+      variant="table"
     >
-      <PanelCard>
-        <form onSubmit={onSubmit} className="mb-4 flex flex-wrap gap-2">
+      <FormSection title="Agregar método">
+        <form onSubmit={onSubmit} className="flex flex-wrap gap-2">
           <Input
             className="min-h-11 min-w-[160px] flex-1"
             value={name}
@@ -75,31 +79,18 @@ export default function EnviosPage() {
             <option value="FLAT">Tarifa fija</option>
             <option value="FREE_OVER">Gratis sobre monto</option>
           </select>
-          <Input
-            className="min-h-11 w-28"
-            value={price}
-            onChange={(e) => setPrice(e.target.value)}
-          />
+          <Input className="min-h-11 w-28" value={price} onChange={(e) => setPrice(e.target.value)} />
           <Button type="submit" className="min-h-11 font-bold" disabled={create.isPending}>
             Agregar
           </Button>
         </form>
-        {listQ.isLoading ? (
-          <p className="text-sm text-muted-foreground">Cargando…</p>
-        ) : items.length === 0 ? (
-          <EmptyHint>Sin métodos de envío.</EmptyHint>
-        ) : (
-          <div className="space-y-2">
-            {items.map((m) => (
-              <ListRow
-                key={m.id}
-                title={m.name}
-                meta={`${m.type} · $${Number(m.price).toLocaleString('es-AR')}`}
-              />
-            ))}
-          </div>
-        )}
-      </PanelCard>
+      </FormSection>
+      <DataTable
+        columns={columns}
+        rows={items}
+        loading={listQ.isLoading}
+        empty="Sin métodos de envío."
+      />
     </PageShell>
   );
 }

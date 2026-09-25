@@ -15,6 +15,100 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
+/** Partner storefront visual theme (stored as JSONB). */
+export class StoreThemeDto {
+  @IsOptional()
+  @IsString()
+  secondaryColor?: string;
+
+  @IsOptional()
+  @IsString()
+  accentColor?: string;
+
+  @IsOptional()
+  @IsString()
+  backgroundColor?: string;
+
+  @IsOptional()
+  @IsString()
+  surfaceColor?: string;
+
+  @IsOptional()
+  @IsString()
+  textColor?: string;
+
+  @IsOptional()
+  @IsString()
+  mutedTextColor?: string;
+
+  @IsOptional()
+  @IsIn(['jakarta', 'inter', 'outfit', 'dm-sans', 'space-grotesk', 'playfair', 'rubik'])
+  fontFamily?: string;
+
+  @IsOptional()
+  @IsIn(['full-bleed', 'split', 'minimal', 'banner-only'])
+  heroStyle?: string;
+
+  @IsOptional()
+  @IsIn([2, 3, 4])
+  productGridCols?: number;
+
+  @IsOptional()
+  @IsIn(['soft', 'bordered', 'flat', 'shadow'])
+  cardStyle?: string;
+
+  @IsOptional()
+  @IsIn(['none', 'sm', 'md', 'lg', 'xl'])
+  cornerRadius?: string;
+
+  @IsOptional()
+  @IsIn(['solid', 'transparent', 'blur'])
+  headerStyle?: string;
+
+  @IsOptional()
+  @IsIn(['light', 'dark', 'brand'])
+  colorMode?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  showCategories?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  showOffers?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  showSearch?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  showTagline?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  ctaLabel?: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(1)
+  heroOverlay?: number;
+
+  @IsOptional()
+  @IsString()
+  faviconUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  heroHeadline?: string;
+
+  @IsOptional()
+  @IsString()
+  footerText?: string;
+}
+
 export class CreatePlatformOrderDto {
   @IsUUID()
   productId: string;
@@ -203,11 +297,28 @@ export class UpdatePlatformSponsorDto {
 
   @IsOptional()
   @IsString()
+  secondaryColor?: string;
+
+  @IsOptional()
+  @IsString()
+  accentColor?: string;
+
+  @IsOptional()
+  @IsString()
   bannerUrl?: string;
 
   @IsOptional()
   @IsString()
   homeIntro?: string;
+
+  @IsOptional()
+  @IsString()
+  faviconUrl?: string;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => StoreThemeDto)
+  storeTheme?: StoreThemeDto;
 
   @IsOptional()
   @IsString()

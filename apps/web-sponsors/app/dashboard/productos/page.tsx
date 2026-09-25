@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useState } from 'react';
+import { FormEvent, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
 import { api } from '@/lib/api';
@@ -10,18 +10,22 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
-  EmptyHint,
-  ListRow,
-  PageShell,
-  PanelCard,
-  StatusPill,
-} from '@/components/layout/PageShell';
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { PageShell, StatusPill } from '@/components/layout/PageShell';
+import { DataTable, type DataTableColumn } from '@/components/layout/DataTable';
 
 type Product = {
   id: string;
   name: string;
   price: number | string;
   status: string;
+  stock_quantity?: number;
+  photo_url?: string;
 };
 
 const FIELD_LABELS: Record<string, string> = {
@@ -42,6 +46,7 @@ export default function ProductosPage() {
     enabled: !!activeSponsorId,
   });
   const [open, setOpen] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'DRAFT'>('ALL');
   const [form, setForm] = useState({
     name: '',
     description: '',
@@ -85,13 +90,53 @@ export default function ProductosPage() {
     create.mutate();
   }
 
-  const products = (listQ.data || []) as Product[];
+  const products = useMemo(() => {
+    const all = (listQ.data || []) as Product[];
+    if (statusFilter === 'ALL') return all;
+    return all.filter((p) => p.status === statusFilter);
+  }, [listQ.data, statusFilter]);
+
+  const columns: DataTableColumn<Product>[] = [
+    {
+      key: 'name',
+      header: 'Producto',
+      cell: (p) => (
+        <div className="flex items-center gap-3">
+          <div className="size-10 overflow-hidden rounded-lg bg-muted">
+            {p.photo_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={p.photo_url} alt="" className="size-full object-cover" />
+            ) : null}
+          </div>
+          <span className="font-semibold">{p.name}</span>
+        </div>
+      ),
+    },
+    {
+      key: 'price',
+      header: 'Precio',
+      cell: (p) => `$${Number(p.price).toLocaleString('es-AR')}`,
+    },
+    {
+      key: 'stock',
+      header: 'Stock',
+      cell: (p) => (p.stock_quantity != null ? p.stock_quantity : '—'),
+    },
+    {
+      key: 'status',
+      header: 'Estado',
+      cell: (p) => (
+        <StatusPill tone={p.status === 'ACTIVE' ? 'success' : 'neutral'}>{p.status}</StatusPill>
+      ),
+    },
+  ];
 
   return (
     <PageShell
       kicker="Catálogo"
       title="Productos"
       description="Publicá y gestioná el inventario de tu tienda."
+      variant="table"
       actions={
         <Button type="button" className="min-h-11 gap-2 font-bold" onClick={() => setOpen(true)}>
           <Plus className="size-4" aria-hidden />
@@ -99,41 +144,40 @@ export default function ProductosPage() {
         </Button>
       }
     >
-      <PanelCard>
-        {listQ.isLoading ? (
-          <p className="text-sm text-muted-foreground">Cargando productos…</p>
-        ) : products.length === 0 ? (
-          <EmptyHint>Todavía no hay productos. Creá el primero.</EmptyHint>
-        ) : (
-          <div className="space-y-2">
-            {products.map((p) => (
-              <ListRow
-                key={p.id}
-                title={p.name}
-                meta={`$${Number(p.price).toLocaleString('es-AR')}`}
-                actions={
-                  <StatusPill tone={p.status === 'ACTIVE' ? 'success' : 'neutral'}>{p.status}</StatusPill>
-                }
-              />
-            ))}
-          </div>
-        )}
-      </PanelCard>
-
-      {open ? (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="new-product-title"
-        >
-          <form
-            onSubmit={onSubmit}
-            className="w-full max-w-md space-y-4 rounded-2xl border border-border bg-card p-5 shadow-2xl"
+      <div className="mb-4 flex flex-wrap gap-2">
+        {(['ALL', 'ACTIVE', 'DRAFT'] as const).map((s) => (
+          <Button
+            key={s}
+            type="button"
+            size="sm"
+            variant={statusFilter === s ? 'default' : 'outline'}
+            className="min-h-9"
+            onClick={() => setStatusFilter(s)}
           >
-            <h2 id="new-product-title" className="text-lg font-extrabold">
-              Nuevo producto
-            </h2>
+            {s === 'ALL' ? 'Todos' : s}
+          </Button>
+        ))}
+      </div>
+
+      <DataTable
+        columns={columns}
+        rows={products}
+        loading={listQ.isLoading}
+        empty="Todavía no hay productos. Creá el primero."
+      />
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+          <form onSubmit={onSubmit} className="space-y-4">
+            <DialogHeader>
+              <DialogTitle>Nuevo producto</DialogTitle>
+            </DialogHeader>
+            {form.photoUrl ? (
+              <div className="aspect-video overflow-hidden rounded-xl bg-muted">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={form.photoUrl} alt="" className="size-full object-cover" />
+              </div>
+            ) : null}
             {(['name', 'description', 'price', 'compareAtPrice', 'stockQuantity', 'photoUrl'] as const).map(
               (k) => (
                 <div key={k} className="space-y-2">
@@ -141,7 +185,6 @@ export default function ProductosPage() {
                   <Input
                     id={k}
                     className="min-h-11"
-                    placeholder={FIELD_LABELS[k]}
                     value={form[k]}
                     onChange={(e) => setForm((f) => ({ ...f, [k]: e.target.value }))}
                     required={k === 'name' || k === 'price'}
@@ -149,22 +192,17 @@ export default function ProductosPage() {
                 </div>
               ),
             )}
-            <div className="flex gap-2 pt-2">
-              <Button type="submit" className="min-h-11 flex-1 font-bold" disabled={create.isPending}>
-                {create.isPending ? 'Guardando…' : 'Guardar'}
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                className="min-h-11"
-                onClick={() => setOpen(false)}
-              >
+            <DialogFooter className="gap-2">
+              <Button type="button" variant="outline" className="min-h-11" onClick={() => setOpen(false)}>
                 Cancelar
               </Button>
-            </div>
+              <Button type="submit" className="min-h-11 font-bold" disabled={create.isPending}>
+                {create.isPending ? 'Guardando…' : 'Guardar'}
+              </Button>
+            </DialogFooter>
           </form>
-        </div>
-      ) : null}
+        </DialogContent>
+      </Dialog>
     </PageShell>
   );
 }
