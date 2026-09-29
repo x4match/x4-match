@@ -319,6 +319,31 @@ export class UpdateMatchDto {
   dateId?: string;
 }
 
+export class CreateTournamentPlayerDto {
+  @IsString()
+  name!: string;
+
+  @IsIn(['DRIVE', 'REVES'])
+  side!: 'DRIVE' | 'REVES';
+
+  @IsOptional()
+  @IsUUID()
+  userId?: string;
+}
+
+export class UpdateTournamentPlayerDto {
+  @IsIn(['DRIVE', 'REVES'])
+  side!: 'DRIVE' | 'REVES';
+}
+
+export class CreateTournamentPairDto {
+  @IsUUID()
+  driveId!: string;
+
+  @IsUUID()
+  revesId!: string;
+}
+
 export class GenerateFixtureDto {
   @IsOptional()
   @IsString()

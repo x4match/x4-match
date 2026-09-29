@@ -29,10 +29,13 @@ import {
   CreateTournamentDto,
   CreateTournamentInvitesDto,
   CreateTournamentMatchDto,
+  CreateTournamentPairDto,
+  CreateTournamentPlayerDto,
   GenerateFixtureDto,
   SetScoreDto,
   UpdateMatchDto,
   UpdateTournamentDto,
+  UpdateTournamentPlayerDto,
 } from './dto/tournament-dtos';
 import { TournamentsService } from './tournaments.service';
 
@@ -313,6 +316,81 @@ export class TournamentsController {
     );
   }
 
+  // --- Jugadores y parejas (torneo interno) ---
+
+  @Get(':id/players')
+  @UseGuards(OptionalJwtAuthGuard)
+  players(
+    @Param('id') id: string,
+    @CurrentUser() user?: { sub: string },
+    @Query('invite') inviteToken?: string,
+  ) {
+    return this.tournamentsService.listPlayers(id, { userId: user?.sub, inviteToken });
+  }
+
+  @Post(':id/players')
+  @UseGuards(JwtAuthGuard)
+  async addPlayer(
+    @Param('id') id: string,
+    @CurrentUser() user: { sub: string },
+    @Body() dto: CreateTournamentPlayerDto,
+  ) {
+    const player = await this.tournamentsService.addPlayer(id, user.sub, dto);
+    this.realtimeGateway.emitTournamentUpdated({ tournamentId: id, type: 'player_added' });
+    return player;
+  }
+
+  @Patch(':id/players/:playerId')
+  @UseGuards(JwtAuthGuard)
+  updatePlayer(
+    @Param('id') id: string,
+    @Param('playerId') playerId: string,
+    @CurrentUser() user: { sub: string },
+    @Body() dto: UpdateTournamentPlayerDto,
+  ) {
+    return this.tournamentsService.updatePlayerSide(id, playerId, user.sub, dto);
+  }
+
+  @Delete(':id/players/:playerId')
+  @UseGuards(JwtAuthGuard)
+  removePlayer(
+    @Param('id') id: string,
+    @Param('playerId') playerId: string,
+    @CurrentUser() user: { sub: string },
+  ) {
+    return this.tournamentsService.removePlayer(id, playerId, user.sub);
+  }
+
+  @Post(':id/pairs')
+  @UseGuards(JwtAuthGuard)
+  async createPair(
+    @Param('id') id: string,
+    @CurrentUser() user: { sub: string },
+    @Body() dto: CreateTournamentPairDto,
+  ) {
+    const players = await this.tournamentsService.createPair(id, user.sub, dto);
+    this.realtimeGateway.emitTournamentUpdated({ tournamentId: id, type: 'pair_created' });
+    return players;
+  }
+
+  @Post(':id/pairs/auto')
+  @UseGuards(JwtAuthGuard)
+  async autoPair(@Param('id') id: string, @CurrentUser() user: { sub: string }) {
+    const players = await this.tournamentsService.autoPair(id, user.sub);
+    this.realtimeGateway.emitTournamentUpdated({ tournamentId: id, type: 'pair_created' });
+    return players;
+  }
+
+  @Delete(':id/pairs/:regId')
+  @UseGuards(JwtAuthGuard)
+  removePair(
+    @Param('id') id: string,
+    @Param('regId') regId: string,
+    @CurrentUser() user: { sub: string },
+  ) {
+    return this.tournamentsService.removePair(id, regId, user.sub);
+  }
+
   // --- Pagos de inscripción ---
 
   @Post(':id/registrations/:regId/checkout')
@@ -434,6 +512,14 @@ export class TournamentsController {
     @CurrentUser() user: { sub: string },
   ) {
     return this.tournamentsService.removeMatch(id, matchId, user.sub);
+  }
+
+  @Delete(':id/matches')
+  @UseGuards(JwtAuthGuard)
+  async clearFixture(@Param('id') id: string, @CurrentUser() user: { sub: string }) {
+    const result = await this.tournamentsService.clearFixture(id, user.sub);
+    this.realtimeGateway.emitTournamentUpdated({ tournamentId: id, type: 'fixture_cleared' });
+    return result;
   }
 
   @Post(':id/generate-fixture')

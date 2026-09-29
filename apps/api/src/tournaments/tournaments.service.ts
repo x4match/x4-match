@@ -7,6 +7,7 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { randomBytes } from 'crypto';
+import { PoolClient } from 'pg';
 import { CircuitsService } from '../circuits/circuits.service';
 import { uploadImageBuffer } from '../common/cloudinary/cloudinary.util';
 import { DatabaseService } from '../database/database.service';
@@ -17,10 +18,13 @@ import {
   CreateTournamentDto,
   CreateTournamentInvitesDto,
   CreateTournamentMatchDto,
+  CreateTournamentPairDto,
+  CreateTournamentPlayerDto,
   GenerateFixtureDto,
   SetScoreDto,
   UpdateMatchDto,
   UpdateTournamentDto,
+  UpdateTournamentPlayerDto,
 } from './dto/tournament-dtos';
 import { v2 as cloudinary } from 'cloudinary';
 
@@ -40,6 +44,27 @@ const TOURNAMENT_IS_PAST_SQL = `COALESCE(
       t.start_date
     ) AT TIME ZONE '${TOURNAMENT_TIMEZONE}'
   )::date < (NOW() AT TIME ZONE '${TOURNAMENT_TIMEZONE}')::date,
+  false
+)`;
+
+/** Horas extra, contadas desde el fin del último día, para cargar resultados antes del cierre. */
+const TOURNAMENT_RESULTS_GRACE_HOURS = 48;
+
+/**
+ * true cuando ya pasó el fin del último día del torneo + el margen para resultados.
+ * A partir de ahí el torneo se cierra (FINISHED) y no admite gestión.
+ * Requiere que la tabla `tournaments` tenga alias `t`.
+ */
+const TOURNAMENT_IS_CLOSED_SQL = `COALESCE(
+  (
+    (
+      COALESCE(
+        (SELECT MAX(td.play_date) FROM tournament_dates td WHERE td.tournament_id = t.id),
+        t.start_date
+      ) AT TIME ZONE '${TOURNAMENT_TIMEZONE}'
+    )::date + 1
+  )::timestamp + INTERVAL '${TOURNAMENT_RESULTS_GRACE_HOURS} hours'
+    <= (NOW() AT TIME ZONE '${TOURNAMENT_TIMEZONE}'),
   false
 )`;
 
@@ -71,7 +96,9 @@ export class TournamentsService {
   async create(userId: string, dto: CreateTournamentDto) {
     await this.assertCanCreateEvents(userId);
     const modality = dto.modality;
-    const price = dto.price ?? null;
+    const isInternal = modality === 'INTERNAL';
+    // El torneo interno es solo fixture: sin premios ni cobro de inscripción.
+    const price = isInternal ? null : dto.price ?? null;
     const paymentRequired = price != null && Number(price) > 0;
     const acceptTransfer = paymentRequired && Boolean(dto.acceptTransfer);
     const acceptMercadopago = paymentRequired && Boolean(dto.acceptMercadopago);
@@ -161,7 +188,7 @@ export class TournamentsService {
         price,
         paymentRequired,
         dto.rules ?? null,
-        dto.prizes ?? null,
+        isInternal ? null : dto.prizes ?? null,
         status,
         userId,
         modality,
@@ -212,6 +239,7 @@ export class TournamentsService {
       `SELECT t.*,
               c.name AS club_name,
               ${TOURNAMENT_IS_PAST_SQL} AS is_past,
+              ${TOURNAMENT_IS_CLOSED_SQL} AS is_closed,
               (SELECT COUNT(*)::int FROM tournament_registrations r
                  WHERE r.tournament_id = t.id AND r.status = 'APPROVED') AS approved_count,
               (SELECT COUNT(*)::int FROM tournament_registrations r
@@ -267,6 +295,7 @@ export class TournamentsService {
       `SELECT t.*,
               c.name AS club_name,
               ${TOURNAMENT_IS_PAST_SQL} AS is_past,
+              ${TOURNAMENT_IS_CLOSED_SQL} AS is_closed,
               (SELECT COUNT(*)::int FROM tournament_registrations r
                  WHERE r.tournament_id = t.id AND r.status = 'APPROVED') AS approved_count,
               (SELECT COUNT(*)::int FROM tournament_registrations r
@@ -1163,7 +1192,8 @@ export class TournamentsService {
 
     await this.db.query(
       `UPDATE tournaments SET status = 'IN_PROGRESS', updated_at = NOW()
-       WHERE id = $1 AND status = 'OPEN_REGISTRATION'`,
+       WHERE id = $1
+         AND (status = 'OPEN_REGISTRATION' OR (status = 'DRAFT' AND modality = 'INTERNAL'))`,
       [tournamentId],
     );
 
@@ -1337,7 +1367,8 @@ export class TournamentsService {
               p.photo_url AS organizer_photo_url,
               COALESCE(NULLIF(TRIM(p.nickname), ''), NULLIF(TRIM(u.name), ''), u.email)
                 AS organizer_display_name,
-              ${TOURNAMENT_IS_PAST_SQL} AS is_past
+              ${TOURNAMENT_IS_PAST_SQL} AS is_past,
+              ${TOURNAMENT_IS_CLOSED_SQL} AS is_closed
        FROM tournaments t
        LEFT JOIN clubs c ON c.id = t.club_id
        LEFT JOIN users u ON u.id = t.organizer_user_id
@@ -1569,6 +1600,205 @@ export class TournamentsService {
     return { success: true };
   }
 
+  // ---------------------------------------------------------------------------
+  // Jugadores y parejas (INTERNAL): columnas drive / revés
+  // ---------------------------------------------------------------------------
+
+  async listPlayers(tournamentId: string, viewer?: TournamentViewer) {
+    const tournament = await this.loadTournamentRow(tournamentId);
+    await this.assertCanViewTournament(tournament, viewer ?? {});
+    return this.listPlayersUnchecked(tournamentId);
+  }
+
+  private async listPlayersUnchecked(tournamentId: string) {
+    const result = await this.db.query(
+      `SELECT tp.*, p.photo_url
+       FROM tournament_players tp
+       LEFT JOIN players p ON p.user_id = tp.user_id
+       WHERE tp.tournament_id = $1
+       ORDER BY tp.created_at ASC`,
+      [tournamentId],
+    );
+    return result.rows;
+  }
+
+  async addPlayer(tournamentId: string, userId: string, dto: CreateTournamentPlayerDto) {
+    await this.assertCanManageTournament(tournamentId, userId);
+    await this.assertInternalTournament(tournamentId);
+    const name = dto.name?.trim();
+    if (!name) throw new BadRequestException('Ingresá el nombre del jugador');
+    try {
+      const result = await this.db.query(
+        `INSERT INTO tournament_players (tournament_id, user_id, name, side)
+         VALUES ($1, $2, $3, $4)
+         RETURNING *`,
+        [tournamentId, dto.userId ?? null, name, dto.side],
+      );
+      return result.rows[0];
+    } catch (err: any) {
+      if (err?.code === '23505') {
+        throw new BadRequestException('Ese jugador ya está cargado en el torneo');
+      }
+      throw err;
+    }
+  }
+
+  async updatePlayerSide(
+    tournamentId: string,
+    playerId: string,
+    userId: string,
+    dto: UpdateTournamentPlayerDto,
+  ) {
+    await this.assertCanManageTournament(tournamentId, userId);
+    const player = await this.getPlayerOrThrow(tournamentId, playerId);
+    if (player.registration_id) {
+      throw new BadRequestException('Deshacé la pareja antes de cambiar de lado al jugador');
+    }
+    const result = await this.db.query(
+      `UPDATE tournament_players SET side = $2 WHERE id = $1 RETURNING *`,
+      [playerId, dto.side],
+    );
+    return result.rows[0];
+  }
+
+  async removePlayer(tournamentId: string, playerId: string, userId: string) {
+    await this.assertCanManageTournament(tournamentId, userId);
+    const player = await this.getPlayerOrThrow(tournamentId, playerId);
+    if (player.registration_id) {
+      await this.deletePairRegistration(tournamentId, player.registration_id);
+    }
+    await this.db.query(`DELETE FROM tournament_players WHERE id = $1`, [playerId]);
+    return { success: true };
+  }
+
+  async createPair(tournamentId: string, userId: string, dto: CreateTournamentPairDto) {
+    await this.assertCanManageTournament(tournamentId, userId);
+    const tournament = await this.assertInternalTournament(tournamentId);
+    const drive = await this.getPlayerOrThrow(tournamentId, dto.driveId);
+    const reves = await this.getPlayerOrThrow(tournamentId, dto.revesId);
+    if (drive.side !== 'DRIVE' || reves.side !== 'REVES') {
+      throw new BadRequestException('La pareja se forma con un drive y un revés');
+    }
+    if (drive.registration_id || reves.registration_id) {
+      throw new BadRequestException('Alguno de los jugadores ya tiene pareja');
+    }
+    await this.db.transaction((client) =>
+      this.insertPair(client, tournament, userId, drive, reves),
+    );
+    return this.listPlayersUnchecked(tournamentId);
+  }
+
+  /** Sortea parejas con los drives y revés que todavía no tienen compañero. */
+  async autoPair(tournamentId: string, userId: string) {
+    await this.assertCanManageTournament(tournamentId, userId);
+    const tournament = await this.assertInternalTournament(tournamentId);
+    const free = await this.db.query(
+      `SELECT * FROM tournament_players
+       WHERE tournament_id = $1 AND registration_id IS NULL`,
+      [tournamentId],
+    );
+    const drives = this.shuffle(free.rows.filter((p) => p.side === 'DRIVE'));
+    const reveses = this.shuffle(free.rows.filter((p) => p.side === 'REVES'));
+    const count = Math.min(drives.length, reveses.length);
+    if (count === 0) {
+      throw new BadRequestException('Necesitás al menos un drive y un revés sin pareja');
+    }
+    await this.db.transaction(async (client) => {
+      for (let i = 0; i < count; i++) {
+        await this.insertPair(client, tournament, userId, drives[i], reveses[i]);
+      }
+    });
+    return this.listPlayersUnchecked(tournamentId);
+  }
+
+  async removePair(tournamentId: string, regId: string, userId: string) {
+    await this.assertCanManageTournament(tournamentId, userId);
+    await this.getRegistrationOrThrow(tournamentId, regId);
+    await this.deletePairRegistration(tournamentId, regId);
+    return this.listPlayersUnchecked(tournamentId);
+  }
+
+  async clearFixture(tournamentId: string, userId: string) {
+    await this.assertCanManageTournament(tournamentId, userId);
+    await this.db.query(
+      `UPDATE tournament_matches SET next_match_id = NULL WHERE tournament_id = $1`,
+      [tournamentId],
+    );
+    await this.db.query(`DELETE FROM tournament_matches WHERE tournament_id = $1`, [tournamentId]);
+    return { success: true };
+  }
+
+  private async insertPair(
+    client: PoolClient,
+    tournament: any,
+    userId: string,
+    drive: any,
+    reves: any,
+  ) {
+    const reg = await client.query(
+      `INSERT INTO tournament_registrations
+        (tournament_id, created_by_user_id, player1_user_id, player2_user_id,
+         player1_name, player2_name, category, status, approved_at, payment_required)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'APPROVED', NOW(), FALSE)
+       RETURNING id`,
+      [
+        tournament.id,
+        userId,
+        drive.user_id ?? null,
+        reves.user_id ?? null,
+        drive.name,
+        reves.name,
+        tournament.category ?? null,
+      ],
+    );
+    await client.query(
+      `UPDATE tournament_players SET registration_id = $1 WHERE id = ANY($2::uuid[])`,
+      [reg.rows[0].id, [drive.id, reves.id]],
+    );
+  }
+
+  private async deletePairRegistration(tournamentId: string, regId: string) {
+    const used = await this.db.query(
+      `SELECT 1 FROM tournament_matches
+       WHERE tournament_id = $1
+         AND (team_a_registration_id = $2 OR team_b_registration_id = $2)
+       LIMIT 1`,
+      [tournamentId, regId],
+    );
+    if (used.rows[0]) {
+      throw new BadRequestException(
+        'Esta pareja ya tiene partidos. Borrá el fixture para poder cambiarla.',
+      );
+    }
+    await this.db.query(`DELETE FROM tournament_registrations WHERE id = $1`, [regId]);
+  }
+
+  private async assertInternalTournament(tournamentId: string) {
+    const tournament = await this.getByIdUnchecked(tournamentId);
+    if (tournament.modality !== 'INTERNAL') {
+      throw new BadRequestException('Las columnas drive / revés son solo para torneos internos');
+    }
+    return tournament;
+  }
+
+  private async getPlayerOrThrow(tournamentId: string, playerId: string) {
+    const result = await this.db.query(
+      `SELECT * FROM tournament_players WHERE id = $1 AND tournament_id = $2`,
+      [playerId, tournamentId],
+    );
+    if (!result.rows[0]) throw new NotFoundException('Jugador no encontrado');
+    return result.rows[0];
+  }
+
+  private shuffle<T>(items: T[]): T[] {
+    const arr = [...items];
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+  }
+
   async joinByInviteToken(token: string, userId: string) {
     const result = await this.db.query(
       `SELECT * FROM tournaments WHERE invite_token = $1 AND modality = 'INTERNAL'`,
@@ -1737,22 +1967,23 @@ export class TournamentsService {
     }
   }
 
-  /** Un torneo terminado (FINISHED o con la fecha ya pasada) no admite cambios, salvo SUPER_ADMIN. */
+  /** Un torneo terminado (FINISHED o vencido el margen para resultados) no admite cambios, salvo SUPER_ADMIN. */
   private async assertTournamentNotClosed(tournamentId: string, userId?: string | null) {
     if (userId && (await this.getRole(userId)) === 'SUPER_ADMIN') return;
     const result = await this.db.query(
-      `SELECT t.status, ${TOURNAMENT_IS_PAST_SQL} AS is_past FROM tournaments t WHERE t.id = $1`,
+      `SELECT t.status, ${TOURNAMENT_IS_CLOSED_SQL} AS is_closed FROM tournaments t WHERE t.id = $1`,
       [tournamentId],
     );
     const row = result.rows[0];
     if (!row) throw new NotFoundException('Torneo no encontrado');
-    if (row.status === 'FINISHED' || row.is_past) {
+    if (row.status === 'FINISHED' || row.is_closed) {
       throw new BadRequestException('El torneo ya terminó y no se puede gestionar.');
     }
   }
 
   /**
-   * Pasa a FINISHED los torneos cuya última jornada ya pasó. Se ejecuta por cron
+   * Pasa a FINISHED los torneos cuya última jornada terminó hace más de
+   * TOURNAMENT_RESULTS_GRACE_HOURS. Se ejecuta por cron
    * y antes de las lecturas principales (como mucho una vez por minuto).
    */
   async closePastTournaments(force = false): Promise<number> {
@@ -1764,7 +1995,7 @@ export class TournamentsService {
       `UPDATE tournaments t
        SET status = 'FINISHED', updated_at = NOW()
        WHERE t.status IN ('DRAFT', 'OPEN_REGISTRATION', 'IN_PROGRESS')
-         AND ${TOURNAMENT_IS_PAST_SQL}
+         AND ${TOURNAMENT_IS_CLOSED_SQL}
        RETURNING t.id, t.circuit_id,
          EXISTS (
            SELECT 1 FROM tournament_matches m
