@@ -50,6 +50,8 @@ type TournamentViewer = {
 
 @Injectable()
 export class TournamentsService {
+  private lastAutoCloseAt = 0;
+
   constructor(
     private readonly db: DatabaseService,
     @Inject(forwardRef(() => CircuitsService))
@@ -204,6 +206,7 @@ export class TournamentsService {
   }
 
   async list(options: { includePast?: boolean } = {}) {
+    await this.safeClosePastTournaments();
     const pastFilter = options.includePast ? '' : `AND NOT ${TOURNAMENT_IS_PAST_SQL}`;
     const result = await this.db.query(
       `SELECT t.*,
@@ -251,6 +254,7 @@ export class TournamentsService {
   /** Torneos del organizador autenticado (microcosmos / historial). */
   async listMine(userId: string, status?: string) {
     // Cualquier usuario autenticado puede listar los torneos que creó.
+    await this.safeClosePastTournaments();
 
     const params: unknown[] = [userId];
     let statusFilter = '';
@@ -306,6 +310,7 @@ export class TournamentsService {
   }
 
   async getById(id: string, viewer?: TournamentViewer) {
+    await this.safeClosePastTournaments();
     const tournament = await this.loadTournamentRow(id);
     await this.assertCanViewTournament(tournament, viewer ?? {});
     return this.buildTournamentDetail(tournament);
@@ -563,7 +568,9 @@ export class TournamentsService {
     const tournament = await this.getByIdUnchecked(tournamentId);
     const managerRegistration =
       dto.onBehalf && userId ? await this.canManageTournament(tournamentId, userId) : false;
-    if (!managerRegistration) {
+    if (managerRegistration) {
+      await this.assertTournamentNotClosed(tournamentId, userId);
+    } else {
       await this.assertCanViewTournament(tournament, { userId, inviteToken });
       if (tournament.modality === 'INTERNAL') {
         await this.assertInternalParticipant(tournament, userId, inviteToken);
@@ -673,6 +680,7 @@ export class TournamentsService {
     if (!isOwner && !canManage) {
       throw new ForbiddenException('No podés eliminar esta inscripción');
     }
+    await this.assertTournamentNotClosed(tournamentId, userId);
     const wasApproved = reg.status === 'APPROVED';
     await this.db.query(`DELETE FROM tournament_registrations WHERE id = $1`, [regId]);
     if (wasApproved) {
@@ -849,6 +857,7 @@ export class TournamentsService {
     if (tournament.rows[0].organizer_user_id !== userId && role !== 'SUPER_ADMIN') {
       throw new ForbiddenException('Solo el organizador de este torneo puede marcar pagos');
     }
+    await this.assertTournamentNotClosed(tournamentId, userId);
     const reg = await this.getRegistrationOrThrow(tournamentId, regId);
     if (!reg.payment_required) {
       throw new BadRequestException('Esta inscripción no requiere pago');
@@ -1490,7 +1499,7 @@ export class TournamentsService {
   // ---------------------------------------------------------------------------
 
   async listInvites(tournamentId: string, userId: string) {
-    await this.assertCanManageTournament(tournamentId, userId);
+    await this.assertCanManageTournament(tournamentId, userId, { allowClosed: true });
     const result = await this.db.query(
       `SELECT i.*,
               u.name AS invited_user_name,
@@ -1603,6 +1612,7 @@ export class TournamentsService {
 
   async listPendingClubValidations(clubId: string, userId: string) {
     await this.assertClubAdminOf(clubId, userId);
+    await this.safeClosePastTournaments();
     const result = await this.db.query(
       `SELECT t.*,
               c.name AS club_name,
@@ -1713,10 +1723,71 @@ export class TournamentsService {
     return false;
   }
 
-  private async assertCanManageTournament(tournamentId: string, userId: string) {
+  private async assertCanManageTournament(
+    tournamentId: string,
+    userId: string,
+    options: { allowClosed?: boolean } = {},
+  ) {
     const ok = await this.canManageTournament(tournamentId, userId);
     if (!ok) {
       throw new ForbiddenException('Solo el organizador de este torneo puede realizar esta acción');
+    }
+    if (!options.allowClosed) {
+      await this.assertTournamentNotClosed(tournamentId, userId);
+    }
+  }
+
+  /** Un torneo terminado (FINISHED o con la fecha ya pasada) no admite cambios, salvo SUPER_ADMIN. */
+  private async assertTournamentNotClosed(tournamentId: string, userId?: string | null) {
+    if (userId && (await this.getRole(userId)) === 'SUPER_ADMIN') return;
+    const result = await this.db.query(
+      `SELECT t.status, ${TOURNAMENT_IS_PAST_SQL} AS is_past FROM tournaments t WHERE t.id = $1`,
+      [tournamentId],
+    );
+    const row = result.rows[0];
+    if (!row) throw new NotFoundException('Torneo no encontrado');
+    if (row.status === 'FINISHED' || row.is_past) {
+      throw new BadRequestException('El torneo ya terminó y no se puede gestionar.');
+    }
+  }
+
+  /**
+   * Pasa a FINISHED los torneos cuya última jornada ya pasó. Se ejecuta por cron
+   * y antes de las lecturas principales (como mucho una vez por minuto).
+   */
+  async closePastTournaments(force = false): Promise<number> {
+    const now = Date.now();
+    if (!force && now - this.lastAutoCloseAt < 60_000) return 0;
+    this.lastAutoCloseAt = now;
+
+    const result = await this.db.query(
+      `UPDATE tournaments t
+       SET status = 'FINISHED', updated_at = NOW()
+       WHERE t.status IN ('DRAFT', 'OPEN_REGISTRATION', 'IN_PROGRESS')
+         AND ${TOURNAMENT_IS_PAST_SQL}
+       RETURNING t.id, t.circuit_id,
+         EXISTS (
+           SELECT 1 FROM tournament_matches m
+           WHERE m.tournament_id = t.id AND m.status = 'FINISHED'
+         ) AS has_results`,
+    );
+
+    for (const row of result.rows) {
+      if (!row.circuit_id || !row.has_results) continue;
+      try {
+        await this.circuitsService.awardFromTournament(row.id);
+      } catch {
+        // No bloquear el cierre automático si falla el ranking del circuito
+      }
+    }
+    return result.rowCount ?? 0;
+  }
+
+  private async safeClosePastTournaments() {
+    try {
+      await this.closePastTournaments();
+    } catch {
+      // El cierre automático nunca debe romper una lectura
     }
   }
 
