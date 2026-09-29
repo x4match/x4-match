@@ -986,8 +986,28 @@ export class TournamentsService {
   }
 
   async createMatch(tournamentId: string, userId: string, dto: CreateTournamentMatchDto) {
-    await this.loadTournamentRow(tournamentId);
+    const tournament = await this.loadTournamentRow(tournamentId);
     await this.assertCanManageTournament(tournamentId, userId);
+    const isInternal = tournament.modality === 'INTERNAL';
+
+    if (
+      dto.teamARegistrationId &&
+      dto.teamBRegistrationId &&
+      dto.teamARegistrationId === dto.teamBRegistrationId
+    ) {
+      throw new BadRequestException('Elegí dos parejas distintas');
+    }
+
+    let round = dto.round;
+    let roundLabel = dto.roundLabel;
+    if (isInternal && (round == null || !roundLabel)) {
+      const next = await this.db.query<{ next: number }>(
+        `SELECT COALESCE(MAX(round), 0)::int + 1 AS next FROM tournament_matches WHERE tournament_id = $1`,
+        [tournamentId],
+      );
+      round = round ?? next.rows[0]?.next ?? 1;
+      roundLabel = roundLabel || `Partido ${round}`;
+    }
 
     const teamAName = dto.teamAName ?? (await this.registrationName(dto.teamARegistrationId));
     const teamBName = dto.teamBName ?? (await this.registrationName(dto.teamBRegistrationId));
@@ -1000,8 +1020,8 @@ export class TournamentsService {
       [
         tournamentId,
         dto.dateId ?? null,
-        dto.round ?? 1,
-        dto.roundLabel ?? null,
+        round ?? 1,
+        roundLabel ?? null,
         dto.groupName ?? null,
         dto.courtLabel ?? null,
         dto.teamARegistrationId ?? null,
@@ -1011,6 +1031,14 @@ export class TournamentsService {
         dto.scheduledAt ?? null,
       ],
     );
+
+    if (isInternal) {
+      await this.db.query(
+        `UPDATE tournaments SET status = 'IN_PROGRESS', updated_at = NOW()
+         WHERE id = $1 AND status = 'DRAFT'`,
+        [tournamentId],
+      );
+    }
     return result.rows[0];
   }
 
@@ -1120,10 +1148,11 @@ export class TournamentsService {
       }[] = [];
 
       if (mode === 'ROUND_ROBIN') {
+        const roundPrefix = tournament.modality === 'INTERNAL' ? 'Partido' : 'Fecha';
         let round = 1;
         for (let a = 0; a < teams.length; a++) {
           for (let b = a + 1; b < teams.length; b++) {
-            matches.push({ a: teams[a], b: teams[b], round, roundLabel: `Fecha ${round}` });
+            matches.push({ a: teams[a], b: teams[b], round, roundLabel: `${roundPrefix} ${round}` });
             round++;
           }
         }
