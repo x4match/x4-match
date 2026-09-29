@@ -749,9 +749,9 @@ export class MatchesService {
     const participantIds = await this.matchesRepository.listActiveParticipantUserIds(matchId);
     const notifyIds = participantIds.filter((id) => id !== userId);
     const señaHint = depositPolicy.withinFreeWindow
-      ? 'Las señas pagadas se reembolsan.'
+      ? 'Los pagos se reembolsan.'
       : depositPolicy.retained > 0
-        ? 'Pasaron más de 30 minutos: las señas pagadas se retienen.'
+        ? 'Pasaron más de 30 minutos: los pagos se retienen.'
         : '';
     await this.matchesRepository.notifyUsers(
       notifyIds,

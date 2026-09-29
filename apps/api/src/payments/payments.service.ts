@@ -65,17 +65,15 @@ export class PaymentsService {
     );
   }
 
-  calculateDepositAmount(
+  /** Parte de cada jugador sobre el precio total del turno. */
+  calculateCourtShareAmount(
     courtPricePerHour: number,
     durationHours: number,
     neededPlayers: number,
-    depositPercent: number,
   ): number {
     const players = Math.max(neededPlayers, 2);
     const totalCourt = courtPricePerHour * durationHours;
-    const sharePerPlayer = totalCourt / players;
-    const deposit = (sharePerPlayer * depositPercent) / 100;
-    return Math.round(deposit * 100) / 100;
+    return Math.round((totalCourt / players) * 100) / 100;
   }
 
   async resolveDepositAmount(match: MatchRow): Promise<{ amount: number; required: boolean; currency: string }> {
@@ -88,20 +86,21 @@ export class PaymentsService {
       return { amount: 0, required: false, currency: 'ARS' };
     }
 
-    const pricePerHour = Number(club.court_price_per_hour ?? 0);
-    const depositPercent = Number(club.deposit_percent ?? 25);
+    let pricePerHour = Number(club.court_price_per_hour ?? 0);
     let durationHours = Number(club.court_duration_hours ?? 1.5);
 
     if (match.court_slot_id) {
-      const slotHours = await this.paymentsRepo.getCourtSlotDurationHours(match.court_slot_id);
-      if (slotHours != null) durationHours = slotHours;
+      const slot = await this.paymentsRepo.getCourtSlotPricing(match.court_slot_id);
+      if (slot) {
+        durationHours = slot.durationHours;
+        if (slot.pricePerHour != null) pricePerHour = slot.pricePerHour;
+      }
     }
 
-    const amount = this.calculateDepositAmount(
+    const amount = this.calculateCourtShareAmount(
       pricePerHour,
       durationHours,
       match.needed_players,
-      depositPercent,
     );
 
     return {
@@ -221,7 +220,7 @@ export class PaymentsService {
     }
 
     if (!['OPEN', 'FULL'].includes(match.status)) {
-      throw new BadRequestException('Este partido ya no acepta confirmación con seña');
+      throw new BadRequestException('Este partido ya no acepta confirmación con pago');
     }
 
     const { amount, required, currency } = await this.resolveDepositAmount(match);
@@ -235,7 +234,7 @@ export class PaymentsService {
         required: false,
         paid: true,
         amount: 0,
-        message: 'No se requiere seña para este partido',
+        message: 'No se requiere pago para este partido',
       };
     }
 
@@ -293,7 +292,7 @@ export class PaymentsService {
         depositId: deposit.id,
         checkoutUrl: null,
         manualPayment: true,
-        message: 'El club cobra la seña en recepción o por transferencia.',
+        message: 'El club cobra el turno en recepción o por transferencia.',
         coveredGuestSlots,
       };
     }
@@ -341,7 +340,7 @@ export class PaymentsService {
     const preference = new Preference(client);
 
     const base = this.publicApiBase();
-    const title = `Seña cancha — ${match.title}`.slice(0, 120);
+    const title = `Turno cancha — ${match.title}`.slice(0, 120);
     const webhookPath =
       match.club_id && resolved.source === 'club'
         ? `/payments/webhooks/mercadopago/clubs/${match.club_id}`
@@ -384,7 +383,7 @@ export class PaymentsService {
     const deposit = await this.paymentsRepo.getDepositById(depositId);
     if (!deposit) throw new NotFoundException('Pago no encontrado');
     if (deposit.user_id !== userId) {
-      throw new BadRequestException('No podés pagar la seña de otro jugador');
+      throw new BadRequestException('No podés pagar la parte de otro jugador');
     }
     await this.approveDeposit(deposit.id, 'mock-payment');
     return { ok: true, depositId: deposit.id };
@@ -476,7 +475,7 @@ export class PaymentsService {
 
     const deposit = await this.paymentsRepo.getDepositByMatchPlayer(matchId, playerId);
     if (!deposit || deposit.status !== 'APPROVED') {
-      throw new BadRequestException('Debés pagar la seña de la cancha antes de confirmar');
+      throw new BadRequestException('Debés pagar tu parte del turno antes de confirmar');
     }
   }
 

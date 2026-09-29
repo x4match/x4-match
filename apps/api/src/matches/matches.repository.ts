@@ -345,10 +345,10 @@ export class MatchesRepository {
       courtSlot = slotResult.rows[0] ?? null;
     }
 
-    let clubPricing: { court_price_per_hour: number; deposit_percent: number } | null = null;
+    let clubPricing: { court_price_per_hour: number } | null = null;
     if (match.club_id) {
       const pricingResult = await this.db.query(
-        `SELECT court_price_per_hour, deposit_percent FROM clubs WHERE id = $1`,
+        `SELECT court_price_per_hour FROM clubs WHERE id = $1`,
         [match.club_id],
       );
       clubPricing = pricingResult.rows[0] ?? null;
@@ -380,11 +380,7 @@ export class MatchesRepository {
       neededPlayers > 0 && totalCourt > 0
         ? Math.round((totalCourt / neededPlayers) * 100) / 100
         : 0;
-    const depositPercent = Number(clubPricing?.deposit_percent ?? 25);
-    const depositPerPlayer =
-      pricePerPlayer > 0
-        ? Math.round(((pricePerPlayer * depositPercent) / 100) * 100) / 100
-        : 0;
+    const depositPerPlayer = pricePerPlayer;
     const bonusPoints = Number(courtSlot?.bonus_points ?? 0);
 
     const courtInfo = {

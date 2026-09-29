@@ -52,14 +52,19 @@ export class PaymentsRepository {
     return this.getDepositById(ref);
   }
 
-  async getCourtSlotDurationHours(slotId: string): Promise<number | null> {
+  async getCourtSlotPricing(
+    slotId: string,
+  ): Promise<{ durationHours: number; pricePerHour: number | null } | null> {
     const res = await this.db.query(
-      `SELECT start_hour, end_hour FROM court_availability_slots WHERE id = $1`,
+      `SELECT start_hour, end_hour, price_per_hour FROM court_availability_slots WHERE id = $1`,
       [slotId],
     );
     const row = res.rows[0];
     if (!row) return null;
-    return Math.max(1, Number(row.end_hour) - Number(row.start_hour));
+    return {
+      durationHours: Math.max(0.5, Number(row.end_hour) - Number(row.start_hour)),
+      pricePerHour: row.price_per_hour != null ? Number(row.price_per_hour) : null,
+    };
   }
 
   async listDepositsForMatch(matchId: string) {

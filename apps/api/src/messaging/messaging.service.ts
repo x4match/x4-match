@@ -18,6 +18,17 @@ export type MessageAccess =
   | { canMessage: true; conversationId?: string }
   | MessageAccessDenied;
 
+/** Requiere un alias `u` de `users`; expone `oc.id`, `oc.name`, `oc.logo_url`. */
+const OTHER_CLUB_LATERAL = `
+  LEFT JOIN LATERAL (
+    SELECT cl.id, cl.name, cl.logo_url
+    FROM club_admins ca
+    INNER JOIN clubs cl ON cl.id = ca.club_id
+    WHERE ca.user_id = u.id AND u.role = 'CLUB_ADMIN'
+    ORDER BY ca.created_at ASC
+    LIMIT 1
+  ) oc ON TRUE`;
+
 @Injectable()
 export class MessagingService {
   constructor(
@@ -28,6 +39,19 @@ export class MessagingService {
 
   private canonicalPair(userId: string, otherUserId: string): [string, string] {
     return userId < otherUserId ? [userId, otherUserId] : [otherUserId, userId];
+  }
+
+  /** Cuentas de club hablan como el club (su primera sede), no como la persona. */
+  private async getDisplayIdentity(userId: string): Promise<{ name: string; clubId: string | null }> {
+    const result = await this.db.query(
+      `SELECT COALESCE(oc.name, u.name) AS name, oc.id AS club_id
+       FROM users u
+       ${OTHER_CLUB_LATERAL}
+       WHERE u.id = $1`,
+      [userId],
+    );
+    const row = result.rows[0];
+    return { name: row?.name || 'Alguien', clubId: row?.club_id ?? null };
   }
 
   /** El otro usuario te sigue → podés mandarle mensaje directo. */
@@ -128,8 +152,8 @@ export class MessagingService {
     );
     const conversationId = result.rows[0].id;
     if (result.rows[0].status === 'pending') {
-      const requester = await this.db.query(`SELECT name FROM users WHERE id = $1`, [userId]);
-      const requesterName = requester.rows[0]?.name || 'Alguien';
+      const { name: requesterName, clubId: requesterClubId } =
+        await this.getDisplayIdentity(userId);
       await this.notifications.create({
         userId: otherUserId,
         type: 'DM_REQUEST',
@@ -139,6 +163,7 @@ export class MessagingService {
           conversationId,
           fromUserId: userId,
           fromUserName: requesterName,
+          fromClubId: requesterClubId,
         },
       });
     }
@@ -157,8 +182,7 @@ export class MessagingService {
       `UPDATE dm_conversations SET status = 'active', updated_at = NOW() WHERE id = $1`,
       [conversationId],
     );
-    const accepter = await this.db.query(`SELECT name FROM users WHERE id = $1`, [userId]);
-    const accepterName = accepter.rows[0]?.name || 'Alguien';
+    const { name: accepterName, clubId: accepterClubId } = await this.getDisplayIdentity(userId);
     if (conv.requested_by_id) {
       await this.notifications.create({
         userId: conv.requested_by_id,
@@ -169,6 +193,7 @@ export class MessagingService {
           conversationId,
           fromUserId: userId,
           fromUserName: accepterName,
+          fromClubId: accepterClubId,
         },
       });
     }
@@ -233,8 +258,9 @@ export class MessagingService {
          c.requested_by_id,
          c.updated_at,
          CASE WHEN c.user_a_id = $1 THEN c.user_b_id ELSE c.user_a_id END AS other_user_id,
-         u.name AS other_user_name,
-         p.photo_url AS other_user_photo,
+         COALESCE(oc.name, u.name) AS other_user_name,
+         COALESCE(oc.logo_url, p.photo_url) AS other_user_photo,
+         oc.id AS other_club_id,
          (
            SELECT content FROM dm_messages m
            WHERE m.conversation_id = c.id
@@ -250,6 +276,7 @@ export class MessagingService {
        FROM dm_conversations c
        INNER JOIN users u ON u.id = CASE WHEN c.user_a_id = $1 THEN c.user_b_id ELSE c.user_a_id END
        LEFT JOIN players p ON p.user_id = u.id
+       ${OTHER_CLUB_LATERAL}
        LEFT JOIN dm_conversation_hides h ON h.conversation_id = c.id AND h.user_id = $1
        WHERE (c.user_a_id = $1 OR c.user_b_id = $1)
          AND (
@@ -280,11 +307,13 @@ export class MessagingService {
          c.requested_by_id,
          c.created_at,
          u.id AS from_user_id,
-         u.name AS from_user_name,
-         p.photo_url AS from_user_photo
+         COALESCE(oc.name, u.name) AS from_user_name,
+         COALESCE(oc.logo_url, p.photo_url) AS from_user_photo,
+         oc.id AS from_club_id
        FROM dm_conversations c
        INNER JOIN users u ON u.id = c.requested_by_id
        LEFT JOIN players p ON p.user_id = u.id
+       ${OTHER_CLUB_LATERAL}
        WHERE c.status = 'pending'
          AND c.requested_by_id <> $1
          AND (c.user_a_id = $1 OR c.user_b_id = $1)
@@ -307,9 +336,10 @@ export class MessagingService {
       );
     }
     const result = await this.db.query(
-      `SELECT m.id, m.sender_id, m.content, m.created_at, u.name AS sender_name
+      `SELECT m.id, m.sender_id, m.content, m.created_at, COALESCE(oc.name, u.name) AS sender_name
        FROM dm_messages m
        INNER JOIN users u ON u.id = m.sender_id
+       ${OTHER_CLUB_LATERAL}
        LEFT JOIN dm_conversation_hides h
          ON h.conversation_id = m.conversation_id AND h.user_id = $2
        WHERE m.conversation_id = $1
@@ -356,9 +386,7 @@ export class MessagingService {
     );
     await this.db.query(`UPDATE dm_conversations SET updated_at = NOW() WHERE id = $1`, [conversationId]);
     const row = result.rows[0];
-    const senderName =
-      (await this.db.query(`SELECT name FROM users WHERE id = $1`, [userId])).rows[0]?.name ||
-      'Alguien';
+    const { name: senderName, clubId: senderClubId } = await this.getDisplayIdentity(userId);
 
     const preview = trimmed.length > 80 ? `${trimmed.slice(0, 77)}...` : trimmed;
     await this.notifications.create({
@@ -369,6 +397,8 @@ export class MessagingService {
       data: {
         conversationId,
         fromUserId: userId,
+        fromUserName: senderName,
+        fromClubId: senderClubId,
         messageId: row.id,
       },
     });

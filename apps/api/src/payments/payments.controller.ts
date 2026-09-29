@@ -28,7 +28,7 @@ export class PaymentsController {
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.send(
       `<!DOCTYPE html><html><body style="font-family:sans-serif;text-align:center;padding:40px">
-        <h2>Seña acreditada (modo prueba)</h2>
+        <h2>Pago acreditado (modo prueba)</h2>
         <p>Podés volver a la app de x4 match.</p>
       </body></html>`,
     );
