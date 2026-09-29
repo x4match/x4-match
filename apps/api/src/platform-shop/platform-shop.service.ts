@@ -95,13 +95,26 @@ export class PlatformShopService {
        WHERE p.status = 'ACTIVE' AND (s.active IS NULL OR s.active = TRUE)
        ORDER BY p.sort_order ASC, p.name ASC`,
     );
-    return result.rows.map((row) => ({
-      ...row,
-      product_url: row.sponsor_slug
-        ? this.productUrl(row, row.id)
-        : null,
-      sponsor_store_url: row.sponsor_slug ? this.storeUrl(row) : null,
-    }));
+    return result.rows.map((row) => {
+      const sponsor = row.sponsor_slug ? this.sponsorFromJoinedRow(row) : null;
+      return {
+        ...row,
+        product_url: sponsor ? this.productUrl(sponsor, row.id) : null,
+        sponsor_store_url: sponsor ? this.storeUrl(sponsor) : null,
+      };
+    });
+  }
+
+  private sponsorFromJoinedRow(row: {
+    sponsor_slug: string;
+    custom_domain?: string | null;
+    custom_domain_status?: string;
+  }) {
+    return {
+      slug: row.sponsor_slug,
+      custom_domain: row.custom_domain,
+      custom_domain_status: row.custom_domain_status,
+    };
   }
 
   async getProduct(productId: string) {
@@ -118,7 +131,9 @@ export class PlatformShopService {
     const row = result.rows[0];
     return {
       ...row,
-      product_url: row.sponsor_slug ? this.productUrl(row, row.id) : null,
+      product_url: row.sponsor_slug
+        ? this.productUrl(this.sponsorFromJoinedRow(row), row.id)
+        : null,
     };
   }
 
