@@ -26,6 +26,23 @@ import { v2 as cloudinary } from 'cloudinary';
 
 const EVENT_CREATOR_ROLES = ['PLAYER', 'ORGANIZER', 'CLUB_ADMIN', 'SUPER_ADMIN'];
 
+const TOURNAMENT_TIMEZONE = 'America/Argentina/Buenos_Aires';
+
+/**
+ * true cuando el día (hora Argentina) de la última jornada del torneo ya pasó.
+ * Sin jornadas cargadas usa start_date; sin ninguna fecha nunca se considera pasado.
+ * Requiere que la tabla `tournaments` tenga alias `t`.
+ */
+const TOURNAMENT_IS_PAST_SQL = `COALESCE(
+  (
+    COALESCE(
+      (SELECT MAX(td.play_date) FROM tournament_dates td WHERE td.tournament_id = t.id),
+      t.start_date
+    ) AT TIME ZONE '${TOURNAMENT_TIMEZONE}'
+  )::date < (NOW() AT TIME ZONE '${TOURNAMENT_TIMEZONE}')::date,
+  false
+)`;
+
 type TournamentViewer = {
   userId?: string | null;
   inviteToken?: string | null;
@@ -186,10 +203,12 @@ export class TournamentsService {
     return this.buildTournamentDetail(tournament);
   }
 
-  async list() {
+  async list(options: { includePast?: boolean } = {}) {
+    const pastFilter = options.includePast ? '' : `AND NOT ${TOURNAMENT_IS_PAST_SQL}`;
     const result = await this.db.query(
       `SELECT t.*,
               c.name AS club_name,
+              ${TOURNAMENT_IS_PAST_SQL} AS is_past,
               (SELECT COUNT(*)::int FROM tournament_registrations r
                  WHERE r.tournament_id = t.id AND r.status = 'APPROVED') AS approved_count,
               (SELECT COUNT(*)::int FROM tournament_registrations r
@@ -217,6 +236,7 @@ export class TournamentsService {
        WHERE t.modality = 'EXTERNAL'
          AND t.club_validation_status = 'APPROVED'
          AND t.status IN ('OPEN_REGISTRATION', 'IN_PROGRESS', 'FINISHED')
+         ${pastFilter}
        ORDER BY
          active_featured_priority DESC,
          COALESCE(t.price, 0) DESC,
@@ -242,6 +262,7 @@ export class TournamentsService {
     const result = await this.db.query(
       `SELECT t.*,
               c.name AS club_name,
+              ${TOURNAMENT_IS_PAST_SQL} AS is_past,
               (SELECT COUNT(*)::int FROM tournament_registrations r
                  WHERE r.tournament_id = t.id AND r.status = 'APPROVED') AS approved_count,
               (SELECT COUNT(*)::int FROM tournament_registrations r
@@ -549,6 +570,9 @@ export class TournamentsService {
       }
       if (tournament.status !== 'OPEN_REGISTRATION') {
         throw new BadRequestException('Las inscripciones no están abiertas');
+      }
+      if (tournament.is_past) {
+        throw new BadRequestException('El torneo ya se jugó, no admite inscripciones');
       }
       if (
         tournament.modality === 'EXTERNAL' &&
@@ -1303,7 +1327,8 @@ export class TournamentsService {
               p.nickname AS organizer_nickname,
               p.photo_url AS organizer_photo_url,
               COALESCE(NULLIF(TRIM(p.nickname), ''), NULLIF(TRIM(u.name), ''), u.email)
-                AS organizer_display_name
+                AS organizer_display_name,
+              ${TOURNAMENT_IS_PAST_SQL} AS is_past
        FROM tournaments t
        LEFT JOIN clubs c ON c.id = t.club_id
        LEFT JOIN users u ON u.id = t.organizer_user_id

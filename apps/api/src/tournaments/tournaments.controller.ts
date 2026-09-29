@@ -47,8 +47,8 @@ export class TournamentsController {
   // --- Rutas estáticas (deben ir antes de ':id') ---
 
   @Get()
-  list() {
-    return this.tournamentsService.list();
+  list(@Query('includePast') includePast?: string) {
+    return this.tournamentsService.list({ includePast: includePast === 'true' });
   }
 
   @Get('mine')
