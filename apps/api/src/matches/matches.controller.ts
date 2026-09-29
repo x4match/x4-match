@@ -50,13 +50,25 @@ export class MatchesController {
   }
 
   @Post(':id/deposit/checkout')
-  createDepositCheckout(@Param('id') id: string, @CurrentUser() user: any) {
-    return this.matchesService.createDepositCheckout(id, user.sub);
+  createDepositCheckout(
+    @Param('id') id: string,
+    @CurrentUser() user: any,
+    @Body() body: { fullCourt?: boolean } = {},
+  ) {
+    return this.matchesService.createDepositCheckout(id, user.sub, {
+      fullCourt: body?.fullCourt === true,
+    });
   }
 
   @Post(':id/deposit/simulate')
-  simulateDeposit(@Param('id') id: string, @CurrentUser() user: any) {
-    return this.matchesService.simulateDepositPayment(id, user.sub);
+  simulateDeposit(
+    @Param('id') id: string,
+    @CurrentUser() user: any,
+    @Body() body: { fullCourt?: boolean } = {},
+  ) {
+    return this.matchesService.simulateDepositPayment(id, user.sub, {
+      fullCourt: body?.fullCourt === true,
+    });
   }
 
   @Get(':id')

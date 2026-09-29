@@ -770,12 +770,16 @@ export class MatchesService {
     return this.paymentsService.getDepositStatusForUser(matchId, userId);
   }
 
-  createDepositCheckout(matchId: string, userId: string) {
-    return this.paymentsService.createCheckout(matchId, userId);
+  createDepositCheckout(matchId: string, userId: string, options: { fullCourt?: boolean } = {}) {
+    return this.paymentsService.createCheckout(matchId, userId, options);
   }
 
-  async simulateDepositPayment(matchId: string, userId: string) {
-    const checkout = await this.paymentsService.createCheckout(matchId, userId);
+  async simulateDepositPayment(
+    matchId: string,
+    userId: string,
+    options: { fullCourt?: boolean } = {},
+  ) {
+    const checkout = await this.paymentsService.createCheckout(matchId, userId, options);
     if (checkout.depositId) {
       await this.paymentsService.simulateMockPayment(checkout.depositId, userId);
     }
@@ -842,18 +846,7 @@ export class MatchesService {
       await this.matchesRepository.bookCourtForConfirmedMatch(matchId);
 
     if (status === 'booked') {
-      for (const otherId of displacedMatchIds) {
-        const participantIds = await this.matchesRepository.listActiveParticipantUserIds(otherId);
-        await this.matchesRepository.notifyUsers(
-          participantIds,
-          'MATCH_COURT_LOST',
-          'Turno tomado por otro partido',
-          'Otro grupo completó el pago de ese horario antes. Elegí otra cancha o cancelá el partido.',
-          { matchId: otherId },
-        );
-        const detail = await this.matchesRepository.getDetail(otherId);
-        if (detail) this.realtimeGateway.emitMatchUpdated(detail);
-      }
+      await this.notifyDisplacedMatches(displacedMatchIds);
     }
 
     if (status === 'unavailable') {
@@ -869,6 +862,57 @@ export class MatchesService {
     }
 
     return status;
+  }
+
+  /** Un jugador pagó el turno completo: la cancha se bloquea ya, sin esperar al resto. */
+  async bookCourtAfterFullCourtPayment(
+    matchId: string,
+    payerUserId: string,
+  ): Promise<'booked' | 'already_booked' | 'unavailable' | 'no_slot'> {
+    const { status, displacedMatchIds } =
+      await this.matchesRepository.bookCourtForConfirmedMatch(matchId);
+    const match = await this.matchesRepository.getById(matchId);
+    const participantIds = await this.matchesRepository.listActiveParticipantUserIds(matchId);
+    const others = participantIds.filter((id) => id !== payerUserId);
+
+    if (status === 'booked' || status === 'already_booked') {
+      if (status === 'booked') await this.notifyDisplacedMatches(displacedMatchIds);
+      const payerName = await this.matchesRepository.getUserName(payerUserId);
+      await this.matchesRepository.notifyUsers(
+        others,
+        'MATCH_COURT_BOOKED',
+        'Cancha reservada',
+        `${payerName || 'Un jugador'} pagó el turno completo de "${match?.title ?? 'tu partido'}". Solo falta que confirmes asistencia.`,
+        { matchId },
+      );
+    }
+
+    if (status === 'unavailable') {
+      await this.matchesRepository.notifyUsers(
+        participantIds,
+        'MATCH_COURT_LOST',
+        'Turno no disponible',
+        'Otro partido reservó ese horario antes. El pago queda registrado; elegí otra cancha o cancelá para gestionar el reembolso.',
+        { matchId },
+      );
+    }
+
+    return status;
+  }
+
+  private async notifyDisplacedMatches(displacedMatchIds: string[]) {
+    for (const otherId of displacedMatchIds) {
+      const participantIds = await this.matchesRepository.listActiveParticipantUserIds(otherId);
+      await this.matchesRepository.notifyUsers(
+        participantIds,
+        'MATCH_COURT_LOST',
+        'Turno tomado por otro partido',
+        'Otro grupo completó el pago de ese horario antes. Elegí otra cancha o cancelá el partido.',
+        { matchId: otherId },
+      );
+      const detail = await this.matchesRepository.getDetail(otherId);
+      if (detail) this.realtimeGateway.emitMatchUpdated(detail);
+    }
   }
 
   async updateMatchStatus(matchId: string, dto: UpdateMatchStatusDto) {

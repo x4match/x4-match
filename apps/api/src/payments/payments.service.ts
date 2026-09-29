@@ -116,11 +116,29 @@ export class PaymentsService {
     return match as MatchRow;
   }
 
+  /** Lo que falta para cubrir el turno completo, descontando lo que ya pagaron otros. */
+  private async resolveFullCourtRemaining(
+    match: MatchRow,
+    playerId: string,
+    shareAmount: number,
+  ): Promise<number> {
+    const totalCourt = shareAmount * Math.max(match.needed_players, 2);
+    const paidByOthers = await this.paymentsRepo.sumApprovedDepositsExcludingPlayer(
+      match.id,
+      playerId,
+    );
+    return Math.max(0, Math.round((totalCourt - paidByOthers) * 100) / 100);
+  }
+
   async getDepositStatusForUser(matchId: string, userId: string) {
     const match = await this.getMatchOrThrow(matchId);
     const playerId = await this.matchesRepo.getPlayerIdByUserId(userId);
     const { amount, required, currency } = await this.resolveDepositAmount(match);
     const allDeposits = await this.paymentsRepo.listDepositsForMatch(matchId);
+    const fullCourtDeposit = await this.paymentsRepo.getApprovedFullCourtDeposit(matchId);
+    const fullCourtPaidBy = fullCourtDeposit
+      ? { userId: fullCourtDeposit.user_id, userName: fullCourtDeposit.user_name }
+      : null;
 
     const mockMode = await this.shouldUseMockForClub(match.club_id);
     const canMp = await this.canUseMercadoPago(match.club_id);
@@ -144,6 +162,9 @@ export class PaymentsService {
         checkoutUrl: null,
         coveredGuestSlots: 0,
         coveredGuests: [],
+        fullCourtPaidBy,
+        fullCourtAmount: null,
+        coversFullCourt: false,
         players: allDeposits.map((d: any) => ({
           id: d.id,
           userId: d.user_id,
@@ -152,6 +173,7 @@ export class PaymentsService {
           status: d.status,
           paidAt: d.paid_at,
           coveredGuestSlots: Number(d.covered_guest_slots ?? 0),
+          coversFullCourt: !!d.covers_full_court,
         })),
       };
     }
@@ -167,8 +189,15 @@ export class PaymentsService {
       deposit?.covered_guest_slots != null
         ? Number(deposit.covered_guest_slots)
         : coveredGuests.length;
+    const shareTotal = amount * Math.max(1, coveredGuestSlots + 1);
+    const pendingFullCourt = deposit?.status !== 'APPROVED' && !!deposit?.covers_full_court;
     const totalAmount =
-      deposit?.amount != null ? Number(deposit.amount) : amount * Math.max(1, coveredGuestSlots + 1);
+      deposit?.status === 'APPROVED' ? Number(deposit.amount) : shareTotal;
+    const ownPaid = deposit?.status === 'APPROVED';
+    const fullCourtAmount =
+      required && !ownPaid && !fullCourtPaidBy
+        ? await this.resolveFullCourtRemaining(match, playerId, amount)
+        : null;
 
     let clubName: string | undefined;
     if (match.club_id) {
@@ -183,11 +212,14 @@ export class PaymentsService {
       currency,
       clubName,
       provider: mockMode ? 'MOCK' : canMp ? 'MERCADOPAGO' : 'MANUAL',
-      paid: deposit?.status === 'APPROVED',
+      paid: ownPaid || !!fullCourtPaidBy,
       depositStatus: deposit?.status ?? null,
-      checkoutUrl: deposit?.checkout_url ?? null,
+      checkoutUrl: pendingFullCourt ? null : (deposit?.checkout_url ?? null),
       coveredGuestSlots,
       coveredGuests,
+      fullCourtPaidBy,
+      fullCourtAmount,
+      coversFullCourt: ownPaid && !!deposit?.covers_full_court,
       players: allDeposits.map((d: any) => ({
         id: d.id,
         userId: d.user_id,
@@ -196,6 +228,7 @@ export class PaymentsService {
         status: d.status,
         paidAt: d.paid_at,
         coveredGuestSlots: Number(d.covered_guest_slots ?? 0),
+        coversFullCourt: !!d.covers_full_court,
       })),
     };
   }
@@ -207,7 +240,8 @@ export class PaymentsService {
     return !process.env.MERCADOPAGO_ACCESS_TOKEN?.trim();
   }
 
-  async createCheckout(matchId: string, userId: string) {
+  async createCheckout(matchId: string, userId: string, options: { fullCourt?: boolean } = {}) {
+    const fullCourt = !!options.fullCourt;
     const match = await this.getMatchOrThrow(matchId);
     const playerId = await this.matchesRepo.getPlayerIdByUserId(userId);
     if (!playerId) {
@@ -227,7 +261,21 @@ export class PaymentsService {
     const coveredGuestSlots = (await this.matchesRepo.listGuestInvites(matchId)).filter(
       (guest: any) => guest.sponsor_user_id === userId,
     ).length;
-    const totalAmount = Math.round(amount * Math.max(1, coveredGuestSlots + 1) * 100) / 100;
+    if (required && (await this.paymentsRepo.getApprovedFullCourtDeposit(matchId))) {
+      await this.approveAndConfirm(matchId, playerId, userId, null);
+      return {
+        required: true,
+        paid: true,
+        amount: 0,
+        message: 'El turno ya está pago. Tu asistencia quedó confirmada.',
+      };
+    }
+    const totalAmount = fullCourt
+      ? await this.resolveFullCourtRemaining(match, playerId, amount)
+      : Math.round(amount * Math.max(1, coveredGuestSlots + 1) * 100) / 100;
+    if (fullCourt && required && totalAmount <= 0) {
+      throw new BadRequestException('El turno ya está cubierto por los pagos de los demás jugadores');
+    }
     if (!required || amount <= 0) {
       await this.approveAndConfirm(matchId, playerId, userId, null);
       return {
@@ -264,6 +312,7 @@ export class PaymentsService {
       provider,
       externalReference,
       coveredGuestSlots,
+      coversFullCourt: fullCourt,
     });
 
     if (mockMode) {
@@ -415,7 +464,16 @@ export class PaymentsService {
           String(payment.external_reference),
         );
         if (deposit) {
-          await this.approveDeposit(deposit.id, String(payment.id));
+          const paidAmount = Number(payment.transaction_amount ?? 0);
+          // El jugador puede cambiar entre "mi parte" y "turno completo": no aprobar un pago
+          // menor al monto vigente del depósito (p. ej. una preferencia vieja de "mi parte").
+          if (paidAmount + 0.01 < Number(deposit.amount)) {
+            this.logger.warn(
+              `Pago ${payment.id} (${paidAmount}) menor al depósito ${deposit.id} (${deposit.amount}); no se aprueba`,
+            );
+          } else {
+            await this.approveDeposit(deposit.id, String(payment.id));
+          }
         }
       }
     } catch (err) {
@@ -432,6 +490,14 @@ export class PaymentsService {
       const existing = await this.paymentsRepo.getDepositById(depositId);
       if (existing?.status === 'APPROVED') return existing;
       return null;
+    }
+
+    if (deposit.covers_full_court) {
+      await this.paymentsRepo.cancelPendingDepositsForMatch(deposit.match_id);
+      await this.matchesService.bookCourtAfterFullCourtPayment(
+        deposit.match_id,
+        deposit.user_id,
+      );
     }
 
     const match = await this.approveAndConfirm(
@@ -472,6 +538,8 @@ export class PaymentsService {
     const match = await this.getMatchOrThrow(matchId);
     const { required } = await this.resolveDepositAmount(match);
     if (!required) return;
+
+    if (await this.paymentsRepo.getApprovedFullCourtDeposit(matchId)) return;
 
     const deposit = await this.paymentsRepo.getDepositByMatchPlayer(matchId, playerId);
     if (!deposit || deposit.status !== 'APPROVED') {
