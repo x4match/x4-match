@@ -141,6 +141,21 @@ export class PlayersService {
     return this.usersService.getMatchHistory(player.user_id, limit);
   }
 
+  async getTournamentTitles(playerId: string, viewerUserId?: string) {
+    let player = await this.playersRepository.getById(playerId);
+    if (!player) {
+      player = await this.playersRepository.getByUserId(playerId);
+    }
+    if (!player) {
+      throw new NotFoundException('Jugador no encontrado');
+    }
+    if (viewerUserId) {
+      await this.reportsService.assertNotBlockedEitherWay(viewerUserId, player.user_id);
+    }
+    const titles = await this.playersRepository.getTournamentTitles(player.user_id);
+    return { total: titles.length, titles };
+  }
+
   async search(query: string | undefined, excludeUserId: string) {
     const q = query?.trim() ?? '';
     if (q.length < 2) {

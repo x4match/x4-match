@@ -47,6 +47,12 @@ export class PlayersController {
     return this.playersService.getMatchHistory(id, safeLimit, user?.sub);
   }
 
+  @Get(':id/tournament-titles')
+  @UseGuards(OptionalJwtAuthGuard)
+  getTournamentTitles(@Param('id') id: string, @CurrentUser() user?: { sub: string }) {
+    return this.playersService.getTournamentTitles(id, user?.sub);
+  }
+
   @Get(':id')
   @UseGuards(OptionalJwtAuthGuard)
   getById(@Param('id') id: string, @CurrentUser() user?: { sub: string }) {

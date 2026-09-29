@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { isClubRole } from '../common/roles';
-import { getMonthKey } from '../common/utils';
+import { getMonthKey, resolvePlayerRating, resolveVisibleLevelCategory } from '../common/utils';
 import { COURT_SLOT_END_AT_SQL } from '../common/utils/court-schedule.util';
 import { deleteCloudinaryAsset, uploadImageBuffer } from '../common/cloudinary/cloudinary.util';
 import { DatabaseService } from '../database/database.service';
@@ -33,6 +33,15 @@ import { UpdateClubDto } from './dto/update-club.dto';
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/** Normaliza el género del perfil (Masculino/Femenino, male/female, caballeros/damas). */
+function normalizePlayerGender(raw?: string | null): 'male' | 'female' | null {
+  const key = raw?.trim().toLowerCase();
+  if (!key) return null;
+  if (['male', 'masculino', 'hombre', 'caballeros', 'caballero', 'm'].includes(key)) return 'male';
+  if (['female', 'femenino', 'mujer', 'damas', 'dama', 'f'].includes(key)) return 'female';
+  return null;
+}
 
 function assertClubId(id: string): void {
   if (!id || id === 'undefined' || id === 'null' || !UUID_RE.test(id)) {
@@ -1522,9 +1531,15 @@ export class ClubsService {
     };
   }
 
-  async getPublicLeaderboard(clubId: string, limit = 20, monthKey?: string) {
+  async getPublicLeaderboard(
+    clubId: string,
+    limit = 20,
+    monthKey?: string,
+    category?: string,
+    gender?: string,
+  ) {
     await this.findOne(clubId);
-    return this.queryMonthlyLeaderboard(clubId, limit, monthKey);
+    return this.queryMonthlyLeaderboard(clubId, limit, monthKey, category, gender);
   }
 
   async getMyClubPoints(clubId: string, userId: string, monthKey?: string) {
@@ -1609,13 +1624,25 @@ export class ClubsService {
     return result.rows;
   }
 
-  private async queryMonthlyLeaderboard(clubId: string, limit = 20, monthKey?: string) {
+  private async queryMonthlyLeaderboard(
+    clubId: string,
+    limit = 20,
+    monthKey?: string,
+    category?: string,
+    gender?: string,
+  ) {
     const month = monthKey ?? getMonthKey();
+    const categoryFilter = category?.trim() || null;
+    const genderFilter = normalizePlayerGender(gender);
+    const hasFilter = Boolean(categoryFilter || genderFilter);
     const result = await this.db.query(
       `SELECT cmmp.user_id,
               u.name,
               p.nickname,
               p.photo_url,
+              p.rating,
+              p.category_status,
+              p.extras,
               cmmp.points,
               cmmp.matches_played AS matches_at_club,
               cmmp.updated_at AS last_played_at,
@@ -1626,10 +1653,47 @@ export class ClubsService {
        LEFT JOIN players p ON p.user_id = cmmp.user_id
        WHERE cmmp.club_id = $1 AND cmmp.month_key = $2 AND cmmp.points > 0
        ORDER BY cmmp.points DESC, cmmp.matches_played DESC
-       LIMIT $3`,
-      [clubId, month, limit],
+       ${hasFilter ? '' : 'LIMIT $3'}`,
+      hasFilter ? [clubId, month] : [clubId, month, limit],
     );
-    return result.rows;
+
+    const rows = result.rows.map(({ rating, category_status, extras, ...row }) => {
+      const safeExtras =
+        extras && typeof extras === 'object' && !Array.isArray(extras) ? extras : {};
+      return {
+        ...row,
+        level_category: resolveVisibleLevelCategory({
+          rating: resolvePlayerRating({ rating }),
+          categoryStatus: category_status,
+          declaredCategory:
+            typeof safeExtras.declaredCategory === 'string' ? safeExtras.declaredCategory : null,
+          lockDeclaredCategory: Boolean(safeExtras.fejubaId || safeExtras.fejubaCategory),
+        }),
+        gender: normalizePlayerGender(
+          typeof safeExtras.gender === 'string' ? safeExtras.gender : null,
+        ),
+      };
+    });
+
+    if (!hasFilter) return rows;
+
+    // Ranking interno del filtro: misma lógica que RANK() (empates comparten puesto).
+    const filtered = rows.filter(
+      (row) =>
+        (!categoryFilter || row.level_category === categoryFilter) &&
+        (!genderFilter || row.gender === genderFilter),
+    );
+    let previous: { points: number; matches: number } | null = null;
+    let currentRank = 0;
+    return filtered.slice(0, limit).map((row, index) => {
+      const points = Number(row.points);
+      const matches = Number(row.matches_at_club);
+      if (!previous || previous.points !== points || previous.matches !== matches) {
+        currentRank = index + 1;
+      }
+      previous = { points, matches };
+      return { ...row, club_rank: row.rank, rank: currentRank };
+    });
   }
 
   async listPromotions(clubId: string, userId: string) {

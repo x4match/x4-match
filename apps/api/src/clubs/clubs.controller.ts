@@ -370,8 +370,13 @@ export class ClubsController {
   }
 
   @Get(':id/leaderboard')
-  getLeaderboard(@Param('id') id: string, @Query('month') month?: string) {
-    return this.clubsService.getPublicLeaderboard(id, 20, month);
+  getLeaderboard(
+    @Param('id') id: string,
+    @Query('month') month?: string,
+    @Query('category') category?: string,
+    @Query('gender') gender?: string,
+  ) {
+    return this.clubsService.getPublicLeaderboard(id, 20, month, category, gender);
   }
 
   @Get(':id/rewards-catalog')
