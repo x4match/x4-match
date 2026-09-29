@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
+import { COURT_TIMEZONE, courtSlotAtSql } from '../common/utils/court-schedule.util';
 import { DatabaseService } from '../database/database.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { ClubGapFillService } from './club-gap-fill.service';
@@ -907,11 +908,8 @@ export class ClubManagerService {
        LEFT JOIN courts c ON c.id = cas.court_id
        WHERE cas.club_id = $1
          AND cas.status IN ('OPEN', 'BOOKED')
-         AND (
-           (cas.slot_date = CURRENT_DATE
-             AND cas.start_hour >= EXTRACT(HOUR FROM NOW())::float8 + EXTRACT(MINUTE FROM NOW())::float8 / 60.0)
-           OR cas.slot_date = CURRENT_DATE + 1
-         )
+         AND ${courtSlotAtSql('start_hour', 'cas')} >= NOW()
+         AND cas.slot_date <= (NOW() AT TIME ZONE '${COURT_TIMEZONE}')::date + 1
        ORDER BY cas.slot_date ASC, cas.start_hour ASC
        LIMIT 8`,
       [clubId],
@@ -925,7 +923,7 @@ export class ClubManagerService {
 
     return result.rows.map((row) => {
       const isToday = row.slot_date?.startsWith(
-        new Date().toISOString().slice(0, 10),
+        new Date().toLocaleDateString('en-CA', { timeZone: COURT_TIMEZONE }),
       );
       const timeBase = formatHour(Number(row.start_hour));
       return {

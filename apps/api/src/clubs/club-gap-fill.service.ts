@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { courtSlotAtSql } from '../common/utils/court-schedule.util';
 import { DatabaseService } from '../database/database.service';
 import { NotificationsService } from '../notifications/notifications.service';
 
@@ -98,7 +99,7 @@ export class ClubGapFillService {
        INNER JOIN clubs c ON c.id = cas.club_id
        WHERE cas.id = $1
          AND cas.status = 'OPEN'
-         AND (cas.slot_date::timestamp + (cas.end_hour * INTERVAL '1 hour')) > NOW()`,
+         AND ${courtSlotAtSql('end_hour', 'cas')} > NOW()`,
       [slotId],
     );
 
@@ -253,8 +254,8 @@ export class ClubGapFillService {
        FROM court_availability_slots cas
        WHERE cas.club_id = $1
          AND cas.status = 'OPEN'
-         AND (cas.slot_date::timestamp + (cas.start_hour * INTERVAL '1 hour')) >= NOW()
-         AND (cas.slot_date::timestamp + (cas.start_hour * INTERVAL '1 hour'))
+         AND ${courtSlotAtSql('start_hour', 'cas')} >= NOW()
+         AND ${courtSlotAtSql('start_hour', 'cas')}
              <= NOW() + ($2::int * INTERVAL '1 hour')
          AND NOT EXISTS (
            SELECT 1 FROM matches m
@@ -284,8 +285,8 @@ export class ClubGapFillService {
     }
 
     const dateResult = await this.db.query<{ starts_at: string; ends_at: string }>(
-      `SELECT (cas.slot_date::timestamp + (cas.start_hour * INTERVAL '1 hour')) AS starts_at,
-              (cas.slot_date::timestamp + (cas.end_hour * INTERVAL '1 hour')) AS ends_at
+      `SELECT ${courtSlotAtSql('start_hour', 'cas')} AS starts_at,
+              ${courtSlotAtSql('end_hour', 'cas')} AS ends_at
        FROM court_availability_slots cas
        WHERE cas.id = $1 AND cas.status = 'OPEN'`,
       [slot.id],

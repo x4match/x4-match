@@ -1,8 +1,19 @@
+export const COURT_TIMEZONE = 'America/Argentina/Buenos_Aires';
+
+/**
+ * SQL expression (timestamptz): instante real de inicio/fin de un turno.
+ * `slot_date` + hora son hora local del club; la sesión de Postgres corre en UTC.
+ */
+export function courtSlotAtSql(hourColumn: 'start_hour' | 'end_hour', alias?: string): string {
+  const prefix = alias ? `${alias}.` : '';
+  return `((${prefix}slot_date::timestamp + (${prefix}${hourColumn} * INTERVAL '1 hour')) AT TIME ZONE '${COURT_TIMEZONE}')`;
+}
+
 /** SQL expression: when a match's court window ends (alias `m`). */
 export const MATCH_COURT_END_AT_SQL = `
   CASE
     WHEN m.court_slot_id IS NOT NULL THEN (
-      SELECT cas.slot_date::timestamp + (cas.end_hour * INTERVAL '1 hour')
+      SELECT ${courtSlotAtSql('end_hour', 'cas')}
       FROM court_availability_slots cas
       WHERE cas.id = m.court_slot_id
     )
@@ -16,4 +27,4 @@ export const MATCH_COURT_END_AT_SQL = `
   END
 `;
 
-export const COURT_SLOT_END_AT_SQL = `(slot_date::timestamp + (end_hour * INTERVAL '1 hour'))`;
+export const COURT_SLOT_END_AT_SQL = courtSlotAtSql('end_hour');
