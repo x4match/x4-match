@@ -82,10 +82,16 @@ export class PlatformShopService {
     const result = await this.db.query(
       `SELECT p.id, p.name, p.description, p.price, p.compare_at_price, p.currency, p.photo_url,
               p.stock_quantity, p.category, p.sort_order, p.status, p.is_new, p.featured,
+              p.created_at,
+              cat.name AS category_name,
               s.id AS sponsor_id, s.name AS sponsor_name, s.logo_url AS sponsor_logo_url,
-              s.slug AS sponsor_slug, s.custom_domain, s.custom_domain_status
+              s.slug AS sponsor_slug, s.custom_domain, s.custom_domain_status,
+              s.tagline AS sponsor_tagline, s.primary_color AS sponsor_primary_color,
+              s.banner_url AS sponsor_banner_url
        FROM platform_products p
        LEFT JOIN platform_sponsors s ON s.id = p.sponsor_id
+       LEFT JOIN platform_sponsor_categories cat
+         ON cat.id = p.category_id AND cat.active = TRUE
        WHERE p.status = 'ACTIVE' AND (s.active IS NULL OR s.active = TRUE)
        ORDER BY p.sort_order ASC, p.name ASC`,
     );
@@ -94,6 +100,7 @@ export class PlatformShopService {
       product_url: row.sponsor_slug
         ? this.productUrl(row, row.id)
         : null,
+      sponsor_store_url: row.sponsor_slug ? this.storeUrl(row) : null,
     }));
   }
 
