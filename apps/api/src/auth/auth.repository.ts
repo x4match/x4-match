@@ -12,7 +12,7 @@ export class AuthRepository {
 
   async findByEmail(email: string) {
     const result = await this.db.query(
-      `SELECT id, email, password_hash, name, role, google_id, apple_id
+      `SELECT id, email, password_hash, name, role, google_id, apple_id, verification_status
        FROM users
        WHERE lower(email) = lower($1)`,
       [email],
@@ -22,7 +22,7 @@ export class AuthRepository {
 
   async findByGoogleId(googleId: string) {
     const result = await this.db.query(
-      `SELECT id, email, password_hash, name, role, google_id, apple_id
+      `SELECT id, email, password_hash, name, role, google_id, apple_id, verification_status
        FROM users
        WHERE google_id = $1`,
       [googleId],
@@ -42,7 +42,7 @@ export class AuthRepository {
 
   async findByAppleId(appleId: string) {
     const result = await this.db.query(
-      `SELECT id, email, password_hash, name, role, google_id, apple_id
+      `SELECT id, email, password_hash, name, role, google_id, apple_id, verification_status
        FROM users
        WHERE apple_id = $1`,
       [appleId],
@@ -52,7 +52,7 @@ export class AuthRepository {
 
   async findById(userId: string) {
     const result = await this.db.query(
-      `SELECT id, email, password_hash, name, role, google_id, apple_id
+      `SELECT id, email, password_hash, name, role, google_id, apple_id, verification_status
        FROM users
        WHERE id = $1`,
       [userId],
@@ -67,6 +67,7 @@ export class AuthRepository {
         u.email,
         u.name,
         u.role,
+        u.verification_status,
         p.nickname,
         p.city,
         p.rating,
@@ -91,11 +92,12 @@ export class AuthRepository {
     role: 'PLAYER' | 'CLUB_ADMIN' | 'ORGANIZER';
     googleId?: string | null;
     appleId?: string | null;
+    verificationStatus?: 'PENDING' | 'APPROVED';
   }) {
     const result = await this.db.query(
-      `INSERT INTO users (email, password_hash, name, role, google_id, apple_id)
-       VALUES ($1, $2, $3, $4::user_role, $5, $6)
-       RETURNING id, email, name, role, google_id, apple_id`,
+      `INSERT INTO users (email, password_hash, name, role, google_id, apple_id, verification_status)
+       VALUES ($1, $2, $3, $4::user_role, $5, $6, $7::account_verification_status)
+       RETURNING id, email, name, role, google_id, apple_id, verification_status`,
       [
         input.email,
         input.passwordHash,
@@ -103,6 +105,7 @@ export class AuthRepository {
         input.role,
         input.googleId ?? null,
         input.appleId ?? null,
+        input.verificationStatus ?? 'APPROVED',
       ],
     );
     return result.rows[0];

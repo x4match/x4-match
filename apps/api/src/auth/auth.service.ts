@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   Logger,
   UnauthorizedException,
@@ -28,6 +29,9 @@ import {
   RegisterDto,
   ResetPasswordDto,
 } from './dto';
+
+const PENDING_VERIFICATION_MESSAGE =
+  'Tu club está pendiente de verificación. Te avisaremos cuando el equipo de x4 match apruebe el registro.';
 
 @Injectable()
 export class AuthService {
@@ -126,6 +130,7 @@ export class AuthService {
         ? this.fallbackNameFromEmail(email)
         : email.split('@')[0] || 'Usuario');
 
+    const requiresVerification = role === 'CLUB_ADMIN';
     const user = await this.authRepository.createUser({
       email,
       passwordHash,
@@ -133,6 +138,7 @@ export class AuthService {
       role,
       googleId,
       appleId,
+      verificationStatus: requiresVerification ? 'PENDING' : 'APPROVED',
     });
 
     const isFederated = Boolean(dto.fejubaId || dto.fejubaCategory);
@@ -155,11 +161,40 @@ export class AuthService {
 
     const fullUser = await this.authRepository.findMe(user.id);
 
+    if (requiresVerification) {
+      this.logger.log(`Club registrado pendiente de verificación user=${user.id} email=${email}`);
+      return {
+        pendingVerification: true,
+        code: 'ACCOUNT_PENDING_VERIFICATION',
+        message: PENDING_VERIFICATION_MESSAGE,
+        user: this.serializeAuthUser(fullUser ?? user),
+      };
+    }
+
     const token = this.generateToken(user.id, user.email);
     return {
       access_token: token,
       user: this.serializeAuthUser(fullUser ?? user),
     };
+  }
+
+  /** Clubes sin aprobar desde el backoffice no pueden obtener sesión. */
+  private assertAccountVerified(user: { verification_status?: string | null }) {
+    if (user.verification_status === 'PENDING') {
+      throw new ForbiddenException({
+        statusCode: 403,
+        code: 'ACCOUNT_PENDING_VERIFICATION',
+        message: PENDING_VERIFICATION_MESSAGE,
+      });
+    }
+    if (user.verification_status === 'REJECTED') {
+      throw new ForbiddenException({
+        statusCode: 403,
+        code: 'ACCOUNT_VERIFICATION_REJECTED',
+        message:
+          'No pudimos verificar el registro de tu club. Escribinos a soporte para revisarlo.',
+      });
+    }
   }
 
   private fallbackNameFromEmail(email: string): string {
@@ -224,6 +259,7 @@ export class AuthService {
     if (!user) {
       throw new UnauthorizedException('No se pudo iniciar sesión con Google');
     }
+    this.assertAccountVerified(user);
 
     if (photo) {
       await this.authRepository.updatePlayerPhotoIfEmpty(user.id, photo);
@@ -274,6 +310,7 @@ export class AuthService {
     if (!user) {
       throw new UnauthorizedException('No se pudo iniciar sesión con Apple');
     }
+    this.assertAccountVerified(user);
 
     const fullUser = await this.authRepository.findMe(user.id);
     const token = this.generateToken(user.id, user.email);
@@ -297,6 +334,7 @@ export class AuthService {
     if (!isPasswordValid) {
       throw new UnauthorizedException('Credenciales inválidas');
     }
+    this.assertAccountVerified(user);
 
     const fullUser = await this.authRepository.findMe(user.id);
     const token = this.generateToken(user.id, user.email);
@@ -311,6 +349,7 @@ export class AuthService {
     if (!user) {
       throw new UnauthorizedException('Usuario no encontrado');
     }
+    this.assertAccountVerified(user);
     return this.serializeAuthUser(user);
   }
 

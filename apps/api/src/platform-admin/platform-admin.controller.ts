@@ -4,6 +4,7 @@ import {
   Get,
   NotFoundException,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Query,
@@ -17,6 +18,7 @@ import {
   CreateOpsUserDto,
   ExtendTrialDto,
   OpsNotesDto,
+  ReviewClubRegistrationDto,
   StartClubTrialDto,
   SuspendClubDto,
   UpdateChecklistItemDto,
@@ -130,6 +132,49 @@ export class PlatformAdminController {
   @Patch('clubs/:id/ops-notes')
   setOpsNotes(@Param('id') id: string, @Body() dto: OpsNotesDto) {
     return this.clubTrialService.setOpsNotes(id, dto.notes);
+  }
+
+  @Get('club-registrations')
+  listClubRegistrations(
+    @Query('q') q?: string,
+    @Query('status') status?: string,
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+  ) {
+    return this.platformAdminService.listClubRegistrations({
+      q,
+      status,
+      limit: limit ? parseInt(limit, 10) : undefined,
+      offset: offset ? parseInt(offset, 10) : undefined,
+    });
+  }
+
+  @Post('club-registrations/:userId/approve')
+  approveClubRegistration(
+    @Param('userId', new ParseUUIDPipe()) userId: string,
+    @CurrentUser() user: { sub: string },
+    @Body() dto: ReviewClubRegistrationDto,
+  ) {
+    return this.platformAdminService.reviewClubRegistration(
+      userId,
+      'APPROVED',
+      user.sub,
+      dto.notes,
+    );
+  }
+
+  @Post('club-registrations/:userId/reject')
+  rejectClubRegistration(
+    @Param('userId', new ParseUUIDPipe()) userId: string,
+    @CurrentUser() user: { sub: string },
+    @Body() dto: ReviewClubRegistrationDto,
+  ) {
+    return this.platformAdminService.reviewClubRegistration(
+      userId,
+      'REJECTED',
+      user.sub,
+      dto.notes,
+    );
   }
 
   @Get('users')

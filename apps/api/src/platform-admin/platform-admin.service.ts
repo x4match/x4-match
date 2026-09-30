@@ -27,6 +27,7 @@ export class PlatformAdminService {
       recentClubs,
       recentUsers,
       billingBreakdown,
+      pendingClubRegistrations,
     ] = await Promise.all([
       this.db.query<{ count: string }>(`SELECT COUNT(*)::text AS count FROM users`),
       this.db.query<{ count: string }>(`SELECT COUNT(*)::text AS count FROM clubs`),
@@ -55,6 +56,10 @@ export class PlatformAdminService {
       this.db.query(
         `SELECT status, COUNT(*)::int AS count FROM club_billing GROUP BY status`,
       ),
+      this.db.query<{ count: string }>(
+        `SELECT COUNT(*)::text AS count FROM users
+         WHERE role = 'CLUB_ADMIN' AND verification_status = 'PENDING'`,
+      ),
     ]);
 
     return {
@@ -67,6 +72,7 @@ export class PlatformAdminService {
         activeTrials: Number(trials.rows[0]?.count ?? 0),
         trialsExpiring7d: Number(trialsExpiring.rows[0]?.count ?? 0),
         mpConnectedClubs: Number(mpConnected.rows[0]?.count ?? 0),
+        pendingClubRegistrations: Number(pendingClubRegistrations.rows[0]?.count ?? 0),
       },
       billingBreakdown: billingBreakdown.rows,
       recentClubs: recentClubs.rows.map((row: any) => ({
@@ -163,6 +169,99 @@ export class PlatformAdminService {
     );
 
     return { club, trial, admins: admins.rows };
+  }
+
+  async listClubRegistrations(params: {
+    q?: string;
+    status?: string;
+    limit?: number;
+    offset?: number;
+  }) {
+    const limit = Math.min(params.limit ?? 50, 100);
+    const offset = params.offset ?? 0;
+    const status = ['PENDING', 'APPROVED', 'REJECTED'].includes(params.status ?? '')
+      ? params.status!
+      : 'PENDING';
+    const values: unknown[] = [status];
+    const filters: string[] = [
+      `u.role = 'CLUB_ADMIN'`,
+      `u.verification_status = $1::account_verification_status`,
+    ];
+
+    if (params.q?.trim()) {
+      values.push(`%${params.q.trim()}%`);
+      filters.push(`(u.name ILIKE $${values.length} OR u.email ILIKE $${values.length})`);
+    }
+
+    const where = `WHERE ${filters.join(' AND ')}`;
+    values.push(limit, offset);
+
+    const result = await this.db.query(
+      `SELECT u.id, u.name, u.email, u.created_at,
+              u.verification_status,
+              u.verification_reviewed_at,
+              u.verification_notes,
+              reviewer.name AS reviewed_by_name,
+              CASE
+                WHEN u.google_id IS NOT NULL THEN 'GOOGLE'
+                WHEN u.apple_id IS NOT NULL THEN 'APPLE'
+                ELSE 'EMAIL'
+              END AS auth_provider,
+              COALESCE(
+                (SELECT json_agg(json_build_object('id', c.id, 'name', c.name, 'city', c.city))
+                 FROM club_admins ca
+                 INNER JOIN clubs c ON c.id = ca.club_id
+                 WHERE ca.user_id = u.id),
+                '[]'::json
+              ) AS clubs
+       FROM users u
+       LEFT JOIN users reviewer ON reviewer.id = u.verification_reviewed_by
+       ${where}
+       ORDER BY u.created_at DESC
+       LIMIT $${values.length - 1} OFFSET $${values.length}`,
+      values,
+    );
+
+    const [countRes, pendingRes] = await Promise.all([
+      this.db.query<{ count: string }>(
+        `SELECT COUNT(*)::text AS count FROM users u ${where}`,
+        values.slice(0, values.length - 2),
+      ),
+      this.db.query<{ count: string }>(
+        `SELECT COUNT(*)::text AS count FROM users
+         WHERE role = 'CLUB_ADMIN' AND verification_status = 'PENDING'`,
+      ),
+    ]);
+
+    return {
+      items: result.rows,
+      total: Number(countRes.rows[0]?.count ?? 0),
+      pendingTotal: Number(pendingRes.rows[0]?.count ?? 0),
+      limit,
+      offset,
+    };
+  }
+
+  async reviewClubRegistration(
+    userId: string,
+    decision: 'APPROVED' | 'REJECTED',
+    reviewerId: string,
+    notes?: string,
+  ) {
+    const result = await this.db.query(
+      `UPDATE users
+       SET verification_status = $2::account_verification_status,
+           verification_reviewed_at = NOW(),
+           verification_reviewed_by = $3,
+           verification_notes = $4,
+           updated_at = NOW()
+       WHERE id = $1 AND role = 'CLUB_ADMIN'
+       RETURNING id, name, email, verification_status, verification_reviewed_at, verification_notes`,
+      [userId, decision, reviewerId, notes?.trim() || null],
+    );
+    const row = result.rows[0];
+    if (!row) throw new NotFoundException('Registro de club no encontrado');
+    return row;
   }
 
   async listUsers(params: { q?: string; role?: string; limit?: number; offset?: number }) {

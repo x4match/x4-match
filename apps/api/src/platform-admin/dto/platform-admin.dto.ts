@@ -72,3 +72,9 @@ export class OpsNotesDto {
   @IsString()
   notes!: string;
 }
+
+export class ReviewClubRegistrationDto {
+  @IsOptional()
+  @IsString()
+  notes?: string;
+}
