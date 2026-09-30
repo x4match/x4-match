@@ -706,9 +706,7 @@ export class ChallengesService {
 
   private async getUserName(userId: string): Promise<string> {
     const result = await this.db.query(
-      `SELECT COALESCE(p.nickname, u.name) AS name
-       FROM users u LEFT JOIN players p ON p.user_id = u.id
-       WHERE u.id = $1`,
+      `SELECT u.name FROM users u WHERE u.id = $1`,
       [userId],
     );
     return result.rows[0]?.name || 'Un jugador';
