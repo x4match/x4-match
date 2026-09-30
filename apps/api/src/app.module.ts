@@ -28,6 +28,7 @@ import { TournamentsModule } from './tournaments/tournaments.module';
 import { PlatformAdminModule } from './platform-admin/platform-admin.module';
 import { PlatformShopModule } from './platform-shop/platform-shop.module';
 import { HealthController } from './health/health.controller';
+import { ShareController } from './share/share.controller';
 
 @Module({
   imports: [
@@ -66,6 +67,6 @@ import { HealthController } from './health/health.controller';
     TournamentsModule,
     PlatformAdminModule,
   ],
-  controllers: [HealthController],
+  controllers: [HealthController, ShareController],
 })
 export class AppModule {}
