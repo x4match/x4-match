@@ -171,64 +171,39 @@ export class ChallengesService {
   }
 
   async create(userId: string, dto: CreateChallengeDto) {
-    if (dto.challengerClubId === dto.challengedClubId) {
-      throw new BadRequestException('No podés desafiar a tu propio club');
-    }
-    if (dto.partnerUserId === userId) {
-      throw new BadRequestException('Elegí un compañero distinto a vos');
-    }
+    const partnerUserId = dto.partnerUserId ?? null;
     if (dto.challengedUserId === userId) {
       throw new BadRequestException('No podés desafiarte a vos mismo');
     }
-    if (dto.challengedUserId === dto.partnerUserId) {
+    if (partnerUserId === userId) {
+      throw new BadRequestException('Elegí un compañero distinto a vos');
+    }
+    if (partnerUserId && partnerUserId === dto.challengedUserId) {
       throw new BadRequestException('El rival y tu compañero no pueden ser la misma persona');
     }
 
-    const monthKey = getMonthKey();
-    const myRank = await this.getClubMemberRank(dto.challengerClubId, userId, monthKey);
-    if (!myRank) {
-      throw new ForbiddenException(
-        'Tenés que figurar en el ranking mensual del club para crear un desafío',
-      );
+    await this.assertPlayerExists(userId, 'Completá tu perfil de jugador para desafiar');
+    await this.assertPlayerExists(dto.challengedUserId, 'El jugador que querés desafiar no existe');
+    if (partnerUserId) {
+      await this.assertPlayerExists(partnerUserId, 'El compañero elegido no existe');
     }
 
-    const theirRank = await this.getClubMemberRank(
-      dto.challengedClubId,
-      dto.challengedUserId,
-      monthKey,
-    );
-    if (!theirRank) {
-      throw new BadRequestException(
-        'El rival debe figurar en el ranking mensual de su club',
-      );
-    }
-
-    const myCat = await this.getUserCategory(userId);
-    const theirCat = await this.getUserCategory(dto.challengedUserId);
-    if (myCat && theirCat && !isCategoryWithinSearchSteps(myCat, theirCat)) {
-      throw new BadRequestException(
-        'Solo podés desafiar jugadores de tu categoría o ±1',
-      );
-    }
-
-    if (await this.hasCooldown(dto.challengerClubId, dto.challengedClubId)) {
-      throw new BadRequestException(
-        `Debés esperar ${CHALLENGE_COOLDOWN_DAYS} días para volver a desafiar a este club`,
-      );
-    }
-
-    const active = await this.db.query(
+    const pairActive = await this.db.query(
       `SELECT id FROM club_challenges
-       WHERE challenger_anchor_user_id = $1
-         AND status IN ('PENDING_OPPONENT', 'PENDING_PARTNER', 'SCHEDULED')
+       WHERE status IN ('PENDING_OPPONENT', 'PENDING_PARTNER', 'SCHEDULED')
+         AND (
+           (challenger_anchor_user_id = $1 AND challenged_anchor_user_id = $2)
+           OR (challenger_anchor_user_id = $2 AND challenged_anchor_user_id = $1)
+         )
        LIMIT 1`,
-      [userId],
+      [userId, dto.challengedUserId],
     );
-    if (active.rows[0]) {
-      throw new BadRequestException('Ya tenés un desafío activo');
+    if (pairActive.rows[0]) {
+      throw new BadRequestException('Ya tenés un desafío activo con este jugador');
     }
 
-    await this.assertValidPartner(dto.challengerClubId, userId, dto.partnerUserId);
+    const challengerClubId = await this.getMainClubId(userId);
+    const challengedClubId = await this.getMainClubId(dto.challengedUserId);
 
     const expiresAt = new Date(Date.now() + CHALLENGE_EXPIRY_HOURS * 60 * 60 * 1000);
     const proposedDate = dto.proposedDate ? new Date(dto.proposedDate) : null;
@@ -240,37 +215,40 @@ export class ChallengesService {
          challenged_anchor_user_id,
          month_key, challenger_rank_snapshot, challenged_rank_snapshot,
          status, proposed_date, expires_at
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'PENDING_OPPONENT',$9,$10)
+       ) VALUES ($1,$2,$3,$4,$5,$6,0,0,'PENDING_OPPONENT',$7,$8)
        RETURNING *`,
       [
-        dto.challengerClubId,
-        dto.challengedClubId,
+        challengerClubId,
+        challengedClubId,
         userId,
-        dto.partnerUserId,
+        partnerUserId,
         dto.challengedUserId,
-        monthKey,
-        Number(myRank.rank),
-        Number(theirRank.rank),
+        getMonthKey(),
         proposedDate,
         expiresAt,
       ],
     );
 
     const challenge = insert.rows[0];
+    const challengerName = await this.getUserName(userId);
     await this.notify(
       dto.challengedUserId,
       'CLUB_CHALLENGE',
       '¡Te desafiaron!',
-      'Un jugador de otro club te desafió a un 2v2 interclub. Aceptá y elegí compañero.',
+      partnerUserId
+        ? `${challengerName} te desafió a un 2v2. Aceptá y elegí compañero.`
+        : `${challengerName} te desafió a un partido 1v1.`,
       { challengeId: challenge.id },
     );
-    await this.notify(
-      dto.partnerUserId,
-      'CLUB_CHALLENGE',
-      'Te eligieron de compañero',
-      'Te sumaron a un desafío interclub 2v2.',
-      { challengeId: challenge.id },
-    );
+    if (partnerUserId) {
+      await this.notify(
+        partnerUserId,
+        'CLUB_CHALLENGE',
+        'Te eligieron de compañero',
+        `${challengerName} te sumó a un desafío 2v2.`,
+        { challengeId: challenge.id },
+      );
+    }
 
     return this.getChallenge(challenge.id, userId);
   }
@@ -290,11 +268,24 @@ export class ChallengesService {
     if (challenge.challenged_anchor_user_id !== userId) {
       throw new ForbiddenException('Solo el jugador desafiado puede aceptar');
     }
-    if (dto.partnerUserId === userId) {
-      throw new BadRequestException('Elegí un compañero distinto a vos');
-    }
 
-    await this.assertValidPartner(challenge.challenged_club_id, userId, dto.partnerUserId);
+    const isDoubles = Boolean(challenge.challenger_partner_user_id);
+    const partnerUserId = isDoubles ? dto.partnerUserId ?? null : null;
+    if (isDoubles) {
+      if (!partnerUserId) {
+        throw new BadRequestException('Es un desafío 2v2: elegí tu compañero');
+      }
+      if (partnerUserId === userId) {
+        throw new BadRequestException('Elegí un compañero distinto a vos');
+      }
+      if (
+        partnerUserId === challenge.challenger_anchor_user_id ||
+        partnerUserId === challenge.challenger_partner_user_id
+      ) {
+        throw new BadRequestException('Tu compañero no puede ser del equipo rival');
+      }
+      await this.assertPlayerExists(partnerUserId, 'El compañero elegido no existe');
+    }
 
     const matchDate = dto.proposedDate
       ? new Date(dto.proposedDate)
@@ -302,12 +293,7 @@ export class ChallengesService {
         ? new Date(challenge.proposed_date)
         : new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
 
-    const matchId = await this.createChallengeMatch(
-      challenge,
-      userId,
-      dto.partnerUserId,
-      matchDate,
-    );
+    const matchId = await this.createChallengeMatch(challenge, userId, partnerUserId, matchDate);
 
     await this.db.query(
       `UPDATE club_challenges
@@ -317,19 +303,19 @@ export class ChallengesService {
            proposed_date = $4,
            updated_at = NOW()
        WHERE id = $1`,
-      [challengeId, dto.partnerUserId, matchId, matchDate],
+      [challengeId, partnerUserId, matchId, matchDate],
     );
 
     for (const uid of [
       challenge.challenger_anchor_user_id,
       challenge.challenger_partner_user_id,
-      dto.partnerUserId,
-    ]) {
+      partnerUserId,
+    ].filter(Boolean)) {
       await this.notify(
         uid,
         'CLUB_CHALLENGE',
         'Desafío aceptado',
-        'El 2v2 interclub ya está armado. ¡A jugar!',
+        'El partido del desafío ya está armado. ¡A jugar!',
         { challengeId, matchId },
       );
     }
@@ -357,7 +343,7 @@ export class ChallengesService {
       challenge.challenger_anchor_user_id,
       'CLUB_CHALLENGE',
       'Desafío rechazado',
-      'El rival rechazó el desafío interclub.',
+      'El rival rechazó tu desafío.',
       { challengeId },
     );
 
@@ -370,8 +356,8 @@ export class ChallengesService {
               cc.name AS challenger_club_name,
               cd.name AS challenged_club_name
        FROM club_challenges c
-       INNER JOIN clubs cc ON cc.id = c.challenger_club_id
-       INNER JOIN clubs cd ON cd.id = c.challenged_club_id
+       LEFT JOIN clubs cc ON cc.id = c.challenger_club_id
+       LEFT JOIN clubs cd ON cd.id = c.challenged_club_id
        WHERE $1 IN (
          c.challenger_anchor_user_id,
          c.challenger_partner_user_id,
@@ -441,71 +427,82 @@ export class ChallengesService {
     }
     if (!challengerTeam) return null;
 
-    const winnerClubId =
-      winnerTeam === challengerTeam
-        ? challenge.challenger_club_id
-        : challenge.challenged_club_id;
-    const loserClubId =
-      winnerClubId === challenge.challenger_club_id
-        ? challenge.challenged_club_id
-        : challenge.challenger_club_id;
+    const challengerWon = winnerTeam === challengerTeam;
+    const challengerUserIds = [
+      challenge.challenger_anchor_user_id,
+      challenge.challenger_partner_user_id,
+    ].filter(Boolean) as string[];
+    const challengedUserIds = [
+      challenge.challenged_anchor_user_id,
+      challenge.challenged_partner_user_id,
+    ].filter(Boolean) as string[];
+    const winnerUserIds = challengerWon ? challengerUserIds : challengedUserIds;
+    const loserUserIds = challengerWon ? challengedUserIds : challengerUserIds;
 
-    const winnerUserIds =
-      winnerClubId === challenge.challenger_club_id
-        ? [challenge.challenger_anchor_user_id, challenge.challenger_partner_user_id]
-        : [challenge.challenged_anchor_user_id, challenge.challenged_partner_user_id];
-    const loserUserIds =
-      winnerClubId === challenge.challenger_club_id
-        ? [challenge.challenged_anchor_user_id, challenge.challenged_partner_user_id]
-        : [challenge.challenger_anchor_user_id, challenge.challenger_partner_user_id];
+    const winnerClubId: string | null = challengerWon
+      ? challenge.challenger_club_id
+      : challenge.challenged_club_id;
+    const loserClubId: string | null = challengerWon
+      ? challenge.challenged_club_id
+      : challenge.challenger_club_id;
+    const isInterclub =
+      !!winnerClubId && !!loserClubId && winnerClubId !== loserClubId;
 
     await this.db.query(
       `UPDATE club_challenges
        SET status = 'COMPLETED', winner_club_id = $2, updated_at = NOW()
        WHERE id = $1`,
-      [challenge.id, winnerClubId],
-    );
-    await this.db.query(
-      `UPDATE clubs SET interclub_wins = interclub_wins + 1 WHERE id = $1`,
-      [winnerClubId],
+      [challenge.id, isInterclub ? winnerClubId : null],
     );
 
-    const monthKey = getMonthKey();
-    for (const uid of winnerUserIds.filter(Boolean)) {
-      await this.clubPointsService.addPoints(
-        winnerClubId,
-        uid,
-        INTERCLUB_WIN_POINTS,
-        'INTERCLUB_WIN',
-        challenge.id,
-        { monthKey, baseAmount: INTERCLUB_WIN_POINTS, multiplier: 1, countMatch: false },
+    if (isInterclub) {
+      await this.db.query(
+        `UPDATE clubs SET interclub_wins = interclub_wins + 1 WHERE id = $1`,
+        [winnerClubId],
       );
-      await this.awardBadge(uid, 'interclub_champion', matchId);
-      await this.awardBadge(uid, 'interclub_challenger', matchId);
-    }
-    for (const uid of loserUserIds.filter(Boolean)) {
-      await this.clubPointsService.addPoints(
-        loserClubId,
-        uid,
-        INTERCLUB_PLAY_POINTS,
-        'INTERCLUB_PLAY',
-        challenge.id,
-        { monthKey, baseAmount: INTERCLUB_PLAY_POINTS, multiplier: 1, countMatch: false },
-      );
-      await this.awardBadge(uid, 'interclub_challenger', matchId);
+
+      const monthKey = getMonthKey();
+      for (const uid of winnerUserIds) {
+        await this.clubPointsService.addPoints(
+          winnerClubId!,
+          uid,
+          INTERCLUB_WIN_POINTS,
+          'INTERCLUB_WIN',
+          challenge.id,
+          { monthKey, baseAmount: INTERCLUB_WIN_POINTS, multiplier: 1, countMatch: false },
+        );
+        await this.awardBadge(uid, 'interclub_champion', matchId);
+        await this.awardBadge(uid, 'interclub_challenger', matchId);
+      }
+      for (const uid of loserUserIds) {
+        await this.clubPointsService.addPoints(
+          loserClubId!,
+          uid,
+          INTERCLUB_PLAY_POINTS,
+          'INTERCLUB_PLAY',
+          challenge.id,
+          { monthKey, baseAmount: INTERCLUB_PLAY_POINTS, multiplier: 1, countMatch: false },
+        );
+        await this.awardBadge(uid, 'interclub_challenger', matchId);
+      }
     }
 
-    for (const uid of [...winnerUserIds, ...loserUserIds].filter(Boolean)) {
+    for (const uid of [...winnerUserIds, ...loserUserIds]) {
       await this.notify(
         uid,
         'CLUB_CHALLENGE',
         'Desafío finalizado',
-        'El 2v2 interclub terminó. ¡Compartí el resultado!',
-        { challengeId: challenge.id, matchId, winnerClubId },
+        'El desafío terminó. ¡Compartí el resultado!',
+        { challengeId: challenge.id, matchId, winnerClubId: isInterclub ? winnerClubId : null },
       );
     }
 
-    return { challengeId: challenge.id, winnerClubId, matchId };
+    return {
+      challengeId: challenge.id,
+      winnerClubId: isInterclub ? winnerClubId : null,
+      winnerUserIds,
+      matchId,
+    };
   }
 
   async expireStale() {
@@ -521,38 +518,39 @@ export class ChallengesService {
   private async createChallengeMatch(
     challenge: Record<string, any>,
     challengedAnchorUserId: string,
-    challengedPartnerUserId: string,
+    challengedPartnerUserId: string | null,
     matchDate: Date,
   ) {
-    // Order: Team A = challenger anchor + partner; Team B = challenged anchor + partner
-    const userIds = [
-      challenge.challenger_anchor_user_id,
-      challenge.challenger_partner_user_id,
-      challengedAnchorUserId,
-      challengedPartnerUserId,
-    ];
+    const isDoubles = Boolean(challenge.challenger_partner_user_id);
+    // Orden de slots: equipo A = desafiante (+ compañero); equipo B = desafiado (+ compañero)
+    const userIds = isDoubles
+      ? [
+          challenge.challenger_anchor_user_id,
+          challenge.challenger_partner_user_id,
+          challengedAnchorUserId,
+          challengedPartnerUserId,
+        ]
+      : [challenge.challenger_anchor_user_id, challengedAnchorUserId];
 
-    const clubs = await this.db.query(
-      `SELECT id, name FROM clubs WHERE id = ANY($1)`,
-      [[challenge.challenger_club_id, challenge.challenged_club_id]],
-    );
-    const nameById = new Map(clubs.rows.map((c) => [c.id, c.name]));
-    const title = `Desafío interclub: ${nameById.get(challenge.challenger_club_id) ?? 'Club A'} vs ${nameById.get(challenge.challenged_club_id) ?? 'Club B'}`;
+    const challengerName = await this.getUserName(challenge.challenger_anchor_user_id);
+    const challengedName = await this.getUserName(challengedAnchorUserId);
+    const title = `Desafío: ${challengerName} vs ${challengedName}`;
 
     const endsAt = new Date(matchDate.getTime() + 90 * 60 * 1000);
     const matchInsert = await this.db.query(
       `INSERT INTO matches (
          club_id, created_by_user_id, title, description, date, ends_at,
          gender, mode, needed_players, court_booking, status
-       ) VALUES ($1,$2,$3,$4,$5,$6,'open','competitive',4,'none','CONFIRMED')
+       ) VALUES ($1,$2,$3,$4,$5,$6,'open','competitive',$7,'none','CONFIRMED')
        RETURNING id`,
       [
-        challenge.challenged_club_id,
+        challenge.challenged_club_id ?? challenge.challenger_club_id ?? null,
         challenge.challenger_anchor_user_id,
         title,
-        'Desafío interclub 2v2 entre jugadores del ranking de cada club.',
+        isDoubles ? 'Desafío 2v2.' : 'Desafío 1v1.',
         matchDate,
         endsAt,
+        isDoubles ? 4 : 2,
       ],
     );
     const matchId = matchInsert.rows[0].id as string;
@@ -687,6 +685,35 @@ export class ChallengesService {
     return result.rows[0] ?? null;
   }
 
+  private async assertPlayerExists(userId: string, message: string) {
+    const result = await this.db.query(`SELECT 1 FROM players WHERE user_id = $1 LIMIT 1`, [
+      userId,
+    ]);
+    if (!result.rows[0]) throw new BadRequestException(message);
+  }
+
+  private async getMainClubId(userId: string): Promise<string | null> {
+    const result = await this.db.query(
+      `SELECT c.id
+       FROM players p
+       INNER JOIN clubs c ON c.id::text = p.extras->>'mainClubId'
+       WHERE p.user_id = $1
+       LIMIT 1`,
+      [userId],
+    );
+    return result.rows[0]?.id ?? null;
+  }
+
+  private async getUserName(userId: string): Promise<string> {
+    const result = await this.db.query(
+      `SELECT COALESCE(p.nickname, u.name) AS name
+       FROM users u LEFT JOIN players p ON p.user_id = u.id
+       WHERE u.id = $1`,
+      [userId],
+    );
+    return result.rows[0]?.name || 'Un jugador';
+  }
+
   private async requireChallenge(id: string) {
     const result = await this.db.query(`SELECT * FROM club_challenges WHERE id = $1`, [id]);
     if (!result.rows[0]) throw new NotFoundException('Desafío no encontrado');
@@ -707,7 +734,7 @@ export class ChallengesService {
   }
 
   private async mapChallenge(row: Record<string, any>) {
-    const clubIds = [row.challenger_club_id, row.challenged_club_id];
+    const clubIds = [row.challenger_club_id, row.challenged_club_id].filter(Boolean);
     const clubs = await this.db.query(
       `SELECT id, name, logo_url, interclub_wins FROM clubs WHERE id = ANY($1)`,
       [clubIds],
@@ -749,6 +776,7 @@ export class ChallengesService {
     return {
       id: row.id,
       status: row.status,
+      format: row.challenger_partner_user_id ? 'DOUBLES' : 'SINGLES',
       monthKey: row.month_key,
       matchId: row.match_id,
       winnerClubId: row.winner_club_id,
