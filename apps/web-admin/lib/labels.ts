@@ -55,13 +55,6 @@ export const TRIAL_MODE_LABELS: Record<string, string> = {
   MANUAL: 'Manual',
 };
 
-export const SUBSCRIPTION_PLAN_LABELS: Record<string, string> = {
-  FREE: 'Gratuito',
-  BASIC: 'Básico',
-  PRO: 'Pro',
-  ENTERPRISE: 'Enterprise',
-};
-
 export const PROVIDER_LABELS: Record<string, string> = {
   mercadopago: 'Mercado Pago',
   mock: 'Simulado',
@@ -82,7 +75,6 @@ export type LabelCategory =
   | 'tournamentStatus'
   | 'paymentStatus'
   | 'trialMode'
-  | 'subscriptionPlan'
   | 'provider';
 
 const LABEL_MAPS: Record<LabelCategory, Record<string, string>> = {
@@ -94,7 +86,6 @@ const LABEL_MAPS: Record<LabelCategory, Record<string, string>> = {
   tournamentStatus: TOURNAMENT_STATUS_LABELS,
   paymentStatus: PAYMENT_STATUS_LABELS,
   trialMode: TRIAL_MODE_LABELS,
-  subscriptionPlan: SUBSCRIPTION_PLAN_LABELS,
   provider: PROVIDER_LABELS,
 };
 

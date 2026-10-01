@@ -2,7 +2,6 @@
 
 import Link from 'next/link';
 import { StatusBadge, StatusText } from '@/components/StatusBadge';
-import { getStatusLabel } from '@/lib/labels';
 import { TableFilters } from '@/components/TableFilters';
 import { TablePagination } from '@/components/TablePagination';
 import { BILLING_STATUSES, MP_STATUSES } from '@/lib/filter-options';
@@ -56,7 +55,6 @@ export default function ClubsPage() {
               <tr>
                 <th>Club</th>
                 <th>Ciudad</th>
-                <th>Plan</th>
                 <th>Billing</th>
                 <th>MP</th>
                 <th></th>
@@ -65,7 +63,7 @@ export default function ClubsPage() {
             <tbody>
               {items.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="table-empty">
+                  <td colSpan={5} className="table-empty">
                     No hay clubes con esos filtros.
                   </td>
                 </tr>
@@ -74,7 +72,6 @@ export default function ClubsPage() {
                   <tr key={club.id}>
                     <td>{club.name}</td>
                     <td>{club.city || '—'}</td>
-                    <td>{getStatusLabel('subscriptionPlan', club.subscription_plan, club.subscription_plan || '—')}</td>
                     <td>
                       <StatusBadge value={club.billing_status || 'NOT_STARTED'} category="billingStatus" />
                     </td>

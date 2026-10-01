@@ -664,178 +664,22 @@ a {
   }
 }
 
-/* ——— Plans section ——— */
+/* ——— Signup section ——— */
 
-.plans {
+.signup {
   position: relative;
   overflow: hidden;
   padding: 88px 0 64px;
   background: #000;
+  scroll-margin-top: 24px;
 }
 
-.plans-inner {
-  position: relative;
-}
-
-.plans-header {
+.signup-inner {
   text-align: center;
-  margin-bottom: 48px;
 }
 
-.plans-title {
+.signup-title {
   margin: 0 0 12px;
-  font-family: var(--font-display);
-  font-size: clamp(2.2rem, 5vw, 3.4rem);
-  font-weight: 400;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  color: #fff;
-}
-
-.plans-subtitle {
-  margin: 0;
-  font-family: var(--font-sans);
-  font-size: clamp(0.95rem, 1.5vw, 1.1rem);
-  font-weight: 500;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.88);
-}
-
-.plans-stage {
-  position: relative;
-  padding: 28px 0 12px;
-}
-
-.plans-watermark {
-  position: absolute;
-  left: 50%;
-  top: 38%;
-  z-index: 0;
-  width: min(1100px, 120%);
-  height: auto;
-  transform: translate(-50%, -50%);
-  pointer-events: none;
-  user-select: none;
-  opacity: 0.28;
-}
-
-.plans-grid {
-  position: relative;
-  z-index: 1;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 18px;
-  align-items: stretch;
-}
-
-.plan-card {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  min-height: 320px;
-  padding: 24px 22px 28px;
-  border-radius: 22px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(18, 18, 18, 0.55);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
-}
-
-.plan-card--featured {
-  border-color: rgba(215, 255, 0, 0.55);
-  box-shadow:
-    0 0 0 1px rgba(215, 255, 0, 0.25),
-    0 0 36px rgba(215, 255, 0, 0.18),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
-}
-
-.plan-card-top {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.plan-heading {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 10px 14px;
-}
-
-.plan-name {
-  margin: 0;
-  font-family: var(--font-display);
-  font-size: 2rem;
-  font-weight: 400;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: #fff;
-  line-height: 1;
-}
-
-.plan-period {
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.75);
-}
-
-.plan-badge {
-  flex-shrink: 0;
-  font-size: 12px;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.85);
-  white-space: nowrap;
-}
-
-.plan-badge--volt {
-  color: var(--volt);
-}
-
-.plan-desc {
-  margin: 0;
-  font-size: 14px;
-  line-height: 1.4;
-  color: rgba(255, 255, 255, 0.72);
-}
-
-.plan-features {
-  list-style: none;
-  margin: auto 0 0;
-  padding: 8px 0 0;
-  display: grid;
-  gap: 12px;
-}
-
-.plan-features li {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 14px;
-  color: rgba(255, 255, 255, 0.9);
-}
-
-.plan-check {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  border-radius: 999px;
-  border: 1.5px solid rgba(255, 255, 255, 0.75);
-  color: #fff;
-  flex-shrink: 0;
-}
-
-.plans-cta {
-  margin-top: 88px;
-  text-align: center;
-}
-
-.plans-cta-title {
-  margin: 0 0 28px;
   font-family: var(--font-mono);
   font-size: clamp(1.6rem, 4.5vw, 2.6rem);
   font-weight: 500;
@@ -844,18 +688,84 @@ a {
   color: #fff;
 }
 
-.plans-cta-title span {
+.signup-title span {
   color: var(--volt);
 }
 
-.plans-cta-actions {
-  display: flex;
-  justify-content: center;
-  flex-wrap: wrap;
-  gap: 14px;
+.signup-subtitle {
+  margin: 0 0 40px;
+  font-size: 15px;
+  color: rgba(255, 255, 255, 0.72);
 }
 
-.plans-glow-line {
+.signup-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  max-width: 880px;
+  margin-inline: auto;
+  text-align: left;
+}
+
+.signup-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 28px 24px;
+  border-radius: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(18, 18, 18, 0.55);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.signup-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  border: 1px solid rgba(215, 255, 0, 0.45);
+  background: rgba(215, 255, 0, 0.1);
+  color: var(--volt);
+}
+
+.signup-eyebrow {
+  margin: 6px 0 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--volt);
+}
+
+.signup-card-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.9rem;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #fff;
+  line-height: 1.05;
+}
+
+.signup-card-text {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.signup-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: auto;
+  padding-top: 14px;
+}
+
+.signup-glow-line {
   width: min(520px, 70%);
   height: 2px;
   margin: 48px auto 0;
@@ -870,19 +780,13 @@ a {
 }
 
 @media (max-width: 960px) {
-  .plans-grid {
+  .signup {
+    padding-top: 64px;
+  }
+
+  .signup-grid {
     grid-template-columns: 1fr;
-    max-width: 420px;
-    margin-inline: auto;
-  }
-
-  .plans-watermark {
-    width: min(720px, 130%);
-    opacity: 0.2;
-  }
-
-  .plans-cta {
-    margin-top: 64px;
+    max-width: 440px;
   }
 }
 

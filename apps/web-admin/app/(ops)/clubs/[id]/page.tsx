@@ -4,8 +4,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams } from 'next/navigation';
 import { StatusBadge, StatusText } from '@/components/StatusBadge';
 import { api } from '@/lib/api';
-import { getStatusLabel } from '@/lib/labels';
-
 export default function ClubDetailPage() {
   const params = useParams<{ id: string }>();
   const clubId = params.id;
@@ -91,8 +89,6 @@ export default function ClubDetailPage() {
         }}
       >
         <span>{club.city || 'Sin ciudad'}</span>
-        <span>·</span>
-        <span>Plan {getStatusLabel('subscriptionPlan', club.subscription_plan, club.subscription_plan || '—')}</span>
         <span>·</span>
         <StatusBadge value={trial.status} category="billingStatus" />
       </div>

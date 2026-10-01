@@ -803,7 +803,7 @@ function GestionInner() {
             <CardHeader>
               <CardTitle className="text-base">Nueva promoción valle</CardTitle>
               <p className="text-sm text-muted-foreground">
-                Boost de puntos canjeables en esa franja (según el plan). No afecta ranking competitivo ni del club.
+                Boost de puntos canjeables en esa franja. No afecta ranking competitivo ni del club.
               </p>
             </CardHeader>
             <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">

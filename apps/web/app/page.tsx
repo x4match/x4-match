@@ -6,8 +6,8 @@ import {
   Users,
 } from 'lucide-react';
 import { Hero } from '@/components/Hero';
-import { PlansSection } from '@/components/PlansSection';
 import { PlayersSection } from '@/components/PlayersSection';
+import { SignupSection } from '@/components/SignupSection';
 import { SITE } from '@/content/site';
 
 const CLUB_FEATURES = [
@@ -22,7 +22,7 @@ export default function HomePage() {
     <>
       <Hero />
       <PlayersSection />
-      <PlansSection />
+      <SignupSection />
     </>
   );
 }

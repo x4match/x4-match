@@ -31,13 +31,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 
 export default function PerfilPage() {
   const { activeClubId, activeClub, clubs, clubsLoading, setSelectedClubId, refetchClubs } =
@@ -87,7 +80,6 @@ export default function PerfilPage() {
   const [description, setDescription] = useState('');
   const [courtPricePerHour, setCourtPricePerHour] = useState('');
   const [depositPercent, setDepositPercent] = useState('');
-  const [plan, setPlan] = useState('BASIC');
   const [newClubName, setNewClubName] = useState('');
   const [newClubLocation, setNewClubLocation] = useState<ClubLocationValue>(emptyClubLocation);
 
@@ -110,7 +102,6 @@ export default function PerfilPage() {
     const deposit = clubDepositPercent(c);
     setCourtPricePerHour(hourly ? String(hourly) : '');
     setDepositPercent(deposit ? String(deposit) : '');
-    setPlan(c.subscriptionPlan || c.subscription_plan || 'BASIC');
   }, [clubQuery.data]);
 
   const saveClub = useMutation({
@@ -159,16 +150,6 @@ export default function PerfilPage() {
     },
     onError: (err: { response?: { data?: { message?: string } }; message?: string }) => {
       toast.error(err.response?.data?.message || err.message || 'Error al guardar tarifa');
-    },
-  });
-
-  const savePlan = useMutation({
-    mutationFn: async () => {
-      await api.patch(`/clubs/${activeClubId}`, { subscriptionPlan: plan });
-    },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['club-detail', activeClubId] });
-      toast.success('Plan actualizado');
     },
   });
 
@@ -524,27 +505,6 @@ export default function PerfilPage() {
                   }}
                 />
               </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Plan operativo</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <Select value={plan} onValueChange={setPlan}>
-                <SelectTrigger className="rounded-xl">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="BASIC">BASIC</SelectItem>
-                  <SelectItem value="GROWTH">GROWTH</SelectItem>
-                  <SelectItem value="PRO">PRO</SelectItem>
-                </SelectContent>
-              </Select>
-              <Button className="w-full rounded-xl" variant="outline" onClick={() => savePlan.mutate()}>
-                Actualizar plan
-              </Button>
             </CardContent>
           </Card>
 

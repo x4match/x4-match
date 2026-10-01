@@ -27,8 +27,6 @@ export type MineClub = {
   description?: string;
   latitude?: number | string | null;
   longitude?: number | string | null;
-  subscriptionPlan?: string;
-  subscription_plan?: string;
   currency?: string;
   courtPricePerHour?: number;
   court_price_per_hour?: number;

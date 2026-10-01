@@ -60,12 +60,12 @@ export function Hero() {
               gestioná mejor.
             </h1>
             <div className="hero-actions">
-              <Link className="btn btn-primary" href="#jugadores">
+              <Link className="btn btn-primary" href="#registro">
                 Quiero jugar
               </Link>
-              <Link className="btn btn-outline" href="#clubes">
+              <a className="btn btn-outline" href={SITE.links.clubRegister}>
                 Tengo un Club
-              </Link>
+              </a>
             </div>
             <p className="hero-login">
               ¿Ya tenés cuenta?{' '}
