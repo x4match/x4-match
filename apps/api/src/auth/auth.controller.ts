@@ -10,7 +10,9 @@ import {
   GoogleAuthDto,
   LoginDto,
   RegisterDto,
+  ResendEmailVerificationDto,
   ResetPasswordDto,
+  VerifyEmailDto,
 } from './dto';
 
 @Controller('auth')
@@ -25,6 +27,18 @@ export class AuthController {
   @Post('register')
   register(@Body() dto: RegisterDto) {
     return this.authService.register(dto);
+  }
+
+  @Post('verify-email')
+  @HttpCode(HttpStatus.OK)
+  verifyEmail(@Body() dto: VerifyEmailDto) {
+    return this.authService.verifyEmail(dto);
+  }
+
+  @Post('resend-verification')
+  @HttpCode(HttpStatus.OK)
+  resendEmailVerification(@Body() dto: ResendEmailVerificationDto) {
+    return this.authService.resendEmailVerification(dto);
   }
 
   @Post('login')

@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
+import { EmailService } from '../email/email.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UpdatePreferencesDto } from './dto/update-preferences.dto';
 import {
@@ -55,7 +56,10 @@ function tallyWL(rows: MatchRow[]) {
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly db: DatabaseService) {}
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly emailService: EmailService,
+  ) {}
 
   private parseExtras(row: { extras?: unknown } | undefined): Extras {
     const raw = row?.extras;
@@ -609,8 +613,11 @@ export class UsersService {
   }
 
   async deleteAccount(userId: string) {
-    const existing = await this.db.query(`SELECT id FROM users WHERE id = $1`, [userId]);
-    if (!existing.rows[0]) {
+    const existing = await this.db.query(`SELECT id, email, name FROM users WHERE id = $1`, [
+      userId,
+    ]);
+    const account = existing.rows[0] as { id: string; email: string; name: string | null } | undefined;
+    if (!account) {
       throw new NotFoundException('Usuario no encontrado');
     }
 
@@ -638,6 +645,8 @@ export class UsersService {
     if (previousPhotoUrl) {
       await deleteCloudinaryAsset(previousPhotoUrl).catch(() => undefined);
     }
+
+    this.emailService.queueTemplate(account.email, 'accountDeleted', { name: account.name ?? '' });
 
     return { ok: true };
   }

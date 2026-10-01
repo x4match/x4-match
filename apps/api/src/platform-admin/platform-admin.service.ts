@@ -7,12 +7,14 @@ import {
 import * as bcrypt from 'bcryptjs';
 import { DatabaseService } from '../database/database.service';
 import { ClubTrialService } from '../clubs/club-trial.service';
+import { EmailService } from '../email/email.service';
 
 @Injectable()
 export class PlatformAdminService {
   constructor(
     private readonly db: DatabaseService,
     private readonly clubTrialService: ClubTrialService,
+    private readonly emailService: EmailService,
   ) {}
 
   async getMonitor() {
@@ -261,6 +263,18 @@ export class PlatformAdminService {
     );
     const row = result.rows[0];
     if (!row) throw new NotFoundException('Registro de club no encontrado');
+
+    if (decision === 'APPROVED') {
+      this.emailService.queueTemplate(row.email, 'clubApproved', {
+        name: row.name ?? '',
+        panelUrl: process.env.WEB_CLUB_URL?.trim() || undefined,
+      });
+    } else {
+      this.emailService.queueTemplate(row.email, 'clubRejected', {
+        name: row.name ?? '',
+        notes: row.verification_notes,
+      });
+    }
     return row;
   }
 

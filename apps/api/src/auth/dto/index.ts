@@ -6,3 +6,4 @@ export { ResetPasswordDto } from './reset-password.dto';
 export { FejubaLookupDto } from './fejuba-lookup.dto';
 export { GoogleAuthDto } from './google-auth.dto';
 export { AppleAuthDto } from './apple-auth.dto';
+export { VerifyEmailDto, ResendEmailVerificationDto } from './verify-email.dto';

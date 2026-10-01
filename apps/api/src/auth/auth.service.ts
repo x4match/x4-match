@@ -16,6 +16,7 @@ import {
   resolvePlayerRating,
   resolveVisibleLevelCategory,
 } from '../common/utils';
+import { EmailService } from '../email/email.service';
 import { FejubaService } from '../integrations/fejuba/fejuba.service';
 import { AuthRepository } from './auth.repository';
 import { OAuth2Client } from 'google-auth-library';
@@ -27,11 +28,19 @@ import {
   GoogleAuthDto,
   LoginDto,
   RegisterDto,
+  ResendEmailVerificationDto,
   ResetPasswordDto,
+  VerifyEmailDto,
 } from './dto';
 
 const PENDING_VERIFICATION_MESSAGE =
   'Tu club está pendiente de verificación. Te avisaremos cuando el equipo de x4 match apruebe el registro.';
+
+const EMAIL_NOT_VERIFIED_MESSAGE =
+  'Te enviamos un código a tu email. Ingresalo para activar tu cuenta.';
+const EMAIL_VERIFICATION_TTL_MINUTES = 30;
+const EMAIL_VERIFICATION_MAX_ATTEMPTS = 5;
+const EMAIL_VERIFICATION_RESEND_COOLDOWN_MS = 60 * 1000;
 
 @Injectable()
 export class AuthService {
@@ -41,6 +50,7 @@ export class AuthService {
     private readonly authRepository: AuthRepository,
     private readonly jwtService: JwtService,
     private readonly fejubaService: FejubaService,
+    private readonly emailService: EmailService,
   ) {}
 
   async lookupFejuba(dni: string) {
@@ -100,6 +110,11 @@ export class AuthService {
 
     const existingUser = await this.authRepository.findByEmail(email);
     if (existingUser) {
+      if (!existingUser.email_verified_at) {
+        throw new ConflictException(
+          'El email ya está registrado pero falta verificarlo. Iniciá sesión para recibir un código nuevo.',
+        );
+      }
       throw new ConflictException('El email ya está registrado');
     }
 
@@ -131,6 +146,8 @@ export class AuthService {
         : email.split('@')[0] || 'Usuario');
 
     const requiresVerification = role === 'CLUB_ADMIN';
+    // Apple y Google ya validan la propiedad del email.
+    const requiresEmailVerification = !appleId && !googleId;
     const user = await this.authRepository.createUser({
       email,
       passwordHash,
@@ -139,6 +156,7 @@ export class AuthService {
       googleId,
       appleId,
       verificationStatus: requiresVerification ? 'PENDING' : 'APPROVED',
+      emailVerified: !requiresEmailVerification,
     });
 
     const isFederated = Boolean(dto.fejubaId || dto.fejubaCategory);
@@ -159,23 +177,147 @@ export class AuthService {
       await this.authRepository.updatePlayerPhotoIfEmpty(user.id, photo);
     }
 
-    const fullUser = await this.authRepository.findMe(user.id);
+    if (requiresEmailVerification) {
+      const devCode = await this.issueEmailVerificationCode(user);
+      return {
+        emailVerificationRequired: true,
+        code: 'EMAIL_NOT_VERIFIED',
+        message: EMAIL_NOT_VERIFIED_MESSAGE,
+        email,
+        ...(devCode ? { devCode } : {}),
+      };
+    }
 
-    if (requiresVerification) {
-      this.logger.log(`Club registrado pendiente de verificación user=${user.id} email=${email}`);
+    return this.completeSignup(user.id);
+  }
+
+  async verifyEmail(dto: VerifyEmailDto) {
+    const invalid = new BadRequestException('Código inválido o expirado');
+    const user = await this.authRepository.findByEmail(dto.email.trim());
+    if (!user) throw invalid;
+    if (user.email_verified_at) {
+      throw new BadRequestException('Tu email ya está verificado. Iniciá sesión.');
+    }
+
+    const token = await this.authRepository.findActiveEmailVerificationToken(
+      user.id,
+      EMAIL_VERIFICATION_MAX_ATTEMPTS,
+    );
+    if (!token) throw invalid;
+    if (token.code_hash !== this.hashResetCode(dto.code.trim())) {
+      await this.authRepository.incrementEmailVerificationAttempts(token.id);
+      throw invalid;
+    }
+
+    await this.authRepository.markEmailVerified(user.id);
+    await this.authRepository.invalidateEmailVerificationTokens(user.id);
+    return this.completeSignup(user.id);
+  }
+
+  async resendEmailVerification(dto: ResendEmailVerificationDto) {
+    const generic = {
+      ok: true,
+      message: 'Si el email está pendiente de verificación, te enviamos un código nuevo.',
+    };
+    const user = await this.authRepository.findByEmail(dto.email.trim());
+    if (!user || user.email_verified_at) return generic;
+
+    const latest = await this.authRepository.findLatestEmailVerificationToken(user.id);
+    const elapsedMs = latest ? Date.now() - new Date(latest.created_at).getTime() : Infinity;
+    if (elapsedMs < EMAIL_VERIFICATION_RESEND_COOLDOWN_MS) {
+      const waitSeconds = Math.ceil((EMAIL_VERIFICATION_RESEND_COOLDOWN_MS - elapsedMs) / 1000);
+      throw new BadRequestException(`Esperá ${waitSeconds} segundos para pedir otro código.`);
+    }
+
+    const devCode = await this.issueEmailVerificationCode(user);
+    return { ...generic, ...(devCode ? { devCode } : {}) };
+  }
+
+  /** Devuelve el código solo fuera de producción, para probar sin email. */
+  private async issueEmailVerificationCode(user: {
+    id: string;
+    email: string;
+    name?: string | null;
+  }): Promise<string | undefined> {
+    const code = String(randomInt(100000, 1000000));
+    const expiresAt = new Date(Date.now() + EMAIL_VERIFICATION_TTL_MINUTES * 60 * 1000);
+
+    await this.authRepository.invalidateEmailVerificationTokens(user.id);
+    await this.authRepository.createEmailVerificationToken(
+      user.id,
+      this.hashResetCode(code),
+      expiresAt,
+    );
+
+    const sent = await this.emailService.sendTemplate(user.email, 'emailVerificationCode', {
+      name: user.name ?? '',
+      code,
+      expiresInMinutes: EMAIL_VERIFICATION_TTL_MINUTES,
+    });
+    if (!sent) {
+      this.logger.warn(`Código de verificación no enviado por email a user=${user.id}`);
+    }
+
+    return process.env.NODE_ENV === 'production' ? undefined : code;
+  }
+
+  /** Cierre del alta con email ya validado: mails de bienvenida y sesión (o espera de aprobación). */
+  private async completeSignup(userId: string) {
+    const fullUser = await this.authRepository.findMe(userId);
+    if (!fullUser) throw new UnauthorizedException('Usuario no encontrado');
+    const name = fullUser.name ?? '';
+
+    if (fullUser.verification_status === 'PENDING') {
+      this.logger.log(`Club registrado pendiente de verificación user=${userId} email=${fullUser.email}`);
+      this.emailService.queueTemplate(fullUser.email, 'clubRegistrationReceived', { name });
+      const admins = this.emailService.adminRecipients;
+      if (admins.length > 0) {
+        this.emailService.queueTemplate(admins, 'clubRegistrationAdminAlert', {
+          name,
+          email: fullUser.email,
+        });
+      }
       return {
         pendingVerification: true,
         code: 'ACCOUNT_PENDING_VERIFICATION',
         message: PENDING_VERIFICATION_MESSAGE,
-        user: this.serializeAuthUser(fullUser ?? user),
+        user: this.serializeAuthUser(fullUser),
       };
     }
+    this.assertAccountVerified(fullUser);
 
-    const token = this.generateToken(user.id, user.email);
+    if (fullUser.role === 'PLAYER') {
+      this.emailService.queueTemplate(fullUser.email, 'welcomePlayer', { name });
+    }
+
     return {
-      access_token: token,
-      user: this.serializeAuthUser(fullUser ?? user),
+      access_token: this.generateToken(fullUser.id, fullUser.email),
+      user: this.serializeAuthUser(fullUser),
     };
+  }
+
+  private async assertEmailVerified(user: {
+    id: string;
+    email: string;
+    name?: string | null;
+    email_verified_at?: Date | string | null;
+  }) {
+    if (user.email_verified_at) return;
+
+    const latest = await this.authRepository.findLatestEmailVerificationToken(user.id);
+    const elapsedMs = latest ? Date.now() - new Date(latest.created_at).getTime() : Infinity;
+    const devCode =
+      elapsedMs >= EMAIL_VERIFICATION_RESEND_COOLDOWN_MS
+        ? await this.issueEmailVerificationCode(user)
+        : undefined;
+
+    throw new ForbiddenException({
+      statusCode: 403,
+      code: 'EMAIL_NOT_VERIFIED',
+      message: EMAIL_NOT_VERIFIED_MESSAGE,
+      email: user.email,
+      ...(devCode ? { devCode } : {}),
+    });
   }
 
   /** Clubes sin aprobar desde el backoffice no pueden obtener sesión. */
@@ -244,6 +386,8 @@ export class AuthService {
           throw new ConflictException('Este email ya está vinculado a otra cuenta de Google');
         }
         await this.authRepository.linkGoogleAccount(existing.id, googleId);
+        await this.authRepository.clearPasswordIfEmailUnverified(existing.id);
+        await this.authRepository.markEmailVerified(existing.id);
         user = await this.authRepository.findById(existing.id);
       } else {
         // Misma política que Apple: no crear cuenta sin DNI / formulario de registro.
@@ -297,6 +441,8 @@ export class AuthService {
           throw new ConflictException('Este email ya está vinculado a otra cuenta de Apple');
         }
         await this.authRepository.linkAppleAccount(existing.id, appleId);
+        await this.authRepository.clearPasswordIfEmailUnverified(existing.id);
+        await this.authRepository.markEmailVerified(existing.id);
         user = await this.authRepository.findById(existing.id);
       } else {
         return {
@@ -334,6 +480,7 @@ export class AuthService {
     if (!isPasswordValid) {
       throw new UnauthorizedException('Credenciales inválidas');
     }
+    await this.assertEmailVerified(user);
     this.assertAccountVerified(user);
 
     const fullUser = await this.authRepository.findMe(user.id);
@@ -376,6 +523,7 @@ export class AuthService {
 
     const passwordHash = await bcrypt.hash(dto.newPassword, 10);
     await this.authRepository.updatePassword(userId, passwordHash);
+    this.emailService.queueTemplate(user.email, 'passwordChanged', { name: user.name ?? '' });
     return { ok: true };
   }
 
@@ -390,17 +538,24 @@ export class AuthService {
       return generic;
     }
 
+    const expiresInMinutes = 15;
     const code = String(randomInt(100000, 1000000));
     const codeHash = this.hashResetCode(code);
-    const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+    const expiresAt = new Date(Date.now() + expiresInMinutes * 60 * 1000);
 
     await this.authRepository.invalidatePasswordResetTokens(user.id);
     await this.authRepository.createPasswordResetToken(user.id, codeHash, expiresAt);
 
-    // Sin proveedor de email aún: el código se registra en logs.
-    // En no-producción también se devuelve para poder probar el flujo.
-    this.logger.log(`Código de recuperación para ${user.email}: ${code} (expira ${expiresAt.toISOString()})`);
+    const sent = await this.emailService.sendTemplate(user.email, 'passwordResetCode', {
+      name: user.name ?? '',
+      code,
+      expiresInMinutes,
+    });
+    if (!sent) {
+      this.logger.warn(`Código de recuperación no enviado por email a user=${user.id}`);
+    }
 
+    // En no-producción también se devuelve para poder probar el flujo sin email.
     if (process.env.NODE_ENV === 'production') {
       return generic;
     }
@@ -424,6 +579,9 @@ export class AuthService {
     await this.authRepository.updatePassword(user.id, passwordHash);
     await this.authRepository.markPasswordResetTokenUsed(token.id);
     await this.authRepository.invalidatePasswordResetTokens(user.id);
+    // El código llegó a su casilla: el email queda probado.
+    await this.authRepository.markEmailVerified(user.id);
+    this.emailService.queueTemplate(user.email, 'passwordChanged', { name: user.name ?? '' });
 
     return { ok: true, message: 'Contraseña actualizada correctamente' };
   }

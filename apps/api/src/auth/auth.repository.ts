@@ -12,7 +12,7 @@ export class AuthRepository {
 
   async findByEmail(email: string) {
     const result = await this.db.query(
-      `SELECT id, email, password_hash, name, role, google_id, apple_id, verification_status
+      `SELECT id, email, password_hash, name, role, google_id, apple_id, verification_status, email_verified_at
        FROM users
        WHERE lower(email) = lower($1)`,
       [email],
@@ -22,7 +22,7 @@ export class AuthRepository {
 
   async findByGoogleId(googleId: string) {
     const result = await this.db.query(
-      `SELECT id, email, password_hash, name, role, google_id, apple_id, verification_status
+      `SELECT id, email, password_hash, name, role, google_id, apple_id, verification_status, email_verified_at
        FROM users
        WHERE google_id = $1`,
       [googleId],
@@ -42,7 +42,7 @@ export class AuthRepository {
 
   async findByAppleId(appleId: string) {
     const result = await this.db.query(
-      `SELECT id, email, password_hash, name, role, google_id, apple_id, verification_status
+      `SELECT id, email, password_hash, name, role, google_id, apple_id, verification_status, email_verified_at
        FROM users
        WHERE apple_id = $1`,
       [appleId],
@@ -52,7 +52,7 @@ export class AuthRepository {
 
   async findById(userId: string) {
     const result = await this.db.query(
-      `SELECT id, email, password_hash, name, role, google_id, apple_id, verification_status
+      `SELECT id, email, password_hash, name, role, google_id, apple_id, verification_status, email_verified_at
        FROM users
        WHERE id = $1`,
       [userId],
@@ -93,11 +93,17 @@ export class AuthRepository {
     googleId?: string | null;
     appleId?: string | null;
     verificationStatus?: 'PENDING' | 'APPROVED';
+    emailVerified: boolean;
   }) {
     const result = await this.db.query(
-      `INSERT INTO users (email, password_hash, name, role, google_id, apple_id, verification_status)
-       VALUES ($1, $2, $3, $4::user_role, $5, $6, $7::account_verification_status)
-       RETURNING id, email, name, role, google_id, apple_id, verification_status`,
+      `INSERT INTO users (
+         email, password_hash, name, role, google_id, apple_id, verification_status, email_verified_at
+       )
+       VALUES (
+         $1, $2, $3, $4::user_role, $5, $6, $7::account_verification_status,
+         CASE WHEN $8::boolean THEN NOW() ELSE NULL END
+       )
+       RETURNING id, email, name, role, google_id, apple_id, verification_status, email_verified_at`,
       [
         input.email,
         input.passwordHash,
@@ -106,6 +112,7 @@ export class AuthRepository {
         input.googleId ?? null,
         input.appleId ?? null,
         input.verificationStatus ?? 'APPROVED',
+        input.emailVerified,
       ],
     );
     return result.rows[0];
@@ -243,6 +250,76 @@ export class AuthRepository {
       `UPDATE password_reset_tokens
        SET used_at = NOW()
        WHERE id = $1`,
+      [tokenId],
+    );
+  }
+
+  async markEmailVerified(userId: string) {
+    await this.db.query(
+      `UPDATE users
+       SET email_verified_at = COALESCE(email_verified_at, NOW()), updated_at = NOW()
+       WHERE id = $1`,
+      [userId],
+    );
+  }
+
+  /** Al vincular Apple/Google a una cuenta sin verificar, la contraseña previa no es confiable. */
+  async clearPasswordIfEmailUnverified(userId: string) {
+    await this.db.query(
+      `UPDATE users
+       SET password_hash = NULL, updated_at = NOW()
+       WHERE id = $1 AND email_verified_at IS NULL`,
+      [userId],
+    );
+  }
+
+  async invalidateEmailVerificationTokens(userId: string) {
+    await this.db.query(
+      `UPDATE email_verification_tokens
+       SET used_at = NOW()
+       WHERE user_id = $1 AND used_at IS NULL`,
+      [userId],
+    );
+  }
+
+  async createEmailVerificationToken(userId: string, codeHash: string, expiresAt: Date) {
+    await this.db.query(
+      `INSERT INTO email_verification_tokens (user_id, code_hash, expires_at)
+       VALUES ($1, $2, $3)`,
+      [userId, codeHash, expiresAt.toISOString()],
+    );
+  }
+
+  async findLatestEmailVerificationToken(userId: string) {
+    const result = await this.db.query<{ created_at: Date }>(
+      `SELECT created_at
+       FROM email_verification_tokens
+       WHERE user_id = $1
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [userId],
+    );
+    return result.rows[0] ?? null;
+  }
+
+  async findActiveEmailVerificationToken(userId: string, maxAttempts: number) {
+    const result = await this.db.query<{ id: string; code_hash: string }>(
+      `SELECT id, code_hash
+       FROM email_verification_tokens
+       WHERE user_id = $1
+         AND used_at IS NULL
+         AND expires_at > NOW()
+         AND attempts < $2
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [userId, maxAttempts],
+    );
+    return result.rows[0] ?? null;
+  }
+
+  async incrementEmailVerificationAttempts(tokenId: string) {
+    await this.db.query(
+      `UPDATE email_verification_tokens SET attempts = attempts + 1 WHERE id = $1`,
       [tokenId],
     );
   }

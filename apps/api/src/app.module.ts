@@ -4,6 +4,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { JwtModule } from '@nestjs/jwt';
 import { AuthModule } from './auth/auth.module';
 import { DatabaseModule } from './database/database.module';
+import { EmailModule } from './email/email.module';
 import { CircuitsModule } from './circuits/circuits.module';
 import { ClubPaymentConfigModule } from './clubs/club-payment-config.module';
 import { ClubsModule } from './clubs/clubs.module';
@@ -42,6 +43,7 @@ import { ShareController } from './share/share.controller';
       signOptions: { expiresIn: process.env.JWT_EXPIRES_IN || '7d' },
     }),
     DatabaseModule,
+    EmailModule,
     RealtimeModule,
     AuthModule,
     UsersModule,
