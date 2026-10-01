@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
   Activity,
+  BadgeCheck,
   Building2,
   CalendarRange,
   CreditCard,
@@ -18,7 +19,9 @@ import {
   X,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
+import { api } from '@/lib/api';
 
 const NAV_GROUPS = [
   {
@@ -33,6 +36,7 @@ const NAV_GROUPS = [
   {
     label: 'Red',
     items: [
+      { href: '/club-registrations', label: 'Altas de clubes', icon: BadgeCheck },
       { href: '/clubs', label: 'Clubes', icon: Building2 },
       { href: '/users', label: 'Usuarios', icon: Users },
       { href: '/matches', label: 'Partidos', icon: Swords },
@@ -55,6 +59,18 @@ function SidebarNav({
   pathname: string;
   onNavigate?: () => void;
 }) {
+  const { data: pendingClubs = 0 } = useQuery({
+    queryKey: ['platform-club-registrations-pending'],
+    queryFn: async () => {
+      const res = await api.get('/platform/club-registrations', {
+        params: { status: 'PENDING', limit: 1 },
+      });
+      return Number(res.data?.total ?? 0);
+    },
+    refetchInterval: 60_000,
+  });
+  const badges: Record<string, number> = { '/club-registrations': pendingClubs };
+
   return (
     <nav className="ops-nav" aria-label="Navegación principal">
       {NAV_GROUPS.map((group) => (
@@ -72,6 +88,11 @@ function SidebarNav({
               >
                 <Icon size={16} aria-hidden />
                 {label}
+                {badges[href] ? (
+                  <span className="badge badge-warning" style={{ marginLeft: 'auto' }}>
+                    {badges[href]}
+                  </span>
+                ) : null}
               </Link>
             );
           })}

@@ -72,6 +72,26 @@ function LoginForm() {
   const busy = loading || googleLoading || appleLoading;
   const nextPath = params.get('next') || '/panel';
 
+  function redirectIfUnverified(err: unknown, accountEmail?: string) {
+    const data = (err as { response?: { data?: { code?: string; email?: string; devCode?: string } } })
+      ?.response?.data;
+    const code = data?.code;
+    if (code === 'EMAIL_NOT_VERIFIED') {
+      const query = new URLSearchParams({ email: data?.email || accountEmail || '', next: nextPath });
+      if (data?.devCode) query.set('devCode', data.devCode);
+      router.push(`/verificar-email?${query}`);
+      return true;
+    }
+    if (code !== 'ACCOUNT_PENDING_VERIFICATION' && code !== 'ACCOUNT_VERIFICATION_REJECTED') {
+      return false;
+    }
+    const query = new URLSearchParams();
+    if (code === 'ACCOUNT_VERIFICATION_REJECTED') query.set('state', 'rejected');
+    if (accountEmail) query.set('email', accountEmail);
+    router.push(`/pendiente-verificacion${query.size ? `?${query}` : ''}`);
+    return true;
+  }
+
   function finishClubLogin(token: string, user: AuthUser) {
     if (!isClub(user.role)) {
       setError('Solo cuentas de club pueden ingresar a este panel.');
@@ -92,6 +112,7 @@ function LoginForm() {
       const user = response.data.user as AuthUser;
       finishClubLogin(token, user);
     } catch (err: unknown) {
+      if (redirectIfUnverified(err, email.trim())) return;
       const message =
         (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
         'No se pudo iniciar sesión';
@@ -123,6 +144,7 @@ function LoginForm() {
       }
       finishClubLogin(response.data.access_token as string, response.data.user as AuthUser);
     } catch (err: unknown) {
+      if (redirectIfUnverified(err)) return;
       const apiMessage = (err as { response?: { data?: { message?: string } } })?.response?.data
         ?.message;
       const message =
@@ -156,6 +178,7 @@ function LoginForm() {
       }
       finishClubLogin(response.data.access_token as string, response.data.user as AuthUser);
     } catch (err: unknown) {
+      if (redirectIfUnverified(err)) return;
       const apiMessage = (err as { response?: { data?: { message?: string } } })?.response?.data
         ?.message;
       const message =

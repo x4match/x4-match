@@ -67,8 +67,15 @@ export const PROVIDER_LABELS: Record<string, string> = {
   mock: 'Simulado',
 };
 
+export const VERIFICATION_STATUS_LABELS: Record<string, string> = {
+  PENDING: 'Pendiente',
+  APPROVED: 'Aprobado',
+  REJECTED: 'Rechazado',
+};
+
 export type LabelCategory =
   | 'userRole'
+  | 'verificationStatus'
   | 'billingStatus'
   | 'mpStatus'
   | 'matchStatus'
@@ -80,6 +87,7 @@ export type LabelCategory =
 
 const LABEL_MAPS: Record<LabelCategory, Record<string, string>> = {
   userRole: USER_ROLE_LABELS,
+  verificationStatus: VERIFICATION_STATUS_LABELS,
   billingStatus: BILLING_STATUS_LABELS,
   mpStatus: MP_STATUS_LABELS,
   matchStatus: MATCH_STATUS_LABELS,
@@ -127,6 +135,11 @@ export function badgeTone(
   if (category === 'mpStatus') {
     if (v === 'CONNECTED') return 'success';
     if (v === 'EXPIRED') return 'danger';
+  }
+  if (category === 'verificationStatus') {
+    if (v === 'APPROVED') return 'success';
+    if (v === 'PENDING') return 'warning';
+    if (v === 'REJECTED') return 'danger';
   }
   if (category === 'paymentStatus') {
     if (v === 'APPROVED') return 'success';

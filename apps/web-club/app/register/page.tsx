@@ -279,6 +279,25 @@ function RegisterForm() {
         name: name.trim() || pendingApple?.fullName || pendingGoogle?.fullName,
         role: 'CLUB_ADMIN',
       });
+      if (response.data?.emailVerificationRequired) {
+        setPendingAppleSignup(null);
+        setPendingGoogleSignup(null);
+        const query = new URLSearchParams({
+          email: (response.data.email as string | undefined) || email.trim(),
+        });
+        if (response.data.devCode) query.set('devCode', response.data.devCode as string);
+        router.replace(`/verificar-email?${query}`);
+        return;
+      }
+      if (response.data?.pendingVerification) {
+        setPendingAppleSignup(null);
+        setPendingGoogleSignup(null);
+        const registeredEmail = (response.data.user?.email as string | undefined) || email.trim();
+        router.replace(
+          `/pendiente-verificacion?email=${encodeURIComponent(registeredEmail)}`,
+        );
+        return;
+      }
       const token = response.data.access_token as string;
       const user = response.data.user as AuthUser;
       if (!isClub(user.role)) {
