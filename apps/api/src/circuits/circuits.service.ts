@@ -1,13 +1,20 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { uploadImageBuffer } from '../common/cloudinary/cloudinary.util';
 import { DatabaseService } from '../database/database.service';
+import { knockoutLoserPlacement } from '../tournaments/brackets/bracket-engine';
+import { CircuitAccessService, circuitDisplayTitle } from './circuit-access.service';
+import { CircuitStaffService } from './circuit-staff.service';
+import { parseCategoryLabel } from './organizer/category-rules';
+import { CircuitAuditService } from './organizer/circuit-audit.service';
 import { AddCircuitCategoryDto } from './dto/add-circuit-category.dto';
 import { AddCircuitVenueDto } from './dto/add-circuit-venue.dto';
-import { CreateCircuitDto } from './dto/create-circuit.dto';
+import { CreateCircuitDto, UpdateCircuitDto } from './dto/create-circuit.dto';
 import { CreateCircuitStageDto } from './dto/create-circuit-stage.dto';
 import {
   CreateCircuitEventDto,
@@ -28,9 +35,39 @@ const DEFAULT_POINT_RULES: Array<{ placement: string; points: number; sortOrder:
   { placement: 'PARTICIPATION', points: 10, sortOrder: 9 },
 ];
 
+const IDENTITY_COLUMNS: Array<[keyof UpdateCircuitDto, string]> = [
+  ['name', 'name'],
+  ['shortName', 'short_name'],
+  ['description', 'description'],
+  ['season', 'season'],
+  ['startDate', 'start_date'],
+  ['endDate', 'end_date'],
+  ['logoUrl', 'logo_url'],
+  ['city', 'city'],
+  ['contactPhone', 'contact_phone'],
+  ['contactEmail', 'contact_email'],
+  ['instagram', 'instagram'],
+  ['website', 'website'],
+];
+
+function normalizeShortName(value: string | undefined | null): string | null {
+  const trimmed = value?.trim().replace(/\s+/g, ' ');
+  return trimmed ? trimmed.toUpperCase() : null;
+}
+
+function isShortNameConflict(error: unknown): boolean {
+  const err = error as { code?: string; constraint?: string };
+  return err?.code === '23505' && err.constraint === 'uq_circuits_short_name_active';
+}
+
 @Injectable()
 export class CircuitsService {
-  constructor(private readonly db: DatabaseService) {}
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly access: CircuitAccessService,
+    private readonly staff: CircuitStaffService,
+    private readonly audit: CircuitAuditService,
+  ) {}
 
   async list() {
     const result = await this.db.query(
@@ -53,35 +90,161 @@ export class CircuitsService {
 
   async create(userId: string, dto: CreateCircuitDto) {
     await this.assertCanCreateEvents(userId);
-    const result = await this.db.query(
-      `INSERT INTO circuits (name, description, season, status, created_by_user_id, start_date, end_date)
-       VALUES ($1, $2, $3, COALESCE($4, 'DRAFT')::circuit_status, $5, $6, $7)
-       RETURNING *`,
-      [
-        dto.name,
-        dto.description ?? null,
-        dto.season ?? null,
-        dto.status ?? 'DRAFT',
-        userId,
-        dto.startDate ?? null,
-        dto.endDate ?? null,
-      ],
-    );
-    const circuit = result.rows[0];
+    const shortName = normalizeShortName(dto.shortName);
+    let circuit: any;
+    try {
+      circuit = await this.db.transaction(async (client) => {
+        const result = await client.query(
+          `INSERT INTO circuits
+             (name, short_name, description, season, status, created_by_user_id, start_date, end_date,
+              logo_url, city, contact_phone, contact_email, instagram, website)
+           VALUES ($1, $2, $3, $4, COALESCE($5, 'DRAFT')::circuit_status, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+           RETURNING *`,
+          [
+            dto.name.trim(),
+            shortName,
+            dto.description ?? null,
+            dto.season ?? null,
+            dto.status ?? 'DRAFT',
+            userId,
+            dto.startDate ?? null,
+            dto.endDate ?? null,
+            dto.logoUrl ?? null,
+            dto.city ?? null,
+            dto.contactPhone ?? null,
+            dto.contactEmail ?? null,
+            dto.instagram ?? null,
+            dto.website ?? null,
+          ],
+        );
+        const row = result.rows[0];
+        await client.query(
+          `INSERT INTO circuit_staff (circuit_id, user_id, role, status, invited_by_user_id, responded_at)
+           VALUES ($1, $2, 'PRESIDENT', 'ACTIVE', $2, NOW())`,
+          [row.id, userId],
+        );
+        return row;
+      });
+    } catch (error) {
+      if (isShortNameConflict(error)) {
+        throw new ConflictException(`Ya existe un circuito con la sigla ${shortName}`);
+      }
+      throw error;
+    }
     await this.seedDefaultPointRules(circuit.id);
     return circuit;
   }
 
-  async getById(id: string) {
+  async update(circuitId: string, userId: string, dto: UpdateCircuitDto) {
+    await this.access.assert(circuitId, userId, 'circuit.edit');
+    const sets: string[] = [];
+    const params: unknown[] = [circuitId];
+    for (const [key, column] of IDENTITY_COLUMNS) {
+      const value = dto[key];
+      if (value === undefined) continue;
+      const normalized =
+        key === 'shortName'
+          ? normalizeShortName(value)
+          : typeof value === 'string'
+            ? value.trim() || null
+            : value;
+      if (key === 'name' && !normalized) {
+        throw new BadRequestException('El nombre del circuito no puede quedar vacío');
+      }
+      params.push(normalized);
+      sets.push(`${column} = $${params.length}`);
+    }
+    if (!sets.length) return this.getById(circuitId, userId);
+
+    try {
+      await this.db.query(
+        `UPDATE circuits SET ${sets.join(', ')}, updated_at = NOW() WHERE id = $1`,
+        params,
+      );
+    } catch (error) {
+      if (isShortNameConflict(error)) {
+        throw new ConflictException(
+          `Ya existe un circuito con la sigla ${normalizeShortName(dto.shortName)}`,
+        );
+      }
+      throw error;
+    }
+    await this.audit.log(circuitId, userId, {
+      action: 'circuit.update',
+      entityType: 'circuit',
+      entityId: circuitId,
+      summary: 'Editó los datos del circuito',
+      meta: { fields: Object.keys(dto).filter((k) => (dto as any)[k] !== undefined) },
+    });
+    return this.getById(circuitId, userId);
+  }
+
+  async uploadLogo(circuitId: string, userId: string, file: Express.Multer.File) {
+    await this.access.assert(circuitId, userId, 'circuit.edit');
+    const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'];
+    if (!file?.buffer?.length) throw new BadRequestException('Archivo requerido');
+    if (!allowed.includes(file.mimetype)) {
+      throw new BadRequestException('Formato de imagen no soportado. Usá JPG, PNG o WEBP.');
+    }
+    const upload = await uploadImageBuffer(file, `playtomic-clone/circuits/${circuitId}`, {
+      width: 512,
+      height: 512,
+      crop: 'fill',
+    });
+    const result = await this.db.query(
+      `UPDATE circuits SET logo_url = $2, updated_at = NOW() WHERE id = $1 RETURNING logo_url`,
+      [circuitId, upload.secure_url],
+    );
+    return { logo_url: result.rows[0].logo_url };
+  }
+
+  /** Circuitos donde el usuario forma parte del staff activo, con su cargo. */
+  async listMine(userId: string) {
+    const result = await this.db.query(
+      `SELECT c.*,
+              cs.role AS my_role,
+              cs.title AS my_title,
+              (SELECT COUNT(*)::int FROM circuit_venues cv WHERE cv.circuit_id = c.id) AS venue_count,
+              (SELECT COUNT(*)::int FROM circuit_categories cc WHERE cc.circuit_id = c.id) AS category_count,
+              (
+                SELECT MIN(st.start_date)
+                FROM circuit_stages st
+                WHERE st.circuit_id = c.id AND st.start_date >= NOW()
+              ) AS next_stage_date
+       FROM circuit_staff cs
+       INNER JOIN circuits c ON c.id = cs.circuit_id
+       WHERE cs.user_id = $1 AND cs.status = 'ACTIVE'
+       ORDER BY
+         CASE c.status WHEN 'ACTIVE' THEN 0 WHEN 'DRAFT' THEN 1 ELSE 2 END,
+         c.created_at DESC`,
+      [userId],
+    );
+    return result.rows.map((row) => ({
+      ...row,
+      my_display_title: circuitDisplayTitle(row.my_role, row.my_title, row),
+    }));
+  }
+
+  async getViewerAccess(circuitId: string, userId?: string | null) {
+    const access = await this.access.getAccess(circuitId, userId);
+    return {
+      role: access.role,
+      memberId: access.memberId,
+      isSuperAdmin: access.isSuperAdmin,
+      permissions: access.permissions,
+    };
+  }
+
+  async getById(id: string, viewerId?: string | null) {
     const circuitResult = await this.db.query(`SELECT * FROM circuits WHERE id = $1`, [id]);
     const circuit = circuitResult.rows[0];
     if (!circuit) {
       throw new NotFoundException('Circuito no encontrado');
     }
 
-    const [categories, venues, stages, rankings, pointRules, events] = await Promise.all([
+    const [categories, venues, stages, rankings, pointRules, events, staff, viewer, news, sponsors] = await Promise.all([
       this.db.query(
-        `SELECT id, circuit_id, label, gender, sort_order, created_at
+        `SELECT id, circuit_id, label, gender, sort_order, kind, level, sum_total, created_at
          FROM circuit_categories
          WHERE circuit_id = $1
          ORDER BY sort_order ASC, label ASC`,
@@ -141,6 +304,23 @@ export class CircuitsService {
          ORDER BY e.start_date DESC`,
         [id],
       ),
+      this.staff.listStaff(id, viewerId),
+      this.getViewerAccess(id, viewerId),
+      this.db.query(
+        `SELECT id, title, body, image_url, pinned, published_at
+         FROM circuit_news
+         WHERE circuit_id = $1
+         ORDER BY pinned DESC, published_at DESC
+         LIMIT 3`,
+        [id],
+      ),
+      this.db.query(
+        `SELECT id, name, logo_url, website, tier, sort_order
+         FROM circuit_sponsors
+         WHERE circuit_id = $1
+         ORDER BY sort_order ASC, created_at ASC`,
+        [id],
+      ),
     ]);
 
     return {
@@ -151,6 +331,10 @@ export class CircuitsService {
       rankings: rankings.rows,
       point_rules: pointRules.rows,
       events: events.rows,
+      staff,
+      viewer,
+      news: news.rows,
+      sponsors: sponsors.rows,
     };
   }
 
@@ -158,12 +342,29 @@ export class CircuitsService {
     await this.assertCanManageCircuit(circuitId, userId);
     await this.ensureCircuit(circuitId);
 
+    const parsed = parseCategoryLabel(dto.label);
+    const kind = dto.kind ?? parsed.kind;
+    const level = kind === 'FIXED' ? dto.level ?? parsed.level : null;
+    const sumTotal = kind === 'SUM' ? dto.sumTotal ?? parsed.sumTotal : null;
+    if (kind === 'FIXED' && level == null) {
+      throw new BadRequestException('Indicá el nivel (1ra a 8va) de la categoría');
+    }
+    if (kind === 'SUM' && sumTotal == null) {
+      throw new BadRequestException('Indicá la suma de la categoría (por ejemplo Suma 7)');
+    }
+
     const result = await this.db.query(
-      `INSERT INTO circuit_categories (circuit_id, label, gender, sort_order)
-       VALUES ($1, $2, $3, COALESCE($4, 0))
+      `INSERT INTO circuit_categories (circuit_id, label, gender, sort_order, kind, level, sum_total)
+       VALUES ($1, $2, $3, COALESCE($4, 0), $5, $6, $7)
        RETURNING *`,
-      [circuitId, dto.label.trim(), dto.gender ?? null, dto.sortOrder ?? null],
+      [circuitId, dto.label.trim(), dto.gender ?? null, dto.sortOrder ?? null, kind, level, sumTotal],
     );
+    await this.audit.log(circuitId, userId, {
+      action: 'category.create',
+      entityType: 'circuit_category',
+      entityId: result.rows[0].id,
+      summary: `Nueva categoría: ${[dto.gender, dto.label.trim()].filter(Boolean).join(' ')}`,
+    });
     return result.rows[0];
   }
 
@@ -332,6 +533,13 @@ export class CircuitsService {
       createdStages.push(row);
     }
 
+    await this.audit.log(circuitId, userId, {
+      action: 'event.create',
+      entityType: 'circuit_event',
+      entityId: event.id,
+      summary: `Creó la etapa ${event.name} con ${createdStages.length} categoría(s)`,
+    });
+
     return {
       eventId: event.id,
       eventName: event.name,
@@ -363,7 +571,10 @@ export class CircuitsService {
     );
     if (!event.rows[0]) throw new NotFoundException('Evento no encontrado');
 
-    const [venues, stages] = await Promise.all([
+    const realMatch = `tm.tournament_id = cs.tournament_id
+                  AND COALESCE((tm.score->>'bye')::boolean, FALSE) = FALSE
+                  AND tm.status <> 'CANCELLED'`;
+    const [venues, stages, sponsors, byDay] = await Promise.all([
       this.db.query(
         `SELECT cev.club_id, cev.courts_count, cev.is_primary, cev.sort_order,
                 cl.name AS club_name, cl.city, cl.address, cl.logo_url
@@ -375,10 +586,24 @@ export class CircuitsService {
       ),
       this.db.query(
         `SELECT cs.*, cc.label AS category_label, cc.gender AS category_gender,
-                t.status AS tournament_status, t.name AS tournament_name,
-                (SELECT COUNT(*)::int FROM tournament_matches tm WHERE tm.tournament_id = cs.tournament_id) AS matches_count,
+                cc.kind AS category_kind, cc.level AS category_level, cc.sum_total AS category_sum_total,
+                t.status AS tournament_status, t.name AS tournament_name, t.max_teams,
+                t.registration_closes_at, t.registration_closed_at,
+                (SELECT COUNT(*)::int FROM tournament_registrations r
+                  WHERE r.tournament_id = cs.tournament_id AND r.status = 'APPROVED') AS teams_approved,
+                (SELECT COUNT(*)::int FROM tournament_registrations r
+                  WHERE r.tournament_id = cs.tournament_id AND r.status = 'PENDING') AS teams_pending,
+                (SELECT COUNT(*)::int FROM tournament_matches tm WHERE ${realMatch}) AS matches_count,
                 (SELECT COUNT(*)::int FROM tournament_matches tm
-                  WHERE tm.tournament_id = cs.tournament_id AND tm.status = 'FINISHED') AS matches_finished
+                  WHERE ${realMatch} AND tm.status = 'FINISHED') AS matches_finished,
+                (SELECT COUNT(DISTINCT tm.group_name)::int FROM tournament_matches tm
+                  WHERE tm.tournament_id = cs.tournament_id AND tm.phase = 'GROUP') AS groups_count,
+                (SELECT CASE WHEN tm.winner_registration_id = tm.team_a_registration_id
+                             THEN tm.team_a_name ELSE tm.team_b_name END
+                 FROM tournament_matches tm
+                 WHERE tm.tournament_id = cs.tournament_id AND tm.phase = 'KNOCKOUT'
+                   AND tm.next_match_id IS NULL AND tm.status = 'FINISHED'
+                 LIMIT 1) AS champion_name
          FROM circuit_stages cs
          LEFT JOIN circuit_categories cc ON cc.id = cs.category_id
          LEFT JOIN tournaments t ON t.id = cs.tournament_id
@@ -386,12 +611,41 @@ export class CircuitsService {
          ORDER BY cs.sort_order ASC`,
         [eventId],
       ),
+      this.db.query(
+        `SELECT id, name, logo_url, website, tier
+         FROM circuit_sponsors WHERE circuit_id = $1
+         ORDER BY sort_order ASC, created_at ASC`,
+        [circuitId],
+      ),
+      this.db.query(
+        `SELECT to_char(tm.scheduled_at AT TIME ZONE 'America/Argentina/Buenos_Aires', 'YYYY-MM-DD') AS day,
+                COUNT(*)::int AS total,
+                COUNT(*) FILTER (WHERE tm.status = 'FINISHED')::int AS finished
+         FROM tournament_matches tm
+         INNER JOIN circuit_stages cs ON cs.tournament_id = tm.tournament_id
+         WHERE cs.event_id = $1 AND tm.scheduled_at IS NOT NULL AND tm.schedule_published = TRUE
+           AND tm.status <> 'CANCELLED'
+         GROUP BY 1 ORDER BY 1`,
+        [eventId],
+      ),
     ]);
+
+    const totals = stages.rows.reduce(
+      (acc, s) => ({
+        teams: acc.teams + Number(s.teams_approved || 0),
+        matches: acc.matches + Number(s.matches_count || 0),
+        finished: acc.finished + Number(s.matches_finished || 0),
+      }),
+      { teams: 0, matches: 0, finished: 0 },
+    );
 
     return {
       ...event.rows[0],
       venues: venues.rows,
       stages: stages.rows,
+      sponsors: sponsors.rows,
+      matches_by_day: byDay.rows,
+      totals,
     };
   }
 
@@ -479,6 +733,10 @@ export class CircuitsService {
         [circuitId, rule.placement.trim().toUpperCase(), rule.points, rule.sortOrder ?? i + 1],
       );
     }
+    await this.audit.log(circuitId, userId, {
+      action: 'points.update',
+      summary: 'Actualizó la tabla de puntos del ranking',
+    });
     return this.getPointRules(circuitId);
   }
 
@@ -534,6 +792,12 @@ export class CircuitsService {
        RETURNING *`,
       [circuitId],
     );
+    await this.audit.log(circuitId, userId, {
+      action: 'circuit.publish',
+      entityType: 'circuit',
+      entityId: circuitId,
+      summary: 'Publicó el circuito',
+    });
     return result.rows[0];
   }
 
@@ -753,9 +1017,33 @@ export class CircuitsService {
     );
 
     const placementByReg = new Map<string, string>();
+    const knockout = matches.rows.filter((m: any) => m.phase === 'KNOCKOUT');
     const hasBracket = matches.rows.some((m: any) => m.next_match_id || /final|semi|cuartos/i.test(m.round_label || ''));
 
-    if (hasBracket) {
+    if (knockout.length) {
+      const finalRound = Math.max(...knockout.map((m: any) => Number(m.round) || 0));
+      for (const m of knockout) {
+        if (m.score?.bye) continue;
+        const winner = m.winner_registration_id as string | null;
+        if (!winner) continue;
+        const loser =
+          m.team_a_registration_id === winner ? m.team_b_registration_id : m.team_a_registration_id;
+        const fromFinal = finalRound - (Number(m.round) || 0);
+        if (fromFinal === 0) placementByReg.set(winner, 'WINNER');
+        if (loser && !placementByReg.has(loser)) {
+          placementByReg.set(loser, knockoutLoserPlacement(fromFinal));
+        }
+      }
+      const groupTeams = new Set<string>();
+      for (const m of matches.rows) {
+        if (m.phase !== 'GROUP') continue;
+        if (m.team_a_registration_id) groupTeams.add(m.team_a_registration_id);
+        if (m.team_b_registration_id) groupTeams.add(m.team_b_registration_id);
+      }
+      for (const regId of groupTeams) {
+        if (!placementByReg.has(regId)) placementByReg.set(regId, 'GROUP_ELIMINATED');
+      }
+    } else if (hasBracket) {
       for (const m of matches.rows) {
         const label = String(m.round_label || '').toLowerCase();
         const winner = m.winner_registration_id as string | null;
@@ -882,20 +1170,11 @@ export class CircuitsService {
   }
 
   private async assertCanManageCircuit(circuitId: string, userId: string) {
-    const role = await this.getRole(userId);
-    if (role === 'SUPER_ADMIN' || role === 'CLUB_ADMIN') {
-      await this.ensureCircuit(circuitId);
-      return;
-    }
-    const result = await this.db.query(
-      `SELECT created_by_user_id FROM circuits WHERE id = $1`,
-      [circuitId],
+    await this.access.assert(
+      circuitId,
+      userId,
+      'circuit.edit',
+      'Solo el Presidente o un Organizador del circuito pueden realizar esta acción',
     );
-    if (!result.rows[0]) {
-      throw new NotFoundException('Circuito no encontrado');
-    }
-    if (result.rows[0].created_by_user_id !== userId) {
-      throw new ForbiddenException('Solo el organizador de este circuito puede realizar esta acción');
-    }
   }
 }

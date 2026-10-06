@@ -24,7 +24,11 @@ import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { CircuitsService } from '../circuits/circuits.service';
 import { CreateTournamentPhotoDto } from './dto/create-tournament-photo.dto';
 import {
+  BulkScoreDto,
+  CloseTournamentDto,
   CreateRegistrationDto,
+  RegistrationWindowDto,
+  SaveZonesDto,
   CreateTournamentDateDto,
   CreateTournamentDto,
   CreateTournamentInvitesDto,
@@ -284,12 +288,30 @@ export class TournamentsController {
 
   @Delete(':id/registrations/:regId')
   @UseGuards(JwtAuthGuard)
-  removeRegistration(
+  async removeRegistration(
     @Param('id') id: string,
     @Param('regId') regId: string,
     @CurrentUser() user: { sub: string },
   ) {
-    return this.tournamentsService.removeRegistration(id, regId, user.sub);
+    const result = await this.tournamentsService.removeRegistration(id, regId, user.sub);
+    this.realtimeGateway.emitTournamentUpdated({ tournamentId: id, type: 'registration_removed' });
+    return result;
+  }
+
+  @Get(':id/refunds')
+  @UseGuards(JwtAuthGuard)
+  listRefunds(@Param('id') id: string, @CurrentUser() user: { sub: string }) {
+    return this.tournamentsService.listRefunds(id, user.sub);
+  }
+
+  @Post(':id/refunds/:refundId/mark-refunded')
+  @UseGuards(JwtAuthGuard)
+  markRefundDone(
+    @Param('id') id: string,
+    @Param('refundId') refundId: string,
+    @CurrentUser() user: { sub: string },
+  ) {
+    return this.tournamentsService.markRefundDone(id, refundId, user.sub);
   }
 
   @Put(':id/registrations/:regId/availability')
@@ -466,6 +488,19 @@ export class TournamentsController {
     });
   }
 
+  @Get(':id/groups')
+  @UseGuards(OptionalJwtAuthGuard)
+  groups(
+    @Param('id') id: string,
+    @CurrentUser() user?: { sub: string },
+    @Query('invite') inviteToken?: string,
+  ) {
+    return this.tournamentsService.getGroups(id, {
+      userId: user?.sub,
+      inviteToken,
+    });
+  }
+
   @Post(':id/matches')
   @UseGuards(JwtAuthGuard)
   async createMatch(
@@ -504,6 +539,18 @@ export class TournamentsController {
     return match;
   }
 
+  @Delete(':id/matches/:matchId/score')
+  @UseGuards(JwtAuthGuard)
+  async clearScore(
+    @Param('id') id: string,
+    @Param('matchId') matchId: string,
+    @CurrentUser() user: { sub: string },
+  ) {
+    const match = await this.tournamentsService.clearMatchScore(id, matchId, user.sub);
+    this.realtimeGateway.emitTournamentUpdated({ tournamentId: id, type: 'score_updated' });
+    return match;
+  }
+
   @Delete(':id/matches/:matchId')
   @UseGuards(JwtAuthGuard)
   removeMatch(
@@ -532,6 +579,90 @@ export class TournamentsController {
     const matches = await this.tournamentsService.generateFixture(id, user.sub, dto);
     this.realtimeGateway.emitTournamentUpdated({ tournamentId: id, type: 'fixture_generated' });
     return matches;
+  }
+
+  @Post(':id/results/bulk')
+  @UseGuards(JwtAuthGuard)
+  async bulkResults(
+    @Param('id') id: string,
+    @CurrentUser() user: { sub: string },
+    @Body() dto: BulkScoreDto,
+  ) {
+    const result = await this.tournamentsService.recordResultsBulk(id, user.sub, dto);
+    if (result.saved) {
+      this.realtimeGateway.emitTournamentUpdated({ tournamentId: id, type: 'score_updated' });
+    }
+    return result;
+  }
+
+  @Patch(':id/registration-window')
+  @UseGuards(JwtAuthGuard)
+  async registrationWindow(
+    @Param('id') id: string,
+    @CurrentUser() user: { sub: string },
+    @Body() dto: RegistrationWindowDto,
+  ) {
+    const updated = await this.tournamentsService.updateRegistrationWindow(id, user.sub, dto);
+    this.realtimeGateway.emitTournamentUpdated(updated);
+    return updated;
+  }
+
+  @Get(':id/zones')
+  @UseGuards(JwtAuthGuard)
+  getZones(@Param('id') id: string, @CurrentUser() user: { sub: string }) {
+    return this.tournamentsService.getZoneDraft(id, user.sub);
+  }
+
+  @Put(':id/zones')
+  @UseGuards(JwtAuthGuard)
+  saveZones(
+    @Param('id') id: string,
+    @CurrentUser() user: { sub: string },
+    @Body() dto: SaveZonesDto,
+  ) {
+    return this.tournamentsService.saveZoneDraft(id, user.sub, dto);
+  }
+
+  @Delete(':id/zones')
+  @UseGuards(JwtAuthGuard)
+  resetZones(@Param('id') id: string, @CurrentUser() user: { sub: string }) {
+    return this.tournamentsService.resetZoneDraft(id, user.sub);
+  }
+
+  @Post(':id/zones/:code/close')
+  @UseGuards(JwtAuthGuard)
+  async closeZone(
+    @Param('id') id: string,
+    @Param('code') code: string,
+    @CurrentUser() user: { sub: string },
+  ) {
+    const result = await this.tournamentsService.closeGroup(id, code.toUpperCase(), user.sub);
+    this.realtimeGateway.emitTournamentUpdated({ tournamentId: id, type: 'group_closed' });
+    return result;
+  }
+
+  @Post(':id/zones/:code/reopen')
+  @UseGuards(JwtAuthGuard)
+  async reopenZone(
+    @Param('id') id: string,
+    @Param('code') code: string,
+    @CurrentUser() user: { sub: string },
+  ) {
+    const result = await this.tournamentsService.reopenGroup(id, code.toUpperCase(), user.sub);
+    this.realtimeGateway.emitTournamentUpdated({ tournamentId: id, type: 'group_reopened' });
+    return result;
+  }
+
+  @Post(':id/close')
+  @UseGuards(JwtAuthGuard)
+  async closeTournament(
+    @Param('id') id: string,
+    @CurrentUser() user: { sub: string },
+    @Body() dto: CloseTournamentDto,
+  ) {
+    const updated = await this.tournamentsService.closeTournament(id, user.sub, dto);
+    this.realtimeGateway.emitTournamentUpdated(updated);
+    return updated;
   }
 
   // --- Fotos ---

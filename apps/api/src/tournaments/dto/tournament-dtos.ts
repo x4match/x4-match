@@ -1,6 +1,10 @@
+import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  ArrayMinSize,
   IsArray,
   IsBoolean,
+  IsDateString,
   IsEmail,
   IsIn,
   IsInt,
@@ -8,8 +12,11 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  Matches,
   Min,
+  ValidateNested,
 } from 'class-validator';
+import { FIXTURE_MODES, type FixtureMode } from '../brackets/bracket-engine';
 
 export class CreateTournamentDto {
   @IsString()
@@ -86,6 +93,11 @@ export class CreateTournamentDto {
   @IsOptional()
   @IsString()
   transferHolderName?: string;
+
+  /** Devolver la inscripción si la pareja se baja con 24 h de anticipación. */
+  @IsOptional()
+  @IsBoolean()
+  refundOnWithdraw?: boolean;
 
   @IsOptional()
   @IsString()
@@ -190,6 +202,10 @@ export class UpdateTournamentDto {
   @IsOptional()
   @IsString()
   transferHolderName?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  refundOnWithdraw?: boolean;
 
   @IsOptional()
   @IsString()
@@ -297,8 +313,66 @@ export class CreateTournamentMatchDto {
 }
 
 export class SetScoreDto {
+  @IsOptional()
   @IsArray()
-  sets!: { teamA: number; teamB: number }[];
+  sets?: { teamA: number; teamB: number }[];
+
+  /** Partido ganado por W.O.: la pareja indicada gana sin sets. */
+  @IsOptional()
+  @IsIn(['A', 'B'])
+  walkoverWinner?: 'A' | 'B';
+}
+
+export class BulkScoreItemDto extends SetScoreDto {
+  @IsUUID()
+  matchId!: string;
+}
+
+export class BulkScoreDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(200)
+  @ValidateNested({ each: true })
+  @Type(() => BulkScoreItemDto)
+  results!: BulkScoreItemDto[];
+}
+
+export class RegistrationWindowDto {
+  /** Fecha y hora de cierre programado (ISO). `null` la quita. */
+  @IsOptional()
+  @IsDateString()
+  closesAt?: string | null;
+
+  /** CLOSE: "Cerrar definitivamente". REOPEN: vuelve a abrir la inscripción. */
+  @IsOptional()
+  @IsIn(['CLOSE', 'REOPEN'])
+  action?: 'CLOSE' | 'REOPEN';
+}
+
+export class ZoneDraftItemDto {
+  @IsString()
+  @Matches(/^[A-Z]{1,3}$/)
+  code!: string;
+
+  @IsArray()
+  @IsUUID('all', { each: true })
+  teamIds!: string[];
+}
+
+export class SaveZonesDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(64)
+  @ValidateNested({ each: true })
+  @Type(() => ZoneDraftItemDto)
+  zones!: ZoneDraftItemDto[];
+}
+
+export class CloseTournamentDto {
+  /** Cancela los partidos sin jugar y cierra igual. */
+  @IsOptional()
+  @IsBoolean()
+  force?: boolean;
 }
 
 export class UpdateMatchDto {
@@ -345,11 +419,17 @@ export class CreateTournamentPairDto {
 }
 
 export class GenerateFixtureDto {
+  /** Si no se envía se usa el formato del torneo. */
   @IsOptional()
-  @IsString()
-  mode?: 'ROUND_ROBIN' | 'SINGLE_ELIMINATION' | 'OPEN_COURT';
+  @IsIn(FIXTURE_MODES)
+  mode?: FixtureMode;
 
   @IsOptional()
   @IsBoolean()
   reset?: boolean;
+
+  /** Permite regenerar aunque ya haya resultados cargados (se pierden). */
+  @IsOptional()
+  @IsBoolean()
+  force?: boolean;
 }

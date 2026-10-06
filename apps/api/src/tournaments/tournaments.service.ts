@@ -1,19 +1,30 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
+  HttpException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
   forwardRef,
 } from '@nestjs/common';
 import { randomBytes } from 'crypto';
 import { PoolClient } from 'pg';
 import { CircuitsService } from '../circuits/circuits.service';
+import { CircuitAccessService } from '../circuits/circuit-access.service';
+import { CircuitAuditService } from '../circuits/organizer/circuit-audit.service';
+import { CircuitPlayersService } from '../circuits/organizer/circuit-players.service';
 import { uploadImageBuffer } from '../common/cloudinary/cloudinary.util';
 import { DatabaseService } from '../database/database.service';
+import { BracketService } from './brackets/bracket.service';
 import { CreateTournamentPhotoDto } from './dto/create-tournament-photo.dto';
 import {
+  BulkScoreDto,
+  CloseTournamentDto,
   CreateRegistrationDto,
+  RegistrationWindowDto,
+  SaveZonesDto,
   CreateTournamentDateDto,
   CreateTournamentDto,
   CreateTournamentInvitesDto,
@@ -68,6 +79,28 @@ const TOURNAMENT_IS_CLOSED_SQL = `COALESCE(
   false
 )`;
 
+/** Anticipación mínima respecto de la primera jornada para que la baja tenga devolución. */
+const WITHDRAW_REFUND_NOTICE_HOURS = 24;
+
+function errorMessage(error: unknown): string {
+  if (error instanceof HttpException) {
+    const body = error.getResponse() as string | { message?: string | string[] };
+    const message = typeof body === 'string' ? body : body.message;
+    return (Array.isArray(message) ? message[0] : message) || error.message;
+  }
+  return (error as Error)?.message || 'Error inesperado';
+}
+
+/** Cierre definitivo manual o fecha de cierre programada ya vencida. */
+function isRegistrationClosed(tournament: {
+  registration_closed_at?: string | Date | null;
+  registration_closes_at?: string | Date | null;
+}): boolean {
+  if (tournament.registration_closed_at) return true;
+  if (!tournament.registration_closes_at) return false;
+  return new Date(tournament.registration_closes_at).getTime() <= Date.now();
+}
+
 type TournamentViewer = {
   userId?: string | null;
   inviteToken?: string | null;
@@ -75,12 +108,20 @@ type TournamentViewer = {
 
 @Injectable()
 export class TournamentsService {
+  private readonly logger = new Logger(TournamentsService.name);
   private lastAutoCloseAt = 0;
 
   constructor(
     private readonly db: DatabaseService,
     @Inject(forwardRef(() => CircuitsService))
     private readonly circuitsService: CircuitsService,
+    @Inject(forwardRef(() => CircuitAccessService))
+    private readonly circuitAccess: CircuitAccessService,
+    private readonly brackets: BracketService,
+    @Inject(forwardRef(() => CircuitPlayersService))
+    private readonly circuitPlayers: CircuitPlayersService,
+    @Inject(forwardRef(() => CircuitAuditService))
+    private readonly circuitAudit: CircuitAuditService,
   ) {
     cloudinary.config({
       cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -170,10 +211,11 @@ export class TournamentsService {
          courts_available, price, payment_required, rules, prizes, status, organizer_user_id,
          modality, invite_token, club_validation_status, schedule_type,
          circuit_id, circuit_stage_id, circuit_category_id,
-         accept_transfer, accept_mercadopago, transfer_cbu, transfer_alias, transfer_holder_name)
+         accept_transfer, accept_mercadopago, transfer_cbu, transfer_alias, transfer_holder_name,
+         refund_on_withdraw)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::tournament_status,$15,
                $16::tournament_modality,$17,$18::tournament_club_validation_status,
-               $19::tournament_schedule_type,$20,$21,$22,$23,$24,$25,$26,$27)
+               $19::tournament_schedule_type,$20,$21,$22,$23,$24,$25,$26,$27,$28)
        RETURNING *`,
       [
         clubId,
@@ -203,6 +245,7 @@ export class TournamentsService {
         transferCbu,
         transferAlias,
         transferHolderName,
+        dto.refundOnWithdraw ?? true,
       ],
     );
     const tournament = result.rows[0];
@@ -342,7 +385,11 @@ export class TournamentsService {
     await this.safeClosePastTournaments();
     const tournament = await this.loadTournamentRow(id);
     await this.assertCanViewTournament(tournament, viewer ?? {});
-    return this.buildTournamentDetail(tournament);
+    const [detail, viewerCanManage] = await Promise.all([
+      this.buildTournamentDetail(tournament),
+      viewer?.userId ? this.canManageTournament(id, viewer.userId) : Promise.resolve(false),
+    ]);
+    return { ...detail, viewer_can_manage: viewerCanManage };
   }
 
   /** Detalle sin chequeo de acceso (uso interno tras assertCanManage / etc.). */
@@ -394,6 +441,9 @@ export class TournamentsService {
     if (dto.transferAlias !== undefined) set('transfer_alias', dto.transferAlias?.trim() || null);
     if (dto.transferHolderName !== undefined) {
       set('transfer_holder_name', dto.transferHolderName?.trim() || null);
+    }
+    if (dto.refundOnWithdraw !== undefined) {
+      set('refund_on_withdraw', Boolean(dto.refundOnWithdraw));
     }
     if (dto.rules !== undefined) set('rules', dto.rules);
     if (dto.prizes !== undefined) set('prizes', dto.prizes);
@@ -544,11 +594,14 @@ export class TournamentsService {
     );
 
     const organizerRow = await this.db.query(
-      `SELECT organizer_user_id FROM tournaments WHERE id = $1`,
+      `SELECT organizer_user_id, circuit_id FROM tournaments WHERE id = $1`,
       [tournamentId],
     );
     const canSeePayments =
-      !!viewerUserId && organizerRow.rows[0]?.organizer_user_id === viewerUserId;
+      !!viewerUserId &&
+      (organizerRow.rows[0]?.organizer_user_id === viewerUserId ||
+        (!!organizerRow.rows[0]?.circuit_id &&
+          (await this.circuitAccess.can(organizerRow.rows[0].circuit_id, viewerUserId, 'circuit.edit'))));
 
     if (canSeePayments) {
       return result.rows;
@@ -616,7 +669,25 @@ export class TournamentsService {
       ) {
         throw new BadRequestException('El torneo aún no fue validado por el club');
       }
+      if (isRegistrationClosed(tournament)) {
+        throw new BadRequestException('La inscripción de este torneo ya cerró');
+      }
     }
+
+    const circuitLink = tournament.circuit_id
+      ? await this.circuitPlayers.evaluateRegistration(
+          { circuit_id: tournament.circuit_id, circuit_category_id: tournament.circuit_category_id ?? null },
+          {
+            player1UserId: dto.player1UserId ?? (dto.onBehalf ? null : userId),
+            player2UserId: dto.player2UserId ?? null,
+            player1Name: dto.player1Name,
+            player2Name: dto.player2Name,
+            player1Email: dto.player1Email ?? null,
+            player2Email: dto.player2Email ?? null,
+          },
+          { managerRegistration, actorUserId: userId },
+        )
+      : null;
 
     const occupied = await this.countOccupiedSpots(tournamentId);
     const maxTeams = tournament.max_teams != null ? Number(tournament.max_teams) : null;
@@ -638,8 +709,9 @@ export class TournamentsService {
       `INSERT INTO tournament_registrations
         (tournament_id, created_by_user_id, player1_user_id, player2_user_id,
          player1_name, player2_name, player1_email, player2_email, phone, category,
-         status, payment_required, payment_status, payment_amount)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+         status, payment_required, payment_status, payment_amount,
+         circuit_player1_id, circuit_player2_id, category_review)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
        RETURNING *`,
       [
         tournamentId,
@@ -656,6 +728,9 @@ export class TournamentsService {
         paymentRequired,
         paymentRequired ? 'PENDING' : null,
         paymentRequired ? price : null,
+        circuitLink?.player1Id ?? null,
+        circuitLink?.player2Id ?? null,
+        circuitLink?.review ?? null,
       ],
     );
     return result.rows[0];
@@ -664,8 +739,29 @@ export class TournamentsService {
   async approveRegistration(tournamentId: string, regId: string, userId: string) {
     await this.assertCanManageTournament(tournamentId, userId);
     const tournament = await this.getByIdUnchecked(tournamentId);
-    const current = await this.getRegistrationOrThrow(tournamentId, regId);
+    let current = await this.getRegistrationOrThrow(tournamentId, regId);
     if (current.status === 'APPROVED') return current;
+
+    if (tournament.circuit_id && (!current.circuit_player1_id || !current.circuit_player2_id)) {
+      const link = await this.circuitPlayers.evaluateRegistration(
+        { circuit_id: tournament.circuit_id, circuit_category_id: tournament.circuit_category_id ?? null },
+        {
+          player1UserId: current.player1_user_id,
+          player2UserId: current.player2_user_id,
+          player1Name: current.player1_name,
+          player2Name: current.player2_name,
+          player1Email: current.player1_email,
+          player2Email: current.player2_email,
+        },
+        { managerRegistration: true, actorUserId: userId },
+      );
+      const linked = await this.db.query(
+        `UPDATE tournament_registrations
+         SET circuit_player1_id = $2, circuit_player2_id = $3 WHERE id = $1 RETURNING *`,
+        [regId, link.player1Id, link.player2Id],
+      );
+      current = linked.rows[0];
+    }
 
     const approvedCount = await this.countApprovedSpots(tournamentId);
     const maxTeams = tournament.max_teams != null ? Number(tournament.max_teams) : null;
@@ -680,6 +776,18 @@ export class TournamentsService {
       [regId, tournamentId],
     );
     if (!result.rows[0]) throw new NotFoundException('Inscripción no encontrada');
+    if (tournament.circuit_id) {
+      await this.circuitPlayers.confirmRegistrationPlayers(result.rows[0]);
+      if (current.category_review) {
+        await this.circuitAudit.log(tournament.circuit_id, userId, {
+          action: 'registration.validate',
+          entityType: 'tournament_registration',
+          entityId: regId,
+          summary: `${tournament.name}: validó la pareja ${current.player1_name} / ${current.player2_name}`,
+          meta: { review: current.category_review },
+        });
+      }
+    }
     return result.rows[0];
   }
 
@@ -710,12 +818,131 @@ export class TournamentsService {
       throw new ForbiddenException('No podés eliminar esta inscripción');
     }
     await this.assertTournamentNotClosed(tournamentId, userId);
+    // Si se baja la propia pareja aplica la política de devolución; si la saca el organizador, no.
+    const refund = isOwner ? await this.settleWithdrawRefund(tournamentId, reg, userId) : null;
     const wasApproved = reg.status === 'APPROVED';
     await this.db.query(`DELETE FROM tournament_registrations WHERE id = $1`, [regId]);
     if (wasApproved) {
       await this.promoteNextWaitlisted(tournamentId);
     }
-    return { success: true };
+    return { success: true, refund };
+  }
+
+  /**
+   * Devolución al darse de baja. Con pago acreditado y al menos 24 h antes del inicio:
+   * Mercado Pago se reembolsa automático; transferencia/efectivo queda pendiente para el organizador.
+   */
+  private async settleWithdrawRefund(
+    tournamentId: string,
+    reg: Record<string, any>,
+    userId: string,
+  ): Promise<{
+    status: 'NONE' | 'REFUNDED' | 'PENDING' | 'RETAINED';
+    amount: number;
+    reason?: 'NOT_PAID' | 'POLICY_DISABLED' | 'TOO_LATE';
+  }> {
+    const amount = Number(reg.payment_amount ?? 0);
+    if (reg.payment_status !== 'APPROVED' || amount <= 0) {
+      return { status: 'NONE', amount: 0, reason: 'NOT_PAID' };
+    }
+
+    const policy = await this.db.query(
+      `SELECT t.refund_on_withdraw,
+              COALESCE(
+                (SELECT MIN(td.play_date) FROM tournament_dates td WHERE td.tournament_id = t.id),
+                t.start_date
+              ) AS starts_at
+       FROM tournaments t WHERE t.id = $1`,
+      [tournamentId],
+    );
+    const row = policy.rows[0];
+    if (!row?.refund_on_withdraw) {
+      return { status: 'RETAINED', amount, reason: 'POLICY_DISABLED' };
+    }
+    const startsAtMs = row.starts_at ? new Date(row.starts_at).getTime() : NaN;
+    if (
+      Number.isNaN(startsAtMs) ||
+      startsAtMs - Date.now() < WITHDRAW_REFUND_NOTICE_HOURS * 60 * 60 * 1000
+    ) {
+      return { status: 'RETAINED', amount, reason: 'TOO_LATE' };
+    }
+
+    let refunded = false;
+    if (reg.payment_provider === 'MOCK') {
+      refunded = true;
+    } else if (reg.payment_provider === 'MERCADOPAGO' && !this.isMockMode()) {
+      refunded = await this.refundMercadoPagoRegistration(reg);
+    }
+
+    const status = refunded ? 'REFUNDED' : 'PENDING';
+    await this.db.query(
+      `INSERT INTO tournament_refunds
+        (tournament_id, registration_id, user_id, player1_name, player2_name, phone,
+         amount, currency, provider, status, refunded_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10, CASE WHEN $10 = 'REFUNDED' THEN NOW() END)`,
+      [
+        tournamentId,
+        reg.id,
+        userId,
+        reg.player1_name,
+        reg.player2_name,
+        reg.phone ?? null,
+        amount,
+        reg.payment_currency || 'ARS',
+        reg.payment_provider ?? null,
+        status,
+      ],
+    );
+    return { status, amount };
+  }
+
+  private async refundMercadoPagoRegistration(reg: Record<string, any>): Promise<boolean> {
+    const accessToken = process.env.MERCADOPAGO_ACCESS_TOKEN?.trim();
+    if (!accessToken) return false;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { MercadoPagoConfig, Payment, PaymentRefund } = require('mercadopago');
+      const client = new MercadoPagoConfig({ accessToken });
+      let paymentId: string | null = reg.payment_provider_payment_id ?? null;
+      // Pagos acreditados antes de guardar el id: se busca por external_reference.
+      if (!paymentId && reg.payment_external_reference) {
+        const search = await new Payment(client).search({
+          options: { external_reference: reg.payment_external_reference },
+        });
+        const approved = (search?.results ?? []).find((p: any) => p.status === 'approved');
+        paymentId = approved?.id != null ? String(approved.id) : null;
+      }
+      if (!paymentId) return false;
+      await new PaymentRefund(client).create({ payment_id: paymentId });
+      return true;
+    } catch (err) {
+      this.logger.error(`Refund Mercado Pago falló (inscripción ${reg.id})`, err);
+      return false;
+    }
+  }
+
+  async listRefunds(tournamentId: string, userId: string) {
+    await this.assertCanManageTournament(tournamentId, userId, { allowClosed: true });
+    const result = await this.db.query(
+      `SELECT * FROM tournament_refunds
+       WHERE tournament_id = $1
+       ORDER BY CASE status WHEN 'PENDING' THEN 0 ELSE 1 END, created_at DESC`,
+      [tournamentId],
+    );
+    return result.rows;
+  }
+
+  async markRefundDone(tournamentId: string, refundId: string, userId: string) {
+    await this.assertCanManageTournament(tournamentId, userId, { allowClosed: true });
+    const result = await this.db.query(
+      `UPDATE tournament_refunds
+       SET status = 'REFUNDED', refunded_at = COALESCE(refunded_at, NOW())
+       WHERE id = $1 AND tournament_id = $2
+       RETURNING *`,
+      [refundId, tournamentId],
+    );
+    if (!result.rows[0]) throw new NotFoundException('Devolución no encontrada');
+    return result.rows[0];
   }
 
   async promoteRegistration(tournamentId: string, regId: string, userId: string) {
@@ -878,12 +1105,15 @@ export class TournamentsService {
   /** Organizador marca el pago como acreditado (efectivo, transferencia, prueba, etc.). */
   async markRegistrationPaid(tournamentId: string, regId: string, userId: string) {
     const tournament = await this.db.query(
-      `SELECT organizer_user_id FROM tournaments WHERE id = $1`,
+      `SELECT organizer_user_id, circuit_id FROM tournaments WHERE id = $1`,
       [tournamentId],
     );
     if (!tournament.rows[0]) throw new NotFoundException('Torneo no encontrado');
     const role = await this.getRole(userId);
-    if (tournament.rows[0].organizer_user_id !== userId && role !== 'SUPER_ADMIN') {
+    const isCircuitManager =
+      !!tournament.rows[0].circuit_id &&
+      (await this.circuitAccess.can(tournament.rows[0].circuit_id, userId, 'circuit.edit'));
+    if (tournament.rows[0].organizer_user_id !== userId && role !== 'SUPER_ADMIN' && !isCircuitManager) {
       throw new ForbiddenException('Solo el organizador de este torneo puede marcar pagos');
     }
     await this.assertTournamentNotClosed(tournamentId, userId);
@@ -907,13 +1137,14 @@ export class TournamentsService {
     return result.rows[0];
   }
 
-  async approvePaymentByRef(externalReference: string) {
+  async approvePaymentByRef(externalReference: string, providerPaymentId?: string | null) {
     const regId = externalReference.replace('treg:', '');
     const result = await this.db.query(
       `UPDATE tournament_registrations
-       SET payment_status = 'APPROVED', payment_paid_at = NOW()
+       SET payment_status = 'APPROVED', payment_paid_at = NOW(),
+           payment_provider_payment_id = COALESCE($2, payment_provider_payment_id)
        WHERE id = $1 RETURNING *`,
-      [regId],
+      [regId, providerPaymentId ?? null],
     );
     return result.rows[0] ?? null;
   }
@@ -927,7 +1158,7 @@ export class TournamentsService {
     const client = new MercadoPagoConfig({ accessToken });
     const payment = await new Payment(client).get({ id: body.data.id });
     if (payment.status === 'approved' && payment.external_reference) {
-      await this.approvePaymentByRef(String(payment.external_reference));
+      await this.approvePaymentByRef(String(payment.external_reference), String(payment.id));
     }
     return { ok: true };
   }
@@ -979,7 +1210,7 @@ export class TournamentsService {
   private async listMatchesUnchecked(tournamentId: string) {
     const result = await this.db.query(
       `SELECT * FROM tournament_matches WHERE tournament_id = $1
-       ORDER BY round ASC, created_at ASC`,
+       ORDER BY round ASC, group_name ASC NULLS LAST, bracket_position ASC NULLS LAST, created_at ASC`,
       [tournamentId],
     );
     return result.rows;
@@ -1078,211 +1309,201 @@ export class TournamentsService {
 
   async setMatchScore(tournamentId: string, matchId: string, userId: string, dto: SetScoreDto) {
     await this.assertCanManageTournament(tournamentId, userId);
-    const match = await this.getMatchOrThrow(tournamentId, matchId);
-    if (!dto.sets?.length) throw new BadRequestException('Sets requeridos');
+    return this.brackets.recordResult(tournamentId, matchId, dto);
+  }
 
-    let setsA = 0;
-    let setsB = 0;
-    for (const set of dto.sets) {
-      if (set.teamA > set.teamB) setsA++;
-      else if (set.teamB > set.teamA) setsB++;
-    }
-    const winnerId =
-      setsA === setsB ? null : setsA > setsB ? match.team_a_registration_id : match.team_b_registration_id;
-
-    const result = await this.db.query(
-      `UPDATE tournament_matches
-       SET score = $2, status = 'FINISHED', finished_at = NOW(),
-           winner_registration_id = $3, updated_at = NOW()
-       WHERE id = $1 RETURNING *`,
-      [matchId, JSON.stringify({ sets: dto.sets, setsA, setsB }), winnerId],
-    );
-    const updated = result.rows[0];
-    if (winnerId && updated.next_match_id && updated.next_slot) {
-      await this.advanceWinnerToNextMatch(updated, winnerId);
-    }
-    return updated;
+  async clearMatchScore(tournamentId: string, matchId: string, userId: string) {
+    await this.assertCanManageTournament(tournamentId, userId);
+    return this.brackets.clearResult(tournamentId, matchId);
   }
 
   async removeMatch(tournamentId: string, matchId: string, userId: string) {
     await this.assertCanManageTournament(tournamentId, userId);
-    await this.getMatchOrThrow(tournamentId, matchId);
+    const match = await this.getMatchOrThrow(tournamentId, matchId);
+    this.brackets.assertMatchRemovable(match);
     await this.db.query(`DELETE FROM tournament_matches WHERE id = $1`, [matchId]);
     return { success: true };
   }
 
   async generateFixture(tournamentId: string, userId: string, dto: GenerateFixtureDto) {
-    const tournament = await this.getByIdUnchecked(tournamentId);
     await this.assertCanManageTournament(tournamentId, userId);
-
-    const approved = await this.db.query(
-      `SELECT id, player1_name, player2_name FROM tournament_registrations
-       WHERE tournament_id = $1 AND status = 'APPROVED' ORDER BY created_at ASC`,
-      [tournamentId],
-    );
-    const teams = approved.rows;
-    if (teams.length < 2) {
-      throw new BadRequestException('Se necesitan al menos 2 parejas aprobadas');
-    }
-
-    if (dto.reset) {
-      await this.db.query(
-        `UPDATE tournament_matches SET next_match_id = NULL WHERE tournament_id = $1`,
-        [tournamentId],
-      );
-      await this.db.query(`DELETE FROM tournament_matches WHERE tournament_id = $1`, [tournamentId]);
-    }
-
-    const label = (t: any) => `${t.player1_name} / ${t.player2_name}`;
-    const mode = dto.mode || 'ROUND_ROBIN';
-
-    if (mode === 'SINGLE_ELIMINATION') {
-      await this.generateSingleEliminationBracket(tournamentId, teams, label);
-    } else {
-      const matches: {
-        a: any;
-        b: any;
-        round: number;
-        roundLabel: string;
-        courtLabel?: string | null;
-      }[] = [];
-
-      if (mode === 'ROUND_ROBIN') {
-        const roundPrefix = tournament.modality === 'INTERNAL' ? 'Partido' : 'Fecha';
-        let round = 1;
-        for (let a = 0; a < teams.length; a++) {
-          for (let b = a + 1; b < teams.length; b++) {
-            matches.push({ a: teams[a], b: teams[b], round, roundLabel: `${roundPrefix} ${round}` });
-            round++;
-          }
-        }
-      } else if (mode === 'OPEN_COURT') {
-        const courts = Math.max(1, Number(tournament.courts_available) || 2);
-        const n = teams.length;
-        const withBye = n % 2 === 1 ? [...teams, null] : [...teams];
-        const total = withBye.length;
-        const half = total / 2;
-        const roundCount = total - 1;
-        let arr = [...withBye];
-        let globalRound = 1;
-
-        for (let r = 0; r < roundCount; r++) {
-          const pairs: { a: any; b: any }[] = [];
-          for (let i = 0; i < half; i++) {
-            const a = arr[i];
-            const b = arr[total - 1 - i];
-            if (a && b) pairs.push({ a, b });
-          }
-
-          for (let offset = 0; offset < pairs.length; offset += courts) {
-            const batch = pairs.slice(offset, offset + courts);
-            const needsSub =
-              pairs.length > courts ? `.${Math.floor(offset / courts) + 1}` : '';
-            batch.forEach((p, courtIdx) => {
-              matches.push({
-                a: p.a,
-                b: p.b,
-                round: globalRound,
-                roundLabel: `Turno ${r + 1}${needsSub}`,
-                courtLabel: `Cancha ${courtIdx + 1}`,
-              });
-            });
-            globalRound++;
-          }
-
-          const fixed = arr[0];
-          const rest = arr.slice(1);
-          const last = rest.pop();
-          if (last !== undefined) rest.unshift(last);
-          arr = [fixed, ...rest];
-        }
-      } else {
-        throw new BadRequestException('Modo de fixture no soportado');
-      }
-
-      for (const m of matches) {
-        await this.db.query(
-          `INSERT INTO tournament_matches
-            (tournament_id, round, round_label, court_label, team_a_registration_id, team_b_registration_id, team_a_name, team_b_name)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-          [
-            tournamentId,
-            m.round,
-            m.roundLabel,
-            m.courtLabel ?? null,
-            m.a.id,
-            m.b.id,
-            label(m.a),
-            label(m.b),
-          ],
-        );
-      }
-    }
-
-    await this.db.query(
-      `UPDATE tournaments SET status = 'IN_PROGRESS', updated_at = NOW()
-       WHERE id = $1
-         AND (status = 'OPEN_REGISTRATION' OR (status = 'DRAFT' AND modality = 'INTERNAL'))`,
-      [tournamentId],
-    );
-
+    await this.brackets.generate(tournamentId, {
+      mode: dto.mode,
+      reset: dto.reset,
+      force: dto.force,
+    });
     return this.listMatchesUnchecked(tournamentId);
+  }
+
+  async getGroups(tournamentId: string, viewer?: TournamentViewer) {
+    const tournament = await this.loadTournamentRow(tournamentId);
+    await this.assertCanViewTournament(tournament, viewer ?? {});
+    return this.brackets.getGroups(tournamentId);
   }
 
   async getStandings(tournamentId: string, viewer?: TournamentViewer) {
     const tournament = await this.loadTournamentRow(tournamentId);
     await this.assertCanViewTournament(tournament, viewer ?? {});
-    const [regs, matches] = await Promise.all([
-      this.db.query(
-        `SELECT id, player1_name, player2_name FROM tournament_registrations
-         WHERE tournament_id = $1 AND status = 'APPROVED'`,
-        [tournamentId],
-      ),
-      this.db.query(
-        `SELECT * FROM tournament_matches WHERE tournament_id = $1 AND status = 'FINISHED'`,
-        [tournamentId],
-      ),
-    ]);
+    return this.brackets.getLeagueStandings(tournamentId);
+  }
 
-    const table = new Map<string, any>();
-    for (const r of regs.rows) {
-      table.set(r.id, {
-        registrationId: r.id,
-        teamName: `${r.player1_name} / ${r.player2_name}`,
-        played: 0,
-        wins: 0,
-        losses: 0,
-        setsWon: 0,
-        setsLost: 0,
-        points: 0,
-      });
+  // ---------------------------------------------------------------------------
+  // Gestión estilo organizador: inscripción, zonas, cierre y carga masiva
+  // ---------------------------------------------------------------------------
+
+  async updateRegistrationWindow(tournamentId: string, userId: string, dto: RegistrationWindowDto) {
+    await this.assertCanManageTournament(tournamentId, userId);
+    const sets: string[] = [];
+    const values: unknown[] = [tournamentId];
+    if (dto.closesAt !== undefined) {
+      values.push(dto.closesAt);
+      sets.push(`registration_closes_at = $${values.length}::timestamptz`);
     }
-
-    for (const m of matches.rows) {
-      const a = table.get(m.team_a_registration_id);
-      const b = table.get(m.team_b_registration_id);
-      if (!a || !b) continue;
-      const score = m.score || {};
-      a.played++;
-      b.played++;
-      a.setsWon += score.setsA ?? 0;
-      a.setsLost += score.setsB ?? 0;
-      b.setsWon += score.setsB ?? 0;
-      b.setsLost += score.setsA ?? 0;
-      if (m.winner_registration_id === a.registrationId) {
-        a.wins++;
-        a.points += 3;
-        b.losses++;
-      } else if (m.winner_registration_id === b.registrationId) {
-        b.wins++;
-        b.points += 3;
-        a.losses++;
+    if (dto.action === 'CLOSE') sets.push(`registration_closed_at = NOW()`);
+    if (dto.action === 'REOPEN') {
+      sets.push(`registration_closed_at = NULL`);
+      if (dto.closesAt === undefined) {
+        sets.push(
+          `registration_closes_at = CASE WHEN registration_closes_at <= NOW() THEN NULL ELSE registration_closes_at END`,
+        );
       }
     }
+    if (!sets.length) return this.getByIdUnchecked(tournamentId);
 
-    return [...table.values()]
-      .sort((x, y) => y.points - x.points || y.setsWon - y.setsLost - (x.setsWon - x.setsLost))
-      .map((row, idx) => ({ ...row, position: idx + 1 }));
+    await this.db.query(
+      `UPDATE tournaments SET ${sets.join(', ')}, updated_at = NOW() WHERE id = $1`,
+      values,
+    );
+    const updated = await this.getByIdUnchecked(tournamentId);
+    const summary =
+      dto.action === 'CLOSE'
+        ? 'cerró la inscripción definitivamente'
+        : dto.action === 'REOPEN'
+          ? 'reabrió la inscripción'
+          : updated.registration_closes_at
+            ? `programó el cierre de inscripción para el ${new Date(updated.registration_closes_at).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`
+            : 'quitó la fecha de cierre de inscripción';
+    await this.circuitAudit.logForTournament(tournamentId, userId, {
+      action: 'registration.window',
+      summary,
+    });
+    return updated;
+  }
+
+  async getZoneDraft(tournamentId: string, userId: string) {
+    await this.assertCanManageTournament(tournamentId, userId, { allowClosed: true });
+    return this.brackets.getZoneDraft(tournamentId);
+  }
+
+  async saveZoneDraft(tournamentId: string, userId: string, dto: SaveZonesDto) {
+    await this.assertCanManageTournament(tournamentId, userId);
+    const draft = await this.brackets.saveZoneDraft(tournamentId, dto.zones);
+    await this.circuitAudit.logForTournament(tournamentId, userId, {
+      action: 'zones.edit',
+      summary: `editó las zonas (${draft.groups.length} zona(s), ${draft.teams} pareja(s))`,
+    });
+    return draft;
+  }
+
+  async resetZoneDraft(tournamentId: string, userId: string) {
+    await this.assertCanManageTournament(tournamentId, userId);
+    const draft = await this.brackets.resetZoneDraft(tournamentId);
+    await this.circuitAudit.logForTournament(tournamentId, userId, {
+      action: 'zones.reset',
+      summary: 'volvió a las zonas automáticas por ranking',
+    });
+    return draft;
+  }
+
+  async closeGroup(tournamentId: string, code: string, userId: string) {
+    await this.assertCanManageTournament(tournamentId, userId);
+    const result = await this.brackets.closeGroup(tournamentId, code);
+    await this.circuitAudit.logForTournament(tournamentId, userId, {
+      action: 'zones.close',
+      summary: `cerró la Zona ${code}${result.cancelled ? ` (${result.cancelled} partido(s) sin jugar cancelados)` : ''}`,
+    });
+    return result;
+  }
+
+  async reopenGroup(tournamentId: string, code: string, userId: string) {
+    await this.assertCanManageTournament(tournamentId, userId);
+    const result = await this.brackets.reopenGroup(tournamentId, code);
+    await this.circuitAudit.logForTournament(tournamentId, userId, {
+      action: 'zones.reopen',
+      summary: `reabrió la Zona ${code}`,
+    });
+    return result;
+  }
+
+  /**
+   * "Cerrar torneo": pasa a FINISHED (suma puntos al ranking del circuito) y bloquea cambios.
+   * Con partidos sin jugar pide confirmación; con `force` los cancela.
+   */
+  async closeTournament(tournamentId: string, userId: string, dto: CloseTournamentDto) {
+    await this.assertCanManageTournament(tournamentId, userId);
+    const pending = await this.db.query(
+      `SELECT COUNT(*)::int AS total FROM tournament_matches
+       WHERE tournament_id = $1 AND status IN ('SCHEDULED', 'IN_PROGRESS')`,
+      [tournamentId],
+    );
+    const pendingCount = Number(pending.rows[0]?.total ?? 0);
+    if (pendingCount > 0 && !dto.force) {
+      throw new ConflictException({
+        message: `Quedan ${pendingCount} partido(s) sin resultado. Si cerrás igual se cancelan.`,
+        code: 'PENDING_MATCHES',
+        pending: pendingCount,
+      });
+    }
+    if (pendingCount > 0) {
+      await this.db.query(
+        `UPDATE tournament_matches SET status = 'CANCELLED', updated_at = NOW()
+         WHERE tournament_id = $1 AND status IN ('SCHEDULED', 'IN_PROGRESS')`,
+        [tournamentId],
+      );
+    }
+    const updated = await this.update(tournamentId, userId, { status: 'FINISHED' } as UpdateTournamentDto);
+    await this.circuitAudit.logForTournament(tournamentId, userId, {
+      action: 'tournament.close',
+      summary: `cerró el torneo${pendingCount ? ` (${pendingCount} partido(s) cancelados)` : ''}`,
+    });
+    return updated;
+  }
+
+  /** Carga de varios resultados a la vez: primero zonas, después cuadro por ronda. */
+  async recordResultsBulk(tournamentId: string, userId: string, dto: BulkScoreDto) {
+    await this.assertCanManageTournament(tournamentId, userId);
+    const ids = [...new Set(dto.results.map((r) => r.matchId))];
+    const order = await this.db.query(
+      `SELECT id, phase, round FROM tournament_matches WHERE tournament_id = $1 AND id = ANY($2::uuid[])`,
+      [tournamentId, ids],
+    );
+    const rank = new Map(
+      order.rows.map((m) => [m.id, (m.phase === 'KNOCKOUT' ? 1_000 : 0) + Number(m.round || 0)]),
+    );
+    const items = [...dto.results].sort(
+      (a, b) => (rank.get(a.matchId) ?? 1e9) - (rank.get(b.matchId) ?? 1e9),
+    );
+
+    const results: Array<{ matchId: string; ok: boolean; error?: string }> = [];
+    for (const item of items) {
+      try {
+        await this.brackets.recordResult(tournamentId, item.matchId, {
+          sets: item.sets,
+          walkoverWinner: item.walkoverWinner,
+        });
+        results.push({ matchId: item.matchId, ok: true });
+      } catch (error) {
+        results.push({ matchId: item.matchId, ok: false, error: errorMessage(error) });
+      }
+    }
+    const saved = results.filter((r) => r.ok).length;
+    if (saved) {
+      await this.circuitAudit.logForTournament(tournamentId, userId, {
+        action: 'results.bulk',
+        summary: `cargó ${saved} resultado(s) en lote`,
+      });
+    }
+    return { saved, failed: results.length - saved, results };
   }
 
   // ---------------------------------------------------------------------------
@@ -1466,6 +1687,7 @@ export class TournamentsService {
 
     return {
       ...tournament,
+      registration_closed: isRegistrationClosed(tournament),
       photos: photos.rows,
       dates: dates.rows,
       venues: venueRows,
@@ -1749,11 +1971,7 @@ export class TournamentsService {
 
   async clearFixture(tournamentId: string, userId: string) {
     await this.assertCanManageTournament(tournamentId, userId);
-    await this.db.query(
-      `UPDATE tournament_matches SET next_match_id = NULL WHERE tournament_id = $1`,
-      [tournamentId],
-    );
-    await this.db.query(`DELETE FROM tournament_matches WHERE tournament_id = $1`, [tournamentId]);
+    await this.brackets.clearFixture(tournamentId);
     return { success: true };
   }
 
@@ -1970,13 +2188,19 @@ export class TournamentsService {
     const role = await this.getRole(userId);
     if (role === 'SUPER_ADMIN') return true;
     const result = await this.db.query(
-      `SELECT organizer_user_id, club_id FROM tournaments WHERE id = $1`,
+      `SELECT organizer_user_id, club_id, circuit_id FROM tournaments WHERE id = $1`,
       [tournamentId],
     );
     const tournament = result.rows[0];
     if (!tournament) return false;
     if (tournament.organizer_user_id === userId) return true;
     if (tournament.club_id && (await this.isClubAdminOf(tournament.club_id, userId))) {
+      return true;
+    }
+    if (
+      tournament.circuit_id &&
+      (await this.circuitAccess.can(tournament.circuit_id, userId, 'circuit.results'))
+    ) {
       return true;
     }
     return false;
@@ -2095,114 +2319,6 @@ export class TournamentsService {
       [next.rows[0].id, tournamentId],
     );
     return result.rows[0] ?? null;
-  }
-
-  private eliminationRoundLabel(round: number, totalRounds: number): string {
-    const fromFinal = totalRounds - round;
-    if (fromFinal === 0) return 'Final';
-    if (fromFinal === 1) return 'Semifinal';
-    if (fromFinal === 2) return 'Cuartos';
-    if (round === 1) return 'Primera ronda';
-    return `Ronda ${round}`;
-  }
-
-  private async generateSingleEliminationBracket(
-    tournamentId: string,
-    teams: any[],
-    label: (t: any) => string,
-  ) {
-    let bracketSize = 1;
-    while (bracketSize < teams.length) bracketSize *= 2;
-    const totalRounds = Math.log2(bracketSize);
-    const firstRoundMatches = bracketSize / 2;
-
-    // Crear árbol desde la final hacia atrás; round 1 = primera ronda.
-    const matchIdsByRound: string[][] = Array.from({ length: totalRounds + 1 }, () => []);
-
-    for (let round = totalRounds; round >= 1; round--) {
-      const count = bracketSize / Math.pow(2, round);
-      for (let i = 0; i < count; i++) {
-        const nextRound = round + 1;
-        const nextMatchId =
-          round < totalRounds ? matchIdsByRound[nextRound][Math.floor(i / 2)] : null;
-        const nextSlot = round < totalRounds ? (i % 2 === 0 ? 'A' : 'B') : null;
-        const result = await this.db.query(
-          `INSERT INTO tournament_matches
-            (tournament_id, round, round_label, bracket_position, next_match_id, next_slot,
-             team_a_registration_id, team_b_registration_id, team_a_name, team_b_name, status)
-           VALUES ($1,$2,$3,$4,$5,$6,NULL,NULL,NULL,NULL,'SCHEDULED')
-           RETURNING id`,
-          [
-            tournamentId,
-            round,
-            this.eliminationRoundLabel(round, totalRounds),
-            i,
-            nextMatchId,
-            nextSlot,
-          ],
-        );
-        matchIdsByRound[round].push(result.rows[0].id);
-      }
-    }
-
-    // Sembrar primera ronda: equipos reales + BYEs (null).
-    const slots: (any | null)[] = [...teams];
-    while (slots.length < bracketSize) slots.push(null);
-
-    for (let i = 0; i < firstRoundMatches; i++) {
-      const teamA = slots[i * 2];
-      const teamB = slots[i * 2 + 1];
-      const matchId = matchIdsByRound[1][i];
-
-      if (teamA && teamB) {
-        await this.db.query(
-          `UPDATE tournament_matches
-           SET team_a_registration_id = $2, team_b_registration_id = $3,
-               team_a_name = $4, team_b_name = $5, updated_at = NOW()
-           WHERE id = $1`,
-          [matchId, teamA.id, teamB.id, label(teamA), label(teamB)],
-        );
-      } else if (teamA || teamB) {
-        const winner = teamA || teamB;
-        const result = await this.db.query(
-          `UPDATE tournament_matches
-           SET team_a_registration_id = $2, team_b_registration_id = NULL,
-               team_a_name = $3, team_b_name = 'BYE',
-               status = 'FINISHED', finished_at = NOW(),
-               winner_registration_id = $2,
-               score = $4::jsonb, updated_at = NOW()
-           WHERE id = $1
-           RETURNING *`,
-          [
-            matchId,
-            winner.id,
-            label(winner),
-            JSON.stringify({ sets: [], setsA: 1, setsB: 0, bye: true }),
-          ],
-        );
-        await this.advanceWinnerToNextMatch(result.rows[0], winner.id);
-      }
-    }
-  }
-
-  private async advanceWinnerToNextMatch(match: any, winnerRegistrationId: string) {
-    if (!match.next_match_id || !match.next_slot) return;
-    const winnerName = await this.registrationName(winnerRegistrationId);
-    if (match.next_slot === 'A') {
-      await this.db.query(
-        `UPDATE tournament_matches
-         SET team_a_registration_id = $2, team_a_name = $3, updated_at = NOW()
-         WHERE id = $1`,
-        [match.next_match_id, winnerRegistrationId, winnerName],
-      );
-    } else {
-      await this.db.query(
-        `UPDATE tournament_matches
-         SET team_b_registration_id = $2, team_b_name = $3, updated_at = NOW()
-         WHERE id = $1`,
-        [match.next_match_id, winnerRegistrationId, winnerName],
-      );
-    }
   }
 
   private async getRegistrationOrThrow(tournamentId: string, regId: string) {

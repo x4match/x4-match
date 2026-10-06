@@ -1,21 +1,34 @@
 import {
+  BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
   Post,
   Put,
   Query,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { OptionalJwtAuthGuard } from '../common/guards/optional-jwt-auth.guard';
 import { CircuitsService } from './circuits.service';
+import { CircuitStaffService } from './circuit-staff.service';
 import { FixtureSchedulerService } from './scheduling/fixture-scheduler.service';
 import { AddCircuitCategoryDto } from './dto/add-circuit-category.dto';
 import { AddCircuitVenueDto } from './dto/add-circuit-venue.dto';
-import { CreateCircuitDto } from './dto/create-circuit.dto';
+import {
+  InviteCircuitStaffDto,
+  TransferCircuitPresidencyDto,
+  UpdateCircuitStaffDto,
+} from './dto/circuit-staff.dto';
+import { CreateCircuitDto, UpdateCircuitDto } from './dto/create-circuit.dto';
 import { CreateCircuitStageDto } from './dto/create-circuit-stage.dto';
 import {
   CreateCircuitEventDto,
@@ -30,6 +43,7 @@ import {
 export class CircuitsController {
   constructor(
     private readonly circuitsService: CircuitsService,
+    private readonly staffService: CircuitStaffService,
     private readonly fixtureScheduler: FixtureSchedulerService,
   ) {}
 
@@ -44,9 +58,126 @@ export class CircuitsController {
     return this.circuitsService.create(user.sub, dto);
   }
 
+  @Get('mine')
+  @UseGuards(JwtAuthGuard)
+  listMine(@CurrentUser() user: { sub: string }) {
+    return this.circuitsService.listMine(user.sub);
+  }
+
+  @Get('staff/invitations/me')
+  @UseGuards(JwtAuthGuard)
+  myInvitations(@CurrentUser() user: { sub: string }) {
+    return this.staffService.myInvitations(user.sub);
+  }
+
+  @Post('staff/invitations/:memberId/accept')
+  @UseGuards(JwtAuthGuard)
+  acceptInvitation(@Param('memberId') memberId: string, @CurrentUser() user: { sub: string }) {
+    return this.staffService.respond(memberId, user.sub, true);
+  }
+
+  @Post('staff/invitations/:memberId/decline')
+  @UseGuards(JwtAuthGuard)
+  declineInvitation(@Param('memberId') memberId: string, @CurrentUser() user: { sub: string }) {
+    return this.staffService.respond(memberId, user.sub, false);
+  }
+
+  /** Cargos activos del usuario en circuitos (carteles del perfil). */
+  @Get('roles/user/:userId')
+  rolesForUser(@Param('userId') userId: string) {
+    return this.staffService.rolesForUser(userId);
+  }
+
   @Get(':id')
-  getById(@Param('id') id: string) {
-    return this.circuitsService.getById(id);
+  @UseGuards(OptionalJwtAuthGuard)
+  getById(@Param('id') id: string, @CurrentUser() user?: { sub: string }) {
+    return this.circuitsService.getById(id, user?.sub);
+  }
+
+  @Patch(':id')
+  @UseGuards(JwtAuthGuard)
+  update(
+    @Param('id') id: string,
+    @CurrentUser() user: { sub: string },
+    @Body() dto: UpdateCircuitDto,
+  ) {
+    return this.circuitsService.update(id, user.sub, dto);
+  }
+
+  @Post(':id/logo')
+  @UseGuards(JwtAuthGuard)
+  @UseInterceptors(
+    FileInterceptor('logo', {
+      storage: memoryStorage(),
+      limits: { fileSize: 5 * 1024 * 1024 },
+      fileFilter: (_req, file, cb) => {
+        if (!file.mimetype?.startsWith('image/')) {
+          cb(new BadRequestException('Solo se permiten imágenes'), false);
+          return;
+        }
+        cb(null, true);
+      },
+    }),
+  )
+  uploadLogo(
+    @Param('id') id: string,
+    @CurrentUser() user: { sub: string },
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    return this.circuitsService.uploadLogo(id, user.sub, file);
+  }
+
+  @Get(':id/me')
+  @UseGuards(OptionalJwtAuthGuard)
+  myAccess(@Param('id') id: string, @CurrentUser() user?: { sub: string }) {
+    return this.circuitsService.getViewerAccess(id, user?.sub);
+  }
+
+  @Get(':id/staff')
+  @UseGuards(OptionalJwtAuthGuard)
+  listStaff(@Param('id') id: string, @CurrentUser() user?: { sub: string }) {
+    return this.staffService.listStaff(id, user?.sub);
+  }
+
+  @Post(':id/staff')
+  @UseGuards(JwtAuthGuard)
+  inviteStaff(
+    @Param('id') id: string,
+    @CurrentUser() user: { sub: string },
+    @Body() dto: InviteCircuitStaffDto,
+  ) {
+    return this.staffService.invite(id, user.sub, dto);
+  }
+
+  @Patch(':id/staff/:memberId')
+  @UseGuards(JwtAuthGuard)
+  updateStaff(
+    @Param('id') id: string,
+    @Param('memberId') memberId: string,
+    @CurrentUser() user: { sub: string },
+    @Body() dto: UpdateCircuitStaffDto,
+  ) {
+    return this.staffService.updateMember(id, user.sub, memberId, dto);
+  }
+
+  @Delete(':id/staff/:memberId')
+  @UseGuards(JwtAuthGuard)
+  removeStaff(
+    @Param('id') id: string,
+    @Param('memberId') memberId: string,
+    @CurrentUser() user: { sub: string },
+  ) {
+    return this.staffService.removeMember(id, user.sub, memberId);
+  }
+
+  @Post(':id/staff/transfer-presidency')
+  @UseGuards(JwtAuthGuard)
+  transferPresidency(
+    @Param('id') id: string,
+    @CurrentUser() user: { sub: string },
+    @Body() dto: TransferCircuitPresidencyDto,
+  ) {
+    return this.staffService.transferPresidency(id, user.sub, dto);
   }
 
   @Get(':id/rankings')
@@ -121,7 +252,9 @@ export class CircuitsController {
   }
 
   @Get(':id/events/:eventId/schedule')
+  @UseGuards(OptionalJwtAuthGuard)
   getSchedule(
+    @CurrentUser() user: { sub: string } | undefined,
     @Param('id') id: string,
     @Param('eventId') eventId: string,
     @Query('categoryId') categoryId?: string,
@@ -138,6 +271,7 @@ export class CircuitsController {
       status,
       q,
       includeDraft: includeDraft === '1' || includeDraft === 'true',
+      viewerUserId: user?.sub,
     });
   }
 
@@ -159,12 +293,10 @@ export class CircuitsController {
     @CurrentUser() user: { sub: string },
     @Body() dto: EnsureEventBracketsDto,
   ) {
-    return this.fixtureScheduler.ensureBracketsForEvent(
-      id,
-      eventId,
-      user.sub,
-      dto.mode ?? 'OPEN_COURT',
-    );
+    return this.fixtureScheduler.ensureBracketsForEvent(id, eventId, user.sub, {
+      mode: dto.mode,
+      regenerate: dto.regenerate,
+    });
   }
 
   @Post(':id/events/:eventId/schedule/preview')

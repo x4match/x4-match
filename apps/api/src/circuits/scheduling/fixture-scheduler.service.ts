@@ -1,12 +1,20 @@
 import {
   BadRequestException,
-  ForbiddenException,
+  HttpException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { DatabaseService } from '../../database/database.service';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { RealtimeGateway } from '../../realtime/realtime.gateway';
+import { BracketService } from '../../tournaments/brackets/bracket.service';
+import {
+  BYE_SOURCE,
+  parseGroupSource,
+  type FixtureMode,
+} from '../../tournaments/brackets/bracket-engine';
+import { CircuitAccessService } from '../circuit-access.service';
+import { CircuitAuditService } from '../organizer/circuit-audit.service';
 import {
   buildVenueSlots,
   eachDayKey,
@@ -47,6 +55,17 @@ export type SchedulePreviewResult = {
   };
 };
 
+export type EnsureBracketsResult = {
+  tournamentId: string;
+  categoryLabel: string | null;
+  created: number;
+  skipped?: string;
+  mode?: FixtureMode;
+  groups?: number;
+  knockoutSize?: number;
+  teams?: number;
+};
+
 type ScheduleOptions = {
   matchDurationMinutes?: number;
   dayStartHour?: number;
@@ -62,6 +81,9 @@ export class FixtureSchedulerService {
     private readonly db: DatabaseService,
     private readonly realtime: RealtimeGateway,
     private readonly notifications: NotificationsService,
+    private readonly access: CircuitAccessService,
+    private readonly brackets: BracketService,
+    private readonly audit: CircuitAuditService,
   ) {}
 
   async previewEventSchedule(
@@ -131,6 +153,12 @@ export class FixtureSchedulerService {
     if (publish) {
       await this.notifyPlayersOfSchedule(preview.assignments, circuitId, eventId);
     }
+    await this.audit.log(circuitId, userId, {
+      action: publish ? 'schedule.publish' : 'schedule.draft',
+      entityType: 'circuit_event',
+      entityId: eventId,
+      summary: `${publish ? 'Publicó' : 'Guardó en borrador'} la grilla de ${eventRow.name}: ${preview.assignments.length} partido(s) asignados`,
+    });
 
     return {
       ...preview,
@@ -179,6 +207,12 @@ export class FixtureSchedulerService {
       circuitId,
       eventId,
     );
+    await this.audit.log(circuitId, userId, {
+      action: 'schedule.publish',
+      entityType: 'circuit_event',
+      entityId: eventId,
+      summary: `Publicó la grilla de ${event.name}: ${schedule.matches.length} partido(s)`,
+    });
 
     return { published: true, count: schedule.matches.length };
   }
@@ -187,49 +221,63 @@ export class FixtureSchedulerService {
     circuitId: string,
     eventId: string,
     userId: string,
-    mode: 'OPEN_COURT' | 'SINGLE_ELIMINATION' | 'ROUND_ROBIN' = 'OPEN_COURT',
+    options: { mode?: FixtureMode; regenerate?: boolean } = {},
   ) {
     await this.assertCanManage(circuitId, userId);
     const stages = await this.db.query(
-      `SELECT cs.id, cs.tournament_id, t.format
+      `SELECT cs.id, cs.tournament_id, cc.label AS category_label
        FROM circuit_stages cs
-       LEFT JOIN tournaments t ON t.id = cs.tournament_id
-       WHERE cs.event_id = $1 AND cs.circuit_id = $2`,
+       LEFT JOIN circuit_categories cc ON cc.id = cs.category_id
+       WHERE cs.event_id = $1 AND cs.circuit_id = $2
+       ORDER BY cc.label ASC NULLS LAST`,
       [eventId, circuitId],
     );
 
-    const results: Array<{ tournamentId: string; created: number; skipped?: string }> = [];
+    const results: EnsureBracketsResult[] = [];
     for (const stage of stages.rows) {
+      const base = { tournamentId: stage.tournament_id ?? '', categoryLabel: stage.category_label };
       if (!stage.tournament_id) {
-        results.push({ tournamentId: '', created: 0, skipped: 'Sin torneo publicado' });
+        results.push({ ...base, created: 0, skipped: 'Sin torneo publicado' });
         continue;
       }
-      const existing = await this.db.query(
-        `SELECT COUNT(*)::int AS c FROM tournament_matches WHERE tournament_id = $1`,
-        [stage.tournament_id],
-      );
-      if (Number(existing.rows[0].c) > 0) {
-        results.push({ tournamentId: stage.tournament_id, created: 0, skipped: 'Ya tiene fixture' });
-        continue;
-      }
-
-      const approved = await this.db.query(
-        `SELECT COUNT(*)::int AS c FROM tournament_registrations
-         WHERE tournament_id = $1 AND status = 'APPROVED'`,
-        [stage.tournament_id],
-      );
-      if (Number(approved.rows[0].c) < 2) {
-        results.push({
-          tournamentId: stage.tournament_id,
-          created: 0,
-          skipped: 'Menos de 2 parejas aprobadas',
+      try {
+        const summary = await this.brackets.generate(stage.tournament_id, {
+          mode: options.mode,
+          reset: !!options.regenerate,
         });
-        continue;
+        results.push({
+          ...base,
+          created: summary.matches,
+          mode: summary.mode,
+          groups: summary.groups,
+          knockoutSize: summary.knockoutSize,
+          teams: summary.teams,
+        });
+        this.realtime.emitTournamentUpdated({
+          tournamentId: stage.tournament_id,
+          type: 'fixture_generated',
+        });
+      } catch (e) {
+        if (!(e instanceof HttpException)) throw e;
+        const body = e.getResponse() as string | { message?: string | string[] };
+        const message = typeof body === 'string' ? body : body.message;
+        results.push({
+          ...base,
+          created: 0,
+          skipped: (Array.isArray(message) ? message[0] : message) || e.message,
+        });
       }
+    }
 
-      // Lazy import path: call SQL generation via tournaments-compatible logic locally
-      const created = await this.generateOpenCourtOrElimination(stage.tournament_id, mode);
-      results.push({ tournamentId: stage.tournament_id, created });
+    const generated = results.filter((r) => r.created > 0);
+    if (generated.length) {
+      this.realtime.emitCircuitEventUpdated({ circuitId, eventId, type: 'brackets_generated' });
+      await this.audit.log(circuitId, userId, {
+        action: options.regenerate ? 'brackets.regenerate' : 'brackets.generate',
+        entityType: 'circuit_event',
+        entityId: eventId,
+        summary: `${options.regenerate ? 'Rearmó' : 'Armó'} los cuadros de ${generated.length} categoría(s): ${generated.map((r) => r.categoryLabel ?? 'Torneo').join(', ')}`,
+      });
     }
     return { results };
   }
@@ -250,7 +298,9 @@ export class FixtureSchedulerService {
     const event = await this.getEvent(eventId);
     if (event.circuit_id !== circuitId) throw new NotFoundException('Evento no encontrado');
 
-    const includeDraft = !!filters.includeDraft;
+    const includeDraft =
+      !!filters.includeDraft &&
+      (await this.access.can(circuitId, filters.viewerUserId, 'circuit.view_internal'));
     const params: unknown[] = [eventId];
     let where = `cs.event_id = $1 AND tm.scheduled_at IS NOT NULL`;
     if (!includeDraft) {
@@ -285,6 +335,7 @@ export class FixtureSchedulerService {
       `SELECT tm.id, tm.tournament_id, tm.round, tm.round_label, tm.court_label, tm.club_id,
               tm.team_a_name, tm.team_b_name, tm.status, tm.score, tm.scheduled_at,
               tm.schedule_published, tm.team_a_registration_id, tm.team_b_registration_id,
+              tm.phase, tm.group_name,
               t.name AS tournament_name, cc.label AS category_label, cc.gender AS category_gender,
               cl.name AS club_name, cl.city AS club_city, cl.address AS club_address,
               e.name AS event_name, e.schedule_status
@@ -308,6 +359,8 @@ export class FixtureSchedulerService {
         : null,
       round: row.round,
       roundLabel: row.round_label,
+      phase: row.phase as 'GROUP' | 'KNOCKOUT' | null,
+      groupName: row.group_name as string | null,
       clubId: row.club_id,
       clubName: row.club_name,
       clubCity: row.club_city,
@@ -393,6 +446,21 @@ export class FixtureSchedulerService {
       [matchId, payload.clubId, payload.courtLabel, payload.scheduledAt, publish],
     );
 
+    if (publish) {
+      await this.notifyPlayersOfSchedule(
+        [{ matchId } as ScheduleAssignment],
+        circuitId,
+        eventId,
+        'Cambio de horario de tu partido',
+      );
+    }
+    await this.audit.log(circuitId, userId, {
+      action: 'schedule.match',
+      entityType: 'tournament_match',
+      entityId: matchId,
+      summary: `Reprogramó un partido de ${event.name}: ${payload.courtLabel} · ${new Date(payload.scheduledAt).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`,
+    });
+
     this.realtime.emitCircuitEventUpdated({
       circuitId,
       eventId,
@@ -454,106 +522,193 @@ export class FixtureSchedulerService {
 
     const matchesRes = await this.db.query(
       `SELECT tm.id, tm.tournament_id, tm.team_a_registration_id, tm.team_b_registration_id,
-              tm.team_a_name, tm.team_b_name, tm.round, tm.status, tm.scheduled_at,
+              tm.team_a_source, tm.team_b_source, tm.phase, tm.group_name,
+              tm.next_match_id, tm.next_slot, tm.round, tm.status, tm.score,
+              tm.scheduled_at, tm.club_id, tm.court_label,
               cc.label AS category_label
        FROM tournament_matches tm
        INNER JOIN circuit_stages cs ON cs.tournament_id = tm.tournament_id
        LEFT JOIN circuit_categories cc ON cc.id = cs.category_id
        WHERE cs.event_id = $1
-         AND tm.status <> 'CANCELLED'
-         AND tm.team_a_registration_id IS NOT NULL
-         AND tm.team_b_registration_id IS NOT NULL`,
+         AND tm.status <> 'CANCELLED'`,
       [eventId],
     );
+    const rows = matchesRes.rows;
+    const durationMs = duration * 60_000;
+    const now = Date.now();
+
+    const isByeLike = (m: any) =>
+      !!m.score?.bye || m.team_a_source === BYE_SOURCE || m.team_b_source === BYE_SOURCE;
+    const isPlayed = (m: any) =>
+      (m.status === 'FINISHED' || m.status === 'IN_PROGRESS') && !isByeLike(m);
+
+    const feedersOf = new Map<string, any[]>();
+    const groupMatches = new Map<string, any[]>();
+    for (const m of rows) {
+      if (m.next_match_id) {
+        feedersOf.set(m.next_match_id, [...(feedersOf.get(m.next_match_id) ?? []), m]);
+      }
+      if (m.phase === 'GROUP') {
+        const key = `${m.tournament_id}|${m.group_name}`;
+        groupMatches.set(key, [...(groupMatches.get(key) ?? []), m]);
+      }
+    }
 
     const regIds = [
       ...new Set(
-        matchesRes.rows.flatMap((m) => [m.team_a_registration_id, m.team_b_registration_id]),
+        rows
+          .flatMap((m) => [m.team_a_registration_id, m.team_b_registration_id])
+          .filter(Boolean) as string[],
       ),
     ];
     const teamAvail = await this.loadTeamAvailabilities(regIds, dayKeys);
 
+    // Lo ya jugado (o en juego) conserva su cancha y bloquea a sus parejas.
+    const courtBusy: Array<{ courtKey: string; start: Date }> = [];
+    const teamBusy: Array<{ teamId: string; start: Date }> = [];
+    const teamVenues = new Map<string, Set<string>>();
+    const assignedEnd = new Map<string, number>();
+    for (const m of rows) {
+      if (!isPlayed(m) || !m.scheduled_at) continue;
+      const start = new Date(m.scheduled_at);
+      assignedEnd.set(m.id, start.getTime() + durationMs);
+      if (m.club_id && m.court_label) courtBusy.push({ courtKey: `${m.club_id}|${m.court_label}`, start });
+      for (const teamId of [m.team_a_registration_id, m.team_b_registration_id].filter(Boolean)) {
+        teamBusy.push({ teamId, start });
+      }
+    }
+
+    /** Hora en que termina un partido; null si todavía no tiene horario asignado. */
+    const endOf = (m: any, depth: number): number | null => {
+      if (depth > 32) return null;
+      if (isByeLike(m)) return readyAt(m, depth + 1);
+      const assigned = assignedEnd.get(m.id);
+      if (assigned != null) return assigned;
+      if (m.status === 'FINISHED' || m.status === 'IN_PROGRESS') return 0;
+      return null;
+    };
+    /** Primer momento en que se conocen las dos parejas (fin de su zona o de los partidos previos). */
+    const readyAt = (m: any, depth = 0): number | null => {
+      let ready = 0;
+      for (const side of ['a', 'b'] as const) {
+        if (m[`team_${side}_registration_id`]) continue;
+        const source = m[`team_${side}_source`];
+        if (source === BYE_SOURCE) continue;
+        const parsed = parseGroupSource(source);
+        const deps = parsed
+          ? groupMatches.get(`${m.tournament_id}|${parsed.group}`) ?? []
+          : (feedersOf.get(m.id) ?? []).filter((f) => f.next_slot === side.toUpperCase());
+        for (const dep of deps) {
+          const end = endOf(dep, depth);
+          if (end == null) return null;
+          ready = Math.max(ready, end);
+        }
+      }
+      return ready;
+    };
+
     type PendingMatch = {
+      row: any;
       id: string;
       tournamentId: string;
       categoryLabel: string | null;
-      teamAId: string;
-      teamBId: string;
+      teamAId: string | null;
+      teamBId: string | null;
+      knockout: boolean;
+      round: number;
       feasibleCount: number;
     };
 
-    const pending: PendingMatch[] = matchesRes.rows.map((m) => {
-      const a = teamAvail.get(m.team_a_registration_id);
-      const b = teamAvail.get(m.team_b_registration_id);
-      let feasibleCount = 0;
-      for (const slot of slots) {
-        const ca = a
-          ? teamCoversSlot(a, slot.dayDate, slot.startHour, slot.endHour, slot.clubId, strict)
-          : { ok: !strict, score: 0 };
-        const cb = b
-          ? teamCoversSlot(b, slot.dayDate, slot.startHour, slot.endHour, slot.clubId, strict)
-          : { ok: !strict, score: 0 };
-        if (ca.ok && cb.ok) feasibleCount++;
-      }
-      return {
-        id: m.id,
-        tournamentId: m.tournament_id,
-        categoryLabel: m.category_label,
-        teamAId: m.team_a_registration_id,
-        teamBId: m.team_b_registration_id,
-        feasibleCount,
-      };
-    });
+    const futureSlots = slots.filter((s) => s.startAt.getTime() >= now);
+    const coverage = (team: TeamAvailability | undefined, slot: CourtSlot, known: boolean) => {
+      if (!known) return { ok: true, score: 0 } as { ok: boolean; score: number; warning?: string };
+      return team
+        ? teamCoversSlot(team, slot.dayDate, slot.startHour, slot.endHour, slot.clubId, strict)
+        : { ok: !strict, score: 5, warning: 'Sin disponibilidad' };
+    };
 
-    pending.sort((x, y) => x.feasibleCount - y.feasibleCount);
+    const pending: PendingMatch[] = rows
+      .filter(
+        (m) =>
+          m.status === 'SCHEDULED' &&
+          !isByeLike(m) &&
+          (m.phase === 'KNOCKOUT' || (m.team_a_registration_id && m.team_b_registration_id)),
+      )
+      .map((m) => {
+        const a = teamAvail.get(m.team_a_registration_id);
+        const b = teamAvail.get(m.team_b_registration_id);
+        const feasibleCount = futureSlots.filter(
+          (slot) =>
+            coverage(a, slot, !!m.team_a_registration_id).ok &&
+            coverage(b, slot, !!m.team_b_registration_id).ok,
+        ).length;
+        return {
+          row: m,
+          id: m.id,
+          tournamentId: m.tournament_id,
+          categoryLabel: m.category_label,
+          teamAId: m.team_a_registration_id,
+          teamBId: m.team_b_registration_id,
+          knockout: m.phase === 'KNOCKOUT',
+          round: Number(m.round) || 0,
+          feasibleCount,
+        };
+      });
 
-    const usedCourtKeys = new Set<string>();
-    const teamBusy: Array<{ teamId: string; start: Date; end: Date }> = [];
-    const durationMs = duration * 60_000;
+    pending.sort(
+      (x, y) =>
+        Number(x.knockout) - Number(y.knockout) ||
+        (x.knockout ? x.round - y.round : 0) ||
+        x.feasibleCount - y.feasibleCount,
+    );
+
     const assignments: ScheduleAssignment[] = [];
     const unassigned: Array<{ matchId: string; tournamentId: string; reason: string }> = [];
     const venuesUsed = new Set<string>();
 
     for (const match of pending) {
-      const teamA = teamAvail.get(match.teamAId);
-      const teamB = teamAvail.get(match.teamBId);
+      const earliest = match.knockout ? readyAt(match.row) : 0;
+      if (earliest == null) {
+        unassigned.push({
+          matchId: match.id,
+          tournamentId: match.tournamentId,
+          reason: 'Depende de partidos de zona o del cuadro que no tienen horario',
+        });
+        continue;
+      }
+
+      const teamA = match.teamAId ? teamAvail.get(match.teamAId) : undefined;
+      const teamB = match.teamBId ? teamAvail.get(match.teamBId) : undefined;
+      const knownTeams = [match.teamAId, match.teamBId].filter(Boolean) as string[];
       let best: { slot: CourtSlot; score: number; warnings: string[] } | null = null;
 
-      for (const slot of slots) {
-        const courtKey = `${slot.clubId}|${slot.courtLabel}|${slot.startAt.toISOString()}`;
-        if (usedCourtKeys.has(courtKey)) continue;
+      for (const slot of futureSlots) {
+        if (slot.startAt.getTime() < earliest) continue;
+        const courtKey = `${slot.clubId}|${slot.courtLabel}`;
+        if (
+          courtBusy.some(
+            (c) => c.courtKey === courtKey && rangesOverlap(c.start, durationMs, slot.startAt, durationMs),
+          )
+        ) {
+          continue;
+        }
+        if (
+          teamBusy.some(
+            (b) =>
+              knownTeams.includes(b.teamId) &&
+              rangesOverlap(b.start, durationMs, slot.startAt, durationMs),
+          )
+        ) {
+          continue;
+        }
 
-        const clashA = teamBusy.some(
-          (b) =>
-            b.teamId === match.teamAId &&
-            rangesOverlap(b.start, durationMs, slot.startAt, durationMs),
-        );
-        const clashB = teamBusy.some(
-          (b) =>
-            b.teamId === match.teamBId &&
-            rangesOverlap(b.start, durationMs, slot.startAt, durationMs),
-        );
-        if (clashA || clashB) continue;
-
-        const ca = teamA
-          ? teamCoversSlot(teamA, slot.dayDate, slot.startHour, slot.endHour, slot.clubId, strict)
-          : { ok: !strict, score: 5, warning: 'Sin disponibilidad' };
-        const cb = teamB
-          ? teamCoversSlot(teamB, slot.dayDate, slot.startHour, slot.endHour, slot.clubId, strict)
-          : { ok: !strict, score: 5, warning: 'Sin disponibilidad' };
+        const ca = coverage(teamA, slot, !!match.teamAId);
+        const cb = coverage(teamB, slot, !!match.teamBId);
         if (!ca.ok || !cb.ok) continue;
 
         let score = ca.score + cb.score;
         if (slot.isPrimary) score += 5;
-        // Prefer same venue if team already played there earlier in assignment list
-        const sameVenueBonus = assignments.some(
-          (a) =>
-            (a.matchId !== match.id &&
-              (teamBusy.some((t) => t.teamId === match.teamAId) ||
-                teamBusy.some((t) => t.teamId === match.teamBId))) &&
-            a.clubId === slot.clubId,
-        );
-        if (sameVenueBonus) score += 8;
+        if (knownTeams.some((t) => teamVenues.get(t)?.has(slot.clubId))) score += 8;
 
         const warnings = [ca.warning, cb.warning].filter(Boolean) as string[];
         if (!best || score > best.score) {
@@ -565,19 +720,21 @@ export class FixtureSchedulerService {
         unassigned.push({
           matchId: match.id,
           tournamentId: match.tournamentId,
-          reason: strict
-            ? 'Sin slot que cumpla disponibilidad y canchas'
-            : 'Sin canchas libres en el rango del evento',
+          reason: !futureSlots.length
+            ? 'El evento no tiene horarios futuros disponibles'
+            : strict
+              ? 'Sin slot que cumpla disponibilidad y canchas'
+              : 'Sin canchas libres en el rango del evento',
         });
         continue;
       }
 
-      const courtKey = `${best.slot.clubId}|${best.slot.courtLabel}|${best.slot.startAt.toISOString()}`;
-      usedCourtKeys.add(courtKey);
-      teamBusy.push(
-        { teamId: match.teamAId, start: best.slot.startAt, end: new Date(best.slot.startAt.getTime() + durationMs) },
-        { teamId: match.teamBId, start: best.slot.startAt, end: new Date(best.slot.startAt.getTime() + durationMs) },
-      );
+      courtBusy.push({ courtKey: `${best.slot.clubId}|${best.slot.courtLabel}`, start: best.slot.startAt });
+      assignedEnd.set(match.id, best.slot.startAt.getTime() + durationMs);
+      for (const teamId of knownTeams) {
+        teamBusy.push({ teamId, start: best.slot.startAt });
+        teamVenues.set(teamId, (teamVenues.get(teamId) ?? new Set()).add(best.slot.clubId));
+      }
       venuesUsed.add(best.slot.clubId);
       assignments.push({
         matchId: match.id,
@@ -687,117 +844,7 @@ export class FixtureSchedulerService {
     return map;
   }
 
-  private async generateOpenCourtOrElimination(
-    tournamentId: string,
-    mode: 'OPEN_COURT' | 'SINGLE_ELIMINATION' | 'ROUND_ROBIN',
-  ): Promise<number> {
-    const approved = await this.db.query(
-      `SELECT id, player1_name, player2_name FROM tournament_registrations
-       WHERE tournament_id = $1 AND status = 'APPROVED' ORDER BY created_at ASC`,
-      [tournamentId],
-    );
-    const teams = approved.rows;
-    if (teams.length < 2) return 0;
-    const label = (t: any) => `${t.player1_name} / ${t.player2_name}`;
-    const tournament = await this.db.query(
-      `SELECT courts_available FROM tournaments WHERE id = $1`,
-      [tournamentId],
-    );
-    const courts = Math.max(1, Number(tournament.rows[0]?.courts_available) || 2);
-
-    if (mode === 'SINGLE_ELIMINATION') {
-      // Minimal SE: first round only pairs
-      let inserted = 0;
-      const shuffled = [...teams];
-      for (let i = 0; i + 1 < shuffled.length; i += 2) {
-        await this.db.query(
-          `INSERT INTO tournament_matches
-            (tournament_id, round, round_label, team_a_registration_id, team_b_registration_id, team_a_name, team_b_name)
-           VALUES ($1,1,'Ronda 1',$2,$3,$4,$5)`,
-          [tournamentId, shuffled[i].id, shuffled[i + 1].id, label(shuffled[i]), label(shuffled[i + 1])],
-        );
-        inserted++;
-      }
-      return inserted;
-    }
-
-    if (mode === 'ROUND_ROBIN') {
-      let inserted = 0;
-      let round = 1;
-      for (let a = 0; a < teams.length; a++) {
-        for (let b = a + 1; b < teams.length; b++) {
-          await this.db.query(
-            `INSERT INTO tournament_matches
-              (tournament_id, round, round_label, team_a_registration_id, team_b_registration_id, team_a_name, team_b_name)
-             VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-            [
-              tournamentId,
-              round,
-              `Fecha ${round}`,
-              teams[a].id,
-              teams[b].id,
-              label(teams[a]),
-              label(teams[b]),
-            ],
-          );
-          inserted++;
-          round++;
-        }
-      }
-      return inserted;
-    }
-
-    // OPEN_COURT circle method
-    const n = teams.length;
-    const withBye = n % 2 === 1 ? [...teams, null] : [...teams];
-    const total = withBye.length;
-    const half = total / 2;
-    const roundCount = total - 1;
-    let arr = [...withBye];
-    let inserted = 0;
-    let globalRound = 1;
-
-    for (let r = 0; r < roundCount; r++) {
-      const pairs: { a: any; b: any }[] = [];
-      for (let i = 0; i < half; i++) {
-        const a = arr[i];
-        const b = arr[total - 1 - i];
-        if (a && b) pairs.push({ a, b });
-      }
-      for (let offset = 0; offset < pairs.length; offset += courts) {
-        const batch = pairs.slice(offset, offset + courts);
-        const needsSub = pairs.length > courts ? `.${Math.floor(offset / courts) + 1}` : '';
-        for (let courtIdx = 0; courtIdx < batch.length; courtIdx++) {
-          const p = batch[courtIdx];
-          await this.db.query(
-            `INSERT INTO tournament_matches
-              (tournament_id, round, round_label, court_label,
-               team_a_registration_id, team_b_registration_id, team_a_name, team_b_name)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-            [
-              tournamentId,
-              globalRound,
-              `Turno ${r + 1}${needsSub}`,
-              `Cancha ${courtIdx + 1}`,
-              p.a.id,
-              p.b.id,
-              label(p.a),
-              label(p.b),
-            ],
-          );
-          inserted++;
-        }
-        globalRound++;
-      }
-      const fixed = arr[0];
-      const rest = arr.slice(1);
-      const last = rest.pop();
-      if (last !== undefined) rest.unshift(last);
-      arr = [fixed, ...rest];
-    }
-    return inserted;
-  }
-
+  /** Solo libera horarios de partidos por jugar: lo jugado o en juego conserva su cancha. */
   private async clearEventSchedule(eventId: string, keepUnpublishedOnly: boolean) {
     await this.db.query(
       `UPDATE tournament_matches tm
@@ -808,6 +855,8 @@ export class FixtureSchedulerService {
        FROM circuit_stages cs
        WHERE cs.event_id = $1
          AND cs.tournament_id = tm.tournament_id
+         AND tm.status = 'SCHEDULED'
+         AND COALESCE((tm.score->>'bye')::boolean, FALSE) = FALSE
          AND ($2::boolean = FALSE OR tm.schedule_published = FALSE)`,
       [eventId, keepUnpublishedOnly],
     );
@@ -817,6 +866,7 @@ export class FixtureSchedulerService {
     assignments: ScheduleAssignment[],
     circuitId: string,
     eventId: string,
+    title = 'Horario de tu partido',
   ) {
     if (!assignments.length) return;
     const matchIds = assignments.map((a) => a.matchId);
@@ -847,7 +897,7 @@ export class FixtureSchedulerService {
         payloads.push({
           userId: uid as string,
           type: 'circuit_schedule',
-          title: 'Horario de tu partido',
+          title,
           body,
           data: { circuitId, eventId, matchId: row.id },
         });
@@ -865,15 +915,11 @@ export class FixtureSchedulerService {
   }
 
   private async assertCanManage(circuitId: string, userId: string) {
-    const circuit = await this.db.query(
-      `SELECT created_by_user_id FROM circuits WHERE id = $1`,
-      [circuitId],
+    await this.access.assert(
+      circuitId,
+      userId,
+      'circuit.schedule',
+      'Solo el Presidente, un Organizador o un Fiscal del circuito pueden gestionar la grilla',
     );
-    if (!circuit.rows[0]) throw new NotFoundException('Circuito no encontrado');
-    const role = await this.db.query(`SELECT role FROM users WHERE id = $1`, [userId]);
-    const isAdmin = role.rows[0]?.role === 'SUPER_ADMIN';
-    if (!isAdmin && circuit.rows[0].created_by_user_id !== userId) {
-      throw new ForbiddenException('No podés gestionar este circuito');
-    }
   }
 }

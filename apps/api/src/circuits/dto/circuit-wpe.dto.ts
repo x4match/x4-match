@@ -3,6 +3,7 @@ import {
   ArrayMinSize,
   IsArray,
   IsBoolean,
+  IsIn,
   IsInt,
   IsNumber,
   IsOptional,
@@ -12,6 +13,7 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
+import { FIXTURE_MODES, type FixtureMode } from '../../tournaments/brackets/bracket-engine';
 
 export class CircuitPointRuleItemDto {
   @IsString()
@@ -162,9 +164,15 @@ export class PreviewEventScheduleDto {
 }
 
 export class EnsureEventBracketsDto {
+  /** Si no se envía, cada categoría usa el formato de su torneo. */
   @IsOptional()
-  @IsString()
-  mode?: 'OPEN_COURT' | 'SINGLE_ELIMINATION' | 'ROUND_ROBIN';
+  @IsIn(FIXTURE_MODES)
+  mode?: FixtureMode;
+
+  /** Rearma los cuadros que todavía no tienen resultados cargados. */
+  @IsOptional()
+  @IsBoolean()
+  regenerate?: boolean;
 }
 
 export class UpdateMatchScheduleDto {
