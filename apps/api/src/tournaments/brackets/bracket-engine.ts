@@ -277,7 +277,7 @@ export function knockoutRoundLabel(round: number, totalRounds: number): string {
   return labels[fromFinal] ?? `Ronda ${round}`;
 }
 
-/** Puesto WPE de quien pierde en la ronda que está a `fromFinal` rondas de la final. */
+/** Puesto en el ranking del circuito de quien pierde en la ronda que está a `fromFinal` rondas de la final. */
 export function knockoutLoserPlacement(fromFinal: number): string {
   const placements = ['FINALIST', 'SEMI', 'QUARTERS', 'R16', 'R32', 'R64'];
   return placements[Math.min(fromFinal, placements.length - 1)];

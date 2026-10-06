@@ -1,4 +1,4 @@
--- Reglas de puntos estilo WPE + ledger de otorgamientos + gender en rankings
+-- Reglas de puntos por instancia + ledger de otorgamientos + gender en rankings
 
 CREATE TABLE IF NOT EXISTS circuit_point_rules (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

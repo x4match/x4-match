@@ -1,4 +1,4 @@
--- Circuit events (WPE-style multi-day / multi-venue stages) + match venue scheduling
+-- Circuit events (multi-day / multi-venue stages) + match venue scheduling
 
 CREATE TABLE IF NOT EXISTS circuit_events (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

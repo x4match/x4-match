@@ -21,7 +21,7 @@ export class UpdateCircuitStaffDto {
   @IsIn(ASSIGNABLE_ROLES, { message: 'Rol inválido (ADMIN, REFEREE o STAFF)' })
   role?: AssignableRole;
 
-  /** String vacío = volver al título automático ("Organizador WPE"). */
+  /** String vacío = volver al título automático (rol + sigla del circuito). */
   @IsOptional()
   @IsString()
   @MaxLength(60)

@@ -37,7 +37,7 @@ import {
   PublishCircuitStageDto,
   UpdateMatchScheduleDto,
   UpsertCircuitPointRulesDto,
-} from './dto/circuit-wpe.dto';
+} from './dto/circuit-stage.dto';
 
 @Controller('circuits')
 export class CircuitsController {
@@ -230,7 +230,7 @@ export class CircuitsController {
     return this.circuitsService.addStage(id, user.sub, dto);
   }
 
-  /** Crea una etapa WPE (evento multi-sede + una stage por categoría). */
+  /** Crea una etapa (evento multi-sede + una stage por categoría). */
   @Post(':id/events')
   @UseGuards(JwtAuthGuard)
   createEvent(

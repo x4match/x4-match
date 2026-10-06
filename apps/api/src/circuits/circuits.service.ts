@@ -20,9 +20,9 @@ import {
   CreateCircuitEventDto,
   PublishCircuitStageDto,
   UpsertCircuitPointRulesDto,
-} from './dto/circuit-wpe.dto';
+} from './dto/circuit-stage.dto';
 
-/** Tabla de puntos por defecto (paridad operativa con Circuito WPE). */
+/** Tabla de puntos por defecto para circuitos nuevos (cada circuito la puede editar). */
 const DEFAULT_POINT_RULES: Array<{ placement: string; points: number; sortOrder: number }> = [
   { placement: 'WINNER', points: 160, sortOrder: 1 },
   { placement: 'FINALIST', points: 120, sortOrder: 2 },
@@ -410,7 +410,7 @@ export class CircuitsService {
   }
 
   /**
-   * Crea una “ETAPA” WPE: evento multi-sede + una fila de stage por categoría.
+   * Crea una “ETAPA”: evento multi-sede + una fila de stage por categoría.
    * Opcionalmente publica el torneo de cada categoría.
    */
   async createEvent(circuitId: string, userId: string, dto: CreateCircuitEventDto) {
@@ -1072,7 +1072,7 @@ export class CircuitsService {
         }
       }
     } else {
-      // Round robin / standings: top positions map to WPE-like placements
+      // Round robin / standings: top positions map to circuit placements
       const standings = await this.computeSimpleStandings(tournamentId, regs.rows);
       const mapPos = (idx: number): string => {
         if (idx === 0) return 'WINNER';

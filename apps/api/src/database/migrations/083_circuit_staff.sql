@@ -9,7 +9,7 @@ ALTER TABLE circuits
   ADD COLUMN IF NOT EXISTS instagram TEXT,
   ADD COLUMN IF NOT EXISTS website TEXT;
 
--- La sigla identifica al circuito en los carteles de perfil ("Presidente WPE"):
+-- La sigla identifica al circuito en los carteles de perfil (rol + sigla, ej. "Presidente CAS"):
 -- no puede repetirse entre circuitos vigentes.
 CREATE UNIQUE INDEX IF NOT EXISTS uq_circuits_short_name_active
   ON circuits (UPPER(short_name))
