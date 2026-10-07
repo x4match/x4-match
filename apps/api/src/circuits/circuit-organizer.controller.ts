@@ -16,6 +16,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { CircuitsEnabledGuard } from '../common/features';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { OptionalJwtAuthGuard } from '../common/guards/optional-jwt-auth.guard';
 import {
@@ -49,6 +50,7 @@ type AuthUser = { sub: string };
 
 /** Padrón, ascensos/descensos, noticias, sponsors e historial de acciones del circuito. */
 @Controller('circuits')
+@UseGuards(CircuitsEnabledGuard)
 export class CircuitOrganizerController {
   constructor(
     private readonly players: CircuitPlayersService,

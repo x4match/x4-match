@@ -16,6 +16,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { CircuitsEnabledGuard } from '../common/features';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { OptionalJwtAuthGuard } from '../common/guards/optional-jwt-auth.guard';
 import { CircuitsService } from './circuits.service';
@@ -40,6 +41,7 @@ import {
 } from './dto/circuit-stage.dto';
 
 @Controller('circuits')
+@UseGuards(CircuitsEnabledGuard)
 export class CircuitsController {
   constructor(
     private readonly circuitsService: CircuitsService,
