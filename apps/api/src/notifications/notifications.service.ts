@@ -30,7 +30,7 @@ export class NotificationsService {
         JSON.stringify(params.data ?? {}),
       ],
     );
-    void this.sendPushToUser(params).catch((error: unknown) => {
+    void this.sendPushToUser(params, result.rows[0].id).catch((error: unknown) => {
       this.logger.warn(`Push no enviado: ${(error as Error).message}`);
     });
     return result.rows[0];
@@ -117,7 +117,7 @@ export class NotificationsService {
     return { ok: true };
   }
 
-  private async sendPushToUser(params: NotificationPayload) {
+  private async sendPushToUser(params: NotificationPayload, notificationId: string) {
     const tokens = await this.db.query(
       `SELECT token FROM user_push_tokens WHERE user_id = $1`,
       [params.userId],
@@ -132,6 +132,7 @@ export class NotificationsService {
       data: {
         ...(params.data ?? {}),
         type: params.type,
+        notificationId,
       },
     }));
 
