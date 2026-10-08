@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { ReportsService } from '../reports/reports.service';
 
 @Injectable()
@@ -11,6 +12,7 @@ export class FollowsService {
   constructor(
     private readonly db: DatabaseService,
     private readonly reportsService: ReportsService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async resolveUserId(playerOrUserId: string): Promise<string> {
@@ -87,12 +89,27 @@ export class FollowsService {
 
     await this.reportsService.assertNotBlockedEitherWay(userId, targetId);
 
-    await this.db.query(
+    const inserted = await this.db.query(
       `INSERT INTO user_follows (follower_id, following_id)
        VALUES ($1, $2)
-       ON CONFLICT DO NOTHING`,
+       ON CONFLICT DO NOTHING
+       RETURNING follower_id`,
       [userId, targetId],
     );
+    if (inserted.rows[0]) {
+      const follower = await this.db.query(`SELECT name FROM users WHERE id = $1`, [userId]);
+      const followerName = follower.rows[0]?.name || 'Alguien';
+      await this.notifications.create({
+        userId: targetId,
+        type: 'NEW_FOLLOWER',
+        title: 'Nuevo seguidor',
+        body: `${followerName} empezó a seguirte`,
+        data: {
+          fromUserId: userId,
+          fromUserName: followerName,
+        },
+      });
+    }
     return this.getRelation(userId, targetId);
   }
 
