@@ -13,6 +13,9 @@ import { PaymentsModule } from '../payments/payments.module';
 import { ReportsModule } from '../reports/reports.module';
 import { MatchResultExpiryService } from './match-result-expiry.service';
 import { MatchReminderService } from './match-reminder.service';
+import { MatchLiveScoreController } from './live-score/match-live-score.controller';
+import { MatchLiveScoreService } from './live-score/match-live-score.service';
+import { MatchLiveScoreRepository } from './live-score/match-live-score.repository';
 
 @Module({
   imports: [
@@ -26,8 +29,15 @@ import { MatchReminderService } from './match-reminder.service';
     forwardRef(() => ChallengesModule),
     forwardRef(() => PaymentsModule),
   ],
-  controllers: [MatchesController],
-  providers: [MatchesService, MatchesRepository, MatchResultExpiryService, MatchReminderService],
+  controllers: [MatchesController, MatchLiveScoreController],
+  providers: [
+    MatchesService,
+    MatchesRepository,
+    MatchResultExpiryService,
+    MatchReminderService,
+    MatchLiveScoreService,
+    MatchLiveScoreRepository,
+  ],
   exports: [MatchesService, MatchesRepository],
 })
 export class MatchesModule {}
