@@ -130,6 +130,9 @@ export class MatchesService {
         lockDeclaredCategory: placement?.lockDeclaredCategory,
       });
       const band = resolveMatchLevelBand({ category, femaleMixed: isFemaleMixed });
+      if (dto.gender === 'mixed') {
+        await this.extendBandWithInvitedPlayers(band, dto.invites);
+      }
       dto.levelMin = dto.levelMin ?? band.min;
       dto.levelMax = dto.levelMax ?? band.max;
     }
@@ -281,21 +284,40 @@ export class MatchesService {
     return this.matchesRepository.listByUser(userId);
   }
 
-  private async playerLevelFitsMatch(
-    userId: string,
-    match: { level_min?: number | null; level_max?: number | null },
-  ): Promise<boolean> {
+  private async getVisibleCategoryByUserId(userId: string): Promise<string | null> {
     const placement = await this.matchesRepository.getPlayerPlacementBandByUserId(userId);
-    if (!placement) return true;
+    if (!placement) return null;
 
     // Usar categoría visible (declarada en provisional). Skill 0 de placement
     // haría pasar a cualquiera en bandas que incluyen 0 (p.ej. 0–639).
-    const category = resolveVisibleLevelCategory({
+    return resolveVisibleLevelCategory({
       rating: placement.rating,
       categoryStatus: placement.categoryStatus,
       declaredCategory: placement.declaredCategory,
       lockDeclaredCategory: placement.lockDeclaredCategory,
     });
+  }
+
+  private async extendBandWithInvitedPlayers(
+    band: { min: number; max: number },
+    invites?: MatchInviteDto[],
+  ): Promise<void> {
+    for (const invite of invites ?? []) {
+      if (!invite.userId) continue;
+      const category = await this.getVisibleCategoryByUserId(invite.userId);
+      if (!category) continue;
+      const range = getCategoryLevelRange(category);
+      band.min = Math.min(band.min, range.min);
+      band.max = Math.max(band.max, range.max);
+    }
+  }
+
+  private async playerLevelFitsMatch(
+    userId: string,
+    match: { level_min?: number | null; level_max?: number | null },
+  ): Promise<boolean> {
+    const category = await this.getVisibleCategoryByUserId(userId);
+    if (!category) return true;
     return categoryOverlapsMatchLevel(category, match.level_min, match.level_max);
   }
 
@@ -320,12 +342,16 @@ export class MatchesService {
     }
   }
 
-  /** Género siempre; categoría en invitaciones (join público puede pedir aprobación). */
+  /**
+   * Género siempre; categoría en invitaciones (join público puede pedir aprobación).
+   * En mixtos las parejas combinan categorías distintas: el invitado no se filtra por nivel.
+   */
   private async assertPlayerCanBeInvitedToMatch(
     userId: string,
     match: { gender?: string | null; level_min?: number | null; level_max?: number | null },
   ): Promise<void> {
     await this.assertPlayerGenderFitsMatch(userId, match.gender);
+    if (match.gender === 'mixed') return;
     await this.assertPlayerCategoryFitsMatch(userId, match);
   }
 
