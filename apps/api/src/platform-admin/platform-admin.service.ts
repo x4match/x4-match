@@ -94,6 +94,46 @@ export class PlatformAdminService {
     };
   }
 
+  async getMonitorTrends(weeks = 12) {
+    const span = Math.min(Math.max(Math.trunc(weeks) || 12, 4), 52);
+    const result = await this.db.query(
+      `WITH weeks AS (
+         SELECT generate_series(
+           date_trunc('week', NOW()) - ($1::int - 1) * INTERVAL '1 week',
+           date_trunc('week', NOW()),
+           INTERVAL '1 week'
+         ) AS week_start
+       )
+       SELECT w.week_start,
+              (SELECT COUNT(*) FROM users u
+                WHERE u.created_at >= w.week_start AND u.created_at < w.week_start + INTERVAL '1 week')::int AS users,
+              (SELECT COUNT(*) FROM clubs c
+                WHERE c.created_at >= w.week_start AND c.created_at < w.week_start + INTERVAL '1 week')::int AS clubs,
+              (SELECT COUNT(*) FROM matches m
+                WHERE m.created_at >= w.week_start AND m.created_at < w.week_start + INTERVAL '1 week')::int AS matches,
+              (SELECT COUNT(*) FROM tournaments t
+                WHERE t.created_at >= w.week_start AND t.created_at < w.week_start + INTERVAL '1 week')::int AS tournaments,
+              (SELECT COALESCE(SUM(md.amount), 0) FROM match_deposits md
+                WHERE md.status::text = 'APPROVED'
+                  AND md.created_at >= w.week_start AND md.created_at < w.week_start + INTERVAL '1 week')::float AS revenue
+       FROM weeks w
+       ORDER BY w.week_start`,
+      [span],
+    );
+
+    return {
+      generatedAt: new Date().toISOString(),
+      weeks: result.rows.map((row: any) => ({
+        weekStart: row.week_start,
+        users: Number(row.users ?? 0),
+        clubs: Number(row.clubs ?? 0),
+        matches: Number(row.matches ?? 0),
+        tournaments: Number(row.tournaments ?? 0),
+        revenue: Number(row.revenue ?? 0),
+      })),
+    };
+  }
+
   async listClubs(params: {
     q?: string;
     status?: string;

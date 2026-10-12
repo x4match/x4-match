@@ -40,6 +40,11 @@ export class PlatformAdminController {
     return this.platformAdminService.getMonitor();
   }
 
+  @Get('monitor/trends')
+  getMonitorTrends(@Query('weeks') weeks?: string) {
+    return this.platformAdminService.getMonitorTrends(weeks ? Number(weeks) : undefined);
+  }
+
   @Get('clubs')
   listClubs(
     @Query('q') q?: string,

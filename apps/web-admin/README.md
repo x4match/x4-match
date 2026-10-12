@@ -26,6 +26,16 @@ cp .env.example .env.local
 
 Solo usuarios con rol `SUPER_ADMIN` en la API.
 
+### Entorno nuevo / producción
+
+```bash
+# En apps/api/.env (o en el entorno del server): SEED_ADMIN_EMAIL, SEED_ADMIN_PASSWORD (12+ caracteres)
+cd apps/api && pnpm db:seed:initial        # local, lee .env
+cd apps/api && pnpm db:seed:initial:ci     # server, usa las variables ya exportadas
+```
+
+Crea (o promueve) el operador `SUPER_ADMIN` y las cuentas de App Review de Apple. Es idempotente.
+
 ### Usuario demo (después de `pnpm db:seed`)
 
 | Campo | Valor |

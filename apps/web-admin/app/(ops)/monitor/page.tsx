@@ -1,128 +1,228 @@
 'use client';
 
-import Link from 'next/link';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { StatusBadge } from '@/components/StatusBadge';
+import { Building2, RefreshCw, Swords, Trophy, Users } from 'lucide-react';
+import { TrendChart } from '@/components/charts/TrendChart';
+import { useAuth } from '@/contexts/AuthContext';
 import { api } from '@/lib/api';
+import {
+  formatCompact,
+  formatCurrency,
+  formatCurrencyCompact,
+  formatNumber,
+  formatRelative,
+  formatWeekLabel,
+} from '@/lib/format';
+import { ActionCenter } from './_components/ActionCenter';
+import { BillingBreakdown } from './_components/BillingBreakdown';
+import { KpiTile } from './_components/KpiTile';
+import { NetworkHealth } from './_components/NetworkHealth';
+import { RecentList } from './_components/RecentList';
+import type { MonitorData, TrendSeries, TrendsData } from './_components/types';
 
-function StatCard({
-  label,
-  value,
-  hint,
-  alert,
-}: {
-  label: string;
-  value: number | string;
-  hint?: string;
-  alert?: boolean;
-}) {
+const SERIES: { key: TrendSeries; label: string }[] = [
+  { key: 'users', label: 'Usuarios' },
+  { key: 'clubs', label: 'Clubes' },
+  { key: 'matches', label: 'Partidos' },
+  { key: 'tournaments', label: 'Torneos' },
+];
+
+function greeting() {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Buen día';
+  if (hour < 20) return 'Buenas tardes';
+  return 'Buenas noches';
+}
+
+function MonitorSkeleton() {
   return (
-    <div className={`ops-kpi${alert ? ' ops-kpi--alert' : ''}`}>
-      <p className="ops-kpi-label">{label}</p>
-      <p className="ops-kpi-value">{value}</p>
-      {hint ? <p className="ops-kpi-hint">{hint}</p> : null}
+    <div className="bento" aria-busy="true" aria-label="Cargando monitoreo">
+      {Array.from({ length: 4 }, (_, index) => (
+        <div key={index} className="bento-tile kpi-tile skeleton" />
+      ))}
+      <div className="bento-tile span-8 skeleton skeleton--chart" />
+      <div className="bento-tile span-4 skeleton skeleton--chart" />
     </div>
   );
 }
 
 export default function MonitorPage() {
-  const { data, isLoading, isError } = useQuery({
+  const { user } = useAuth();
+  const [series, setSeries] = useState<TrendSeries>('users');
+
+  const monitor = useQuery({
     queryKey: ['platform-monitor'],
-    queryFn: async () => (await api.get('/platform/monitor')).data,
+    queryFn: async () => (await api.get<MonitorData>('/platform/monitor')).data,
+    refetchInterval: 120_000,
+  });
+  const trends = useQuery({
+    queryKey: ['platform-monitor-trends', 12],
+    queryFn: async () =>
+      (await api.get<TrendsData>('/platform/monitor/trends', { params: { weeks: 12 } })).data,
+    refetchInterval: 300_000,
   });
 
-  if (isLoading) {
-    return <p style={{ color: 'var(--muted)' }}>Cargando monitoreo…</p>;
-  }
-  if (isError || !data) {
-    return <p role="alert" style={{ color: '#fca5a5' }}>No se pudo cargar el monitoreo.</p>;
-  }
+  const weeks = useMemo(() => trends.data?.weeks ?? [], [trends.data]);
+  const seriesOf = (key: TrendSeries) => (weeks.length ? weeks.map((week) => week[key]) : undefined);
+  const activityData = weeks.map((week) => ({ label: formatWeekLabel(week.weekStart), value: week[series] }));
+  const revenueData = weeks.map((week) => ({ label: formatWeekLabel(week.weekStart), value: week.revenue }));
+  const periodTotal = weeks.reduce((sum, week) => sum + week[series], 0);
+  const revenueTotal = weeks.reduce((sum, week) => sum + week.revenue, 0);
+  const activeSeriesLabel = SERIES.find((entry) => entry.key === series)?.label ?? '';
 
-  const t = data.totals;
+  const refreshing = monitor.isFetching || trends.isFetching;
+  const refresh = () => {
+    void monitor.refetch();
+    void trends.refetch();
+  };
+
+  const data = monitor.data;
+  const firstName = user?.name?.split(' ')[0];
 
   return (
-    <div>
+    <div className="monitor">
       <header className="ops-page-header">
         <div>
-          <p className="ops-page-kicker">Operación en vivo</p>
-          <h1 className="ops-page-title">Monitoreo</h1>
+          <p className="ops-page-kicker">
+            <span className="live-dot" aria-hidden />
+            Operación en vivo
+          </p>
+          <h1 className="ops-page-title">
+            {greeting()}
+            {firstName ? `, ${firstName}` : ''}
+          </h1>
           <p className="ops-page-subtitle">
-            Snapshot de la plataforma · {new Date(data.generatedAt).toLocaleString('es-AR')}
+            {data
+              ? `Snapshot de la plataforma · actualizado ${formatRelative(data.generatedAt)}`
+              : 'Snapshot de la plataforma'}
           </p>
         </div>
+        <button type="button" className="btn btn-outline" onClick={refresh} disabled={refreshing}>
+          <RefreshCw size={16} aria-hidden className={refreshing ? 'spin' : undefined} />
+          {refreshing ? 'Actualizando…' : 'Actualizar'}
+        </button>
       </header>
 
-      <div className="ops-kpi-grid">
-        <StatCard label="Usuarios" value={t.users} />
-        <StatCard label="Clubes" value={t.clubs} />
-        <StatCard label="Partidos" value={t.matches} />
-        <StatCard label="Torneos" value={t.tournaments} />
-        <StatCard label="Trials activos" value={t.activeTrials} />
-        <StatCard
-          label="Trials vencen (7d)"
-          value={t.trialsExpiring7d}
-          hint="Requieren acción"
-          alert={Number(t.trialsExpiring7d) > 0}
-        />
-        <StatCard label="MP conectados" value={t.mpConnectedClubs} />
-      </div>
+      {monitor.isLoading ? (
+        <MonitorSkeleton />
+      ) : monitor.isError || !data ? (
+        <div className="bento-tile error-tile" role="alert">
+          <p>No se pudo cargar el monitoreo.</p>
+          <button type="button" className="btn btn-outline" onClick={refresh}>
+            Reintentar
+          </button>
+        </div>
+      ) : (
+        <>
+          <ActionCenter totals={data.totals} />
 
-      <div className="ops-grid-2">
-        <div className="card card-table">
-          <div style={{ padding: '16px 16px 0' }}>
-            <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>Clubes recientes</h2>
+          <div className="bento">
+            <KpiTile index={0} href="/users" label="Usuarios" value={data.totals.users} icon={Users} series={seriesOf('users')} />
+            <KpiTile index={1} href="/clubs" label="Clubes" value={data.totals.clubs} icon={Building2} series={seriesOf('clubs')} />
+            <KpiTile index={2} href="/matches" label="Partidos" value={data.totals.matches} icon={Swords} series={seriesOf('matches')} />
+            <KpiTile index={3} href="/tournaments" label="Torneos" value={data.totals.tournaments} icon={Trophy} series={seriesOf('tournaments')} />
+
+            <section className="bento-tile span-8 reveal" style={{ '--reveal-index': 4 } as React.CSSProperties} aria-labelledby="activity-title">
+              <header className="tile-header">
+                <div>
+                  <h2 id="activity-title" className="tile-title">
+                    Actividad semanal
+                  </h2>
+                  <p className="tile-subtitle">
+                    <span className="num">{formatNumber(periodTotal)}</span> {activeSeriesLabel.toLowerCase()} nuevos en 12 semanas
+                  </p>
+                </div>
+                <div className="segmented" role="group" aria-label="Serie del gráfico">
+                  {SERIES.map((entry) => (
+                    <button
+                      key={entry.key}
+                      type="button"
+                      className={`segmented-btn${series === entry.key ? ' segmented-btn--active' : ''}`}
+                      aria-pressed={series === entry.key}
+                      onClick={() => setSeries(entry.key)}
+                    >
+                      {entry.label}
+                    </button>
+                  ))}
+                </div>
+              </header>
+              {trends.isError ? (
+                <p className="chart-empty" role="alert">No se pudieron cargar las tendencias.</p>
+              ) : trends.isLoading ? (
+                <div className="skeleton skeleton--plot" aria-busy="true" />
+              ) : (
+                <TrendChart data={activityData} seriesLabel={`${activeSeriesLabel} nuevos`} formatValue={formatCompact} />
+              )}
+            </section>
+
+            <div className="span-4 reveal" style={{ '--reveal-index': 5 } as React.CSSProperties}>
+              <NetworkHealth totals={data.totals} />
+            </div>
+
+            <section className="bento-tile span-7 reveal" style={{ '--reveal-index': 6 } as React.CSSProperties} aria-labelledby="revenue-title">
+              <header className="tile-header">
+                <div>
+                  <h2 id="revenue-title" className="tile-title">
+                    Señas cobradas
+                  </h2>
+                  <p className="tile-subtitle">Depósitos aprobados por semana</p>
+                </div>
+                <p className="tile-figure num">{formatCurrency(revenueTotal)}</p>
+              </header>
+              {trends.isError ? (
+                <p className="chart-empty" role="alert">No se pudieron cargar las tendencias.</p>
+              ) : trends.isLoading ? (
+                <div className="skeleton skeleton--plot" aria-busy="true" />
+              ) : (
+                <TrendChart
+                  data={revenueData}
+                  variant="bar"
+                  seriesLabel="Señas aprobadas"
+                  formatValue={formatCurrency}
+                  formatAxis={formatCurrencyCompact}
+                  height={200}
+                />
+              )}
+            </section>
+
+            <div className="span-5 reveal" style={{ '--reveal-index': 7 } as React.CSSProperties}>
+              <BillingBreakdown rows={data.billingBreakdown} />
+            </div>
+
+            <div className="span-6 reveal" style={{ '--reveal-index': 8 } as React.CSSProperties}>
+              <RecentList
+                title="Clubes recientes"
+                seeAllHref="/clubs"
+                category="billingStatus"
+                items={data.recentClubs.map((club) => ({
+                  id: club.id,
+                  href: `/clubs/${club.id}`,
+                  name: club.name,
+                  secondary: club.city,
+                  status: club.billingStatus,
+                  createdAt: club.createdAt,
+                }))}
+              />
+            </div>
+            <div className="span-6 reveal" style={{ '--reveal-index': 9 } as React.CSSProperties}>
+              <RecentList
+                title="Usuarios recientes"
+                seeAllHref="/users"
+                category="userRole"
+                items={data.recentUsers.map((recent) => ({
+                  id: recent.id,
+                  href: `/users/${recent.id}`,
+                  name: recent.name,
+                  secondary: recent.email,
+                  status: recent.role,
+                  createdAt: recent.createdAt,
+                }))}
+              />
+            </div>
           </div>
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Club</th>
-                <th>Estado</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.recentClubs.map((c: { id: string; name: string; billingStatus: string }) => (
-                <tr key={c.id}>
-                  <td>
-                    <Link href={`/clubs/${c.id}`} style={{ color: 'var(--primary)', fontWeight: 600 }}>
-                      {c.name}
-                    </Link>
-                  </td>
-                  <td>
-                    <StatusBadge value={c.billingStatus} category="billingStatus" />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <div className="card card-table">
-          <div style={{ padding: '16px 16px 0' }}>
-            <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>Usuarios recientes</h2>
-          </div>
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Nombre</th>
-                <th>Rol</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.recentUsers.map((u: { id: string; name: string; role: string }) => (
-                <tr key={u.id}>
-                  <td>
-                    <Link href={`/users/${u.id}`} style={{ color: 'var(--primary)', fontWeight: 600 }}>
-                      {u.name}
-                    </Link>
-                  </td>
-                  <td>
-                    <StatusBadge value={u.role} category="userRole" />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+        </>
+      )}
     </div>
   );
 }

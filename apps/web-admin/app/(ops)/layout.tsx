@@ -1,14 +1,18 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { OpsSidebar } from '@/components/OpsSidebar';
+import { OpsTopbar } from '@/components/OpsTopbar';
 import { useAuth } from '@/contexts/AuthContext';
 import { isPlatformAdmin } from '@/lib/roles';
 
 export default function OpsLayout({ children }: { children: React.ReactNode }) {
   const { user, token, loading, logout } = useAuth();
   const router = useRouter();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const closeMenu = useCallback(() => setMenuOpen(false), []);
+  const openMenu = useCallback(() => setMenuOpen(true), []);
 
   useEffect(() => {
     if (loading) return;
@@ -20,13 +24,23 @@ export default function OpsLayout({ children }: { children: React.ReactNode }) {
   }, [loading, token, user, router, logout]);
 
   if (loading || !user || !isPlatformAdmin(user.role)) {
-    return <div style={{ padding: 32, color: 'var(--muted)' }}>Cargando…</div>;
+    return (
+      <div className="ops-boot" role="status">
+        <span className="ops-brand-mark" aria-hidden>
+          x4
+        </span>
+        <span>Cargando…</span>
+      </div>
+    );
   }
 
   return (
     <div className="ops-layout">
-      <OpsSidebar />
-      <main className="ops-main">{children}</main>
+      <OpsSidebar open={menuOpen} onClose={closeMenu} />
+      <div className="ops-shell">
+        <OpsTopbar onOpenMenu={openMenu} />
+        <main className="ops-main">{children}</main>
+      </div>
     </div>
   );
 }

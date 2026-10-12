@@ -2,82 +2,26 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import {
-  Activity,
-  BadgeCheck,
-  Building2,
-  CalendarRange,
-  CreditCard,
-  Handshake,
-  LayoutDashboard,
-  LogOut,
-  Menu,
-  Swords,
-  Timer,
-  Trophy,
-  Users,
-  X,
-} from 'lucide-react';
-import { useEffect, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { LogOut, X } from 'lucide-react';
+import { useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { api } from '@/lib/api';
+import { initials } from '@/lib/format';
+import { USER_ROLE_LABELS } from '@/lib/labels';
+import { NAV_GROUPS, isNavActive } from '@/lib/nav';
+import { usePendingClubRegistrations } from '@/lib/use-pending-club-registrations';
 
-const NAV_GROUPS = [
-  {
-    label: 'Operación',
-    items: [
-      { href: '/monitor', label: 'Monitoreo', icon: LayoutDashboard },
-      { href: '/trials', label: 'Trials', icon: Timer },
-      { href: '/activity', label: 'Actividad', icon: Activity },
-      { href: '/calendar', label: 'Agenda', icon: CalendarRange },
-    ],
-  },
-  {
-    label: 'Red',
-    items: [
-      { href: '/club-registrations', label: 'Altas de clubes', icon: BadgeCheck },
-      { href: '/clubs', label: 'Clubes', icon: Building2 },
-      { href: '/users', label: 'Usuarios', icon: Users },
-      { href: '/matches', label: 'Partidos', icon: Swords },
-      { href: '/tournaments', label: 'Torneos', icon: Trophy },
-    ],
-  },
-  {
-    label: 'Comercio',
-    items: [
-      { href: '/payments', label: 'Pagos', icon: CreditCard },
-      { href: '/partners', label: 'Partners', icon: Handshake },
-    ],
-  },
-];
-
-function SidebarNav({
-  pathname,
-  onNavigate,
-}: {
-  pathname: string;
-  onNavigate?: () => void;
-}) {
-  const { data: pendingClubs = 0 } = useQuery({
-    queryKey: ['platform-club-registrations-pending'],
-    queryFn: async () => {
-      const res = await api.get('/platform/club-registrations', {
-        params: { status: 'PENDING', limit: 1 },
-      });
-      return Number(res.data?.total ?? 0);
-    },
-    refetchInterval: 60_000,
-  });
+function SidebarNav({ pathname, onNavigate }: { pathname: string; onNavigate?: () => void }) {
+  const { data: pendingClubs = 0 } = usePendingClubRegistrations();
   const badges: Record<string, number> = { '/club-registrations': pendingClubs };
 
   return (
     <nav className="ops-nav" aria-label="Navegación principal">
       {NAV_GROUPS.map((group) => (
-        <div key={group.label}>
+        <div key={group.label} className="ops-nav-group">
           <p className="ops-nav-section">{group.label}</p>
           {group.items.map(({ href, label, icon: Icon }) => {
-            const active = pathname === href || pathname.startsWith(`${href}/`);
+            const active = isNavActive(pathname, href);
+            const badge = badges[href];
             return (
               <Link
                 key={href}
@@ -86,11 +30,13 @@ function SidebarNav({
                 onClick={onNavigate}
                 aria-current={active ? 'page' : undefined}
               >
-                <Icon size={16} aria-hidden />
-                {label}
-                {badges[href] ? (
-                  <span className="badge badge-warning" style={{ marginLeft: 'auto' }}>
-                    {badges[href]}
+                <span className="ops-nav-icon" aria-hidden>
+                  <Icon size={16} />
+                </span>
+                <span className="ops-nav-label">{label}</span>
+                {badge ? (
+                  <span className="ops-nav-badge" aria-label={`${badge} pendientes`}>
+                    {badge}
                   </span>
                 ) : null}
               </Link>
@@ -102,15 +48,14 @@ function SidebarNav({
   );
 }
 
-export function OpsSidebar() {
+export function OpsSidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, logout } = useAuth();
-  const [open, setOpen] = useState(false);
 
   useEffect(() => {
-    setOpen(false);
-  }, [pathname]);
+    onClose();
+  }, [pathname, onClose]);
 
   useEffect(() => {
     document.body.style.overflow = open ? 'hidden' : '';
@@ -121,65 +66,61 @@ export function OpsSidebar() {
 
   return (
     <>
-      <header className="ops-mobile-bar">
-        <button
-          type="button"
-          className="btn btn-outline ops-menu-btn"
-          aria-label="Abrir menú"
-          onClick={() => setOpen(true)}
-        >
-          <Menu size={18} aria-hidden />
-        </button>
-        <div className="ops-mobile-brand">
-          <p className="ops-brand-kicker">X4 MATCH OPS</p>
-          <p className="ops-brand-title">Backoffice</p>
-        </div>
-      </header>
-
       {open ? (
         <button
           type="button"
           className="ops-sidebar-backdrop"
           aria-label="Cerrar menú"
-          onClick={() => setOpen(false)}
+          onClick={onClose}
         />
       ) : null}
 
       <aside className={`ops-sidebar${open ? ' ops-sidebar--open' : ''}`}>
         <div className="ops-sidebar-header">
-          <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-            <div className="ops-brand-mark" aria-hidden>
+          <Link href="/monitor" className="ops-brand" onClick={onClose}>
+            <span className="ops-brand-mark" aria-hidden>
               x4
-            </div>
-            <div>
-              <p className="ops-brand-kicker">X4 MATCH OPS</p>
-              <h2 className="ops-brand-title">Backoffice</h2>
-              <p className="ops-user-name">{user?.name}</p>
-            </div>
-          </div>
+            </span>
+            <span>
+              <span className="ops-brand-kicker">X4 MATCH</span>
+              <span className="ops-brand-title">Ops Console</span>
+            </span>
+          </Link>
           <button
             type="button"
-            className="ops-sidebar-close btn btn-outline"
+            className="ops-sidebar-close btn btn-ghost"
             aria-label="Cerrar menú"
-            onClick={() => setOpen(false)}
+            onClick={onClose}
           >
-            <X size={16} aria-hidden />
+            <X size={18} aria-hidden />
           </button>
         </div>
 
-        <SidebarNav pathname={pathname} onNavigate={() => setOpen(false)} />
+        <SidebarNav pathname={pathname} onNavigate={onClose} />
 
-        <button
-          className="btn btn-outline ops-logout-btn"
-          type="button"
-          onClick={() => {
-            logout();
-            router.replace('/login');
-          }}
-        >
-          <LogOut size={16} aria-hidden />
-          Salir
-        </button>
+        <div className="ops-user-card">
+          <span className="ops-avatar" aria-hidden>
+            {initials(user?.name)}
+          </span>
+          <span className="ops-user-meta">
+            <span className="ops-user-name">{user?.name}</span>
+            <span className="ops-user-role">
+              {user?.role ? USER_ROLE_LABELS[user.role] ?? user.role : ''}
+            </span>
+          </span>
+          <button
+            className="btn btn-ghost ops-icon-btn"
+            type="button"
+            aria-label="Cerrar sesión"
+            title="Cerrar sesión"
+            onClick={() => {
+              logout();
+              router.replace('/login');
+            }}
+          >
+            <LogOut size={16} aria-hidden />
+          </button>
+        </div>
       </aside>
     </>
   );
