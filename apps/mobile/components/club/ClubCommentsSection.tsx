@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { api } from '@/lib/api';
 import { formatRelativeTime } from '@/lib/format';
 import { ui } from '@/theme/tokens';
-import { AppCard, Avatar, PrimaryButton, SectionHeader } from '@/components/padely';
+import { AppCard, Avatar, PrimaryButton, SectionHeader } from '@/components/x4match';
 
 export interface ClubComment {
   id: string;

@@ -2,7 +2,7 @@ import { View, Text } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { formatCurrency } from '@/lib/currency';
 import { ui } from '@/theme/tokens';
-import { AppCard } from '@/components/padely';
+import { AppCard } from '@/components/x4match';
 
 export interface ClubImpactSummary {
   monthKey: string;

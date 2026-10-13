@@ -1,7 +1,7 @@
 import { ScrollView, View } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import { SelectionChip } from '@/components/padely';
+import { SelectionChip } from '@/components/x4match';
 
 export type MineClub = { id: string; name: string };
 

@@ -7,10 +7,12 @@ import { ui } from '@/theme/tokens';
 type AppCardProps = {
   children: ReactNode;
   onPress?: () => void;
+  onLongPress?: () => void;
   style?: ViewStyle;
   padding?: 'sm' | 'md' | 'lg';
   variant?: 'default' | 'elevated' | 'gradient' | 'ghost';
   glow?: boolean;
+  accessibilityLabel?: string;
 };
 
 const paddingMap = { sm: ui.spacing.md, md: ui.spacing.lg, lg: ui.spacing.xl };
@@ -64,21 +66,31 @@ function CardSurface({
 export function AppCard({
   children,
   onPress,
+  onLongPress,
   style,
   padding = 'md',
   variant = 'default',
   glow,
+  accessibilityLabel,
 }: AppCardProps) {
   const { wrapperStyle, surfaceStyle } = splitCardStyles(style);
   const outerStyle = [{ marginBottom: ui.spacing.sm }, wrapperStyle];
 
-  if (onPress) {
+  if (onPress || onLongPress) {
+    // PressableScale aplica `style` a un hijo animado; los porcentajes/flex deben ir al contenedor externo.
     return (
-      <PressableScale onPress={onPress} style={outerStyle}>
-        <CardSurface padding={padding} variant={variant} glow={glow} style={surfaceStyle}>
-          {children}
-        </CardSurface>
-      </PressableScale>
+      <View style={outerStyle}>
+        <PressableScale
+          onPress={onPress}
+          onLongPress={onLongPress}
+          accessibilityRole="button"
+          accessibilityLabel={accessibilityLabel}
+        >
+          <CardSurface padding={padding} variant={variant} glow={glow} style={surfaceStyle}>
+            {children}
+          </CardSurface>
+        </PressableScale>
+      </View>
     );
   }
 

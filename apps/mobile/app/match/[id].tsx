@@ -5,8 +5,6 @@ import {
   ScrollView,
   TextInput,
   Alert,
-  KeyboardAvoidingView,
-  Platform,
   TouchableOpacity,
   Linking,
   Share,
@@ -20,9 +18,9 @@ import { mapMatch } from '@/lib/mappers';
 import { formatRelativeTime, formatCurrency } from '@/lib/format';
 import { formatSkillRange, resolveSkillScore } from '@/lib/skill';
 import { isClub } from '@/lib/roles';
-import { markDepositPaid } from '@/lib/shop-api';
-import { buildMatchShareMessage, invitePlayersToMatch } from '@/lib/match-share';
-import type { InvitedPlayer } from '@/components/padely';
+import { markDepositPaid } from '@/lib/shop/shop-api';
+import { buildMatchShareMessage, invitePlayersToMatch } from '@/lib/match/match-share';
+import type { InvitedPlayer } from '@/components/x4match';
 import type { PlayerMatchRating, SetScore } from '@/lib/types';
 import { ui } from '@/theme/tokens';
 import {
@@ -39,8 +37,11 @@ import {
   PlayerInvitePicker,
   buildMatchInvitesPayload,
   MatchOrganizedSummary,
-} from '@/components/padely';
+  ChatBubble,
+} from '@/components/x4match';
 import { MatchShopExtras } from '@/components/shop/MatchShopExtras';
+import { LiveScoreboard } from '@/components/match/LiveScoreboard';
+import { useMatchLiveScore } from '@/lib/match/live-score';
 
 const FREE_CANCEL_WINDOW_MS = 30 * 60 * 1000;
 
@@ -52,10 +53,10 @@ function isWithinFreeCancelWindow(createdAt?: string) {
 }
 
 function depositCancelHint(createdAt?: string, hasPaidDeposit?: boolean) {
-  if (!hasPaidDeposit) return 'Las señas pendientes se anulan.';
+  if (!hasPaidDeposit) return 'Los pagos pendientes se anulan.';
   return isWithinFreeCancelWindow(createdAt)
-    ? 'Todavía estás dentro de los 30 minutos: la seña pagada se reembolsa.'
-    : 'Pasaron más de 30 minutos desde la creación/alquiler: la seña pagada se retiene.';
+    ? 'Todavía estás dentro de los 30 minutos: lo pagado se reembolsa.'
+    : 'Pasaron más de 30 minutos desde la creación/alquiler: lo pagado se retiene.';
 }
 
 function userTeamFromRank(rnk: number, neededPlayers: number): 'A' | 'B' {
@@ -110,6 +111,10 @@ export default function MatchDetailScreen() {
   });
 
   const match = matchRaw ? mapMatch(matchRaw) : null;
+  const { data: liveScore } = useMatchLiveScore(
+    id,
+    !!match && ['FULL', 'CONFIRMED', 'IN_PROGRESS', 'FINISHED'].includes(match.status),
+  );
   const isClubAccount = isClub(user?.role);
   const isChatEnabled =
     match &&
@@ -176,9 +181,9 @@ export default function MatchDetailScreen() {
       if (data?.cancelled) {
         const detail =
           policy?.retained > 0
-            ? 'Eras el único jugador: el partido se canceló y tu seña se retuvo.'
+            ? 'Eras el único jugador: el partido se canceló y tu pago se retuvo.'
             : policy?.refunded > 0
-              ? 'Eras el único jugador: el partido se canceló y tu seña se reembolsa.'
+              ? 'Eras el único jugador: el partido se canceló y tu pago se reembolsa.'
               : 'Eras el único jugador: el partido se canceló.';
         Alert.alert('Partido cancelado', detail);
         return;
@@ -190,9 +195,9 @@ export default function MatchDetailScreen() {
         : '';
       const detail =
         policy?.retained > 0
-          ? `Saliste del partido. Tu seña se retuvo porque pasaron más de 30 minutos.${transferHint}`
+          ? `Saliste del partido. Tu pago se retuvo porque pasaron más de 30 minutos.${transferHint}`
           : policy?.refunded > 0
-            ? `Saliste del partido. Tu seña será reembolsada.${transferHint}`
+            ? `Saliste del partido. Tu pago será reembolsado.${transferHint}`
             : `Saliste del partido.${transferHint}`;
       Alert.alert('Listo', detail.trim());
     },
@@ -209,9 +214,9 @@ export default function MatchDetailScreen() {
       const policy = response.data?.depositPolicy;
       const detail =
         policy?.retained > 0
-          ? 'Partido cancelado. Las señas pagadas se retuvieron (más de 30 minutos).'
+          ? 'Partido cancelado. Los pagos se retuvieron (más de 30 minutos).'
           : policy?.refunded > 0
-            ? 'Partido cancelado. Las señas pagadas se reembolsan.'
+            ? 'Partido cancelado. Los pagos se reembolsan.'
             : 'Partido cancelado.';
       Alert.alert('Partido cancelado', detail);
     },
@@ -328,32 +333,39 @@ export default function MatchDetailScreen() {
   });
 
   const depositCheckoutMutation = useMutation({
-    mutationFn: async () => {
-      const res = await api.post(`/matches/${id}/deposit/checkout`);
-      return res.data;
+    mutationFn: async (options: { fullCourt?: boolean } = {}) => {
+      const res = await api.post(`/matches/${id}/deposit/checkout`, {
+        fullCourt: !!options.fullCourt,
+      });
+      return { ...res.data, fullCourt: !!options.fullCourt };
     },
     onSuccess: async (data) => {
       if (data.paid || !data.required) {
         refetch();
         queryClient.invalidateQueries({ queryKey: ['my-matches'] });
-        Alert.alert('Listo', 'Tu asistencia quedó confirmada.');
+        Alert.alert('Listo', data.message || 'Tu asistencia quedó confirmada.');
         return;
       }
 
       if (data.mock) {
         Alert.alert(
-          'Pagar seña (modo prueba)',
-          `Seña: ${formatCurrency(data.amount, data.currency || 'ARS')}\n\nEn producción se abre Mercado Pago.`,
+          data.fullCourt ? 'Pagar turno completo (modo prueba)' : 'Pagar turno (modo prueba)',
+          `${data.fullCourt ? 'Turno completo' : 'Tu parte'}: ${formatCurrency(data.amount, data.currency || 'ARS')}\n\nEn producción se abre Mercado Pago.`,
           [
             { text: 'Cancelar', style: 'cancel' },
             {
               text: 'Simular pago',
               onPress: async () => {
                 try {
-                  await api.post(`/matches/${id}/deposit/simulate`);
+                  await api.post(`/matches/${id}/deposit/simulate`, { fullCourt: data.fullCourt });
                   refetch();
                   queryClient.invalidateQueries({ queryKey: ['my-matches'] });
-                  Alert.alert('Listo', 'Seña acreditada y asistencia confirmada.');
+                  Alert.alert(
+                    'Listo',
+                    data.fullCourt
+                      ? 'Turno pagado: la cancha quedó reservada.'
+                      : 'Pago acreditado y asistencia confirmada.',
+                  );
                 } catch (e: any) {
                   Alert.alert('Error', e?.response?.data?.message || 'No se pudo simular el pago');
                 }
@@ -371,10 +383,16 @@ export default function MatchDetailScreen() {
         } else {
           Alert.alert('Error', 'No se pudo abrir la pasarela de pago');
         }
+      } else if (data.manualPayment) {
+        refetch();
+        Alert.alert(
+          'Pago en el club',
+          `${data.message ?? ''}\nMonto: ${formatCurrency(data.amount, data.currency || 'ARS')}`.trim(),
+        );
       }
     },
     onError: (error: any) =>
-      Alert.alert('Error', error?.response?.data?.message || 'No se pudo iniciar el pago de la seña'),
+      Alert.alert('Error', error?.response?.data?.message || 'No se pudo iniciar el pago del turno'),
   });
 
   const markDepositPaidMutation = useMutation({
@@ -387,10 +405,10 @@ export default function MatchDetailScreen() {
         queryClient.invalidateQueries({ queryKey: ['club-profile-revenue'] }),
         queryClient.invalidateQueries({ queryKey: ['club-manager-report'] }),
       ]);
-      Alert.alert('Listo', 'Seña marcada como pagada en recepción.');
+      Alert.alert('Listo', 'Pago marcado como cobrado en recepción.');
     },
     onError: (error: any) =>
-      Alert.alert('Error', error?.response?.data?.message || 'No se pudo marcar la seña como pagada'),
+      Alert.alert('Error', error?.response?.data?.message || 'No se pudo marcar el pago como cobrado'),
   });
 
   const invitePlayersMutation = useMutation({
@@ -515,6 +533,11 @@ export default function MatchDetailScreen() {
   const needsDepositPayment =
     needsConfirm && deposit?.required && !deposit?.paid;
   const canConfirmWithoutPay = needsConfirm && (!deposit?.required || deposit?.paid);
+  const canPayFullCourt =
+    !!deposit?.required &&
+    !deposit?.paid &&
+    ['OPEN', 'FULL'].includes(match.status) &&
+    (deposit?.fullCourtAmount ?? 0) > (deposit?.amount ?? 0);
   const clubId = match.clubId || match.club?.id;
   const canAddShopExtras =
     isParticipant && !!clubId && ['OPEN', 'FULL', 'CONFIRMED', 'IN_PROGRESS'].includes(match.status);
@@ -558,16 +581,28 @@ export default function MatchDetailScreen() {
     pendingInvitePayload.length > 0 &&
     pendingInvitePayload.length <= openSlots;
 
+  const confirmPayFullCourt = () => {
+    if (!deposit?.fullCourtAmount) return;
+    Alert.alert(
+      'Pagar turno completo',
+      `Vas a pagar ${formatCurrency(deposit.fullCourtAmount, deposit.currency)} y la cancha queda reservada ya. Los demás jugadores no tendrán que pagar; solo confirmar asistencia.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Pagar', onPress: () => depositCheckoutMutation.mutate({ fullCourt: true }) },
+      ],
+    );
+  };
+
   const sharePaymentLink = async () => {
     const checkoutUrl = deposit?.checkoutUrl?.trim();
     if (!checkoutUrl) {
-      depositCheckoutMutation.mutate();
+      depositCheckoutMutation.mutate({});
       return;
     }
     try {
       await Share.share({
-        message: `Pagá la seña del partido "${match.title}" para confirmar la cancha:\n${checkoutUrl}`,
-        title: 'Link de pago · seña de cancha',
+        message: `Pagá tu parte del turno del partido "${match.title}" para reservar la cancha:\n${checkoutUrl}`,
+        title: 'Link de pago · turno de cancha',
         url: checkoutUrl,
       });
     } catch {
@@ -594,28 +629,37 @@ export default function MatchDetailScreen() {
       />
 
       {showChat ? (
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <ScrollView ref={scrollRef} style={{ flex: 1, padding: ui.spacing.lg }} onContentSizeChange={() => scrollRef.current?.scrollToEnd()}>
+        <View style={{ flex: 1 }}>
+          <ScrollView
+            ref={scrollRef}
+            style={{ flex: 1, padding: ui.spacing.lg }}
+            keyboardShouldPersistTaps="handled"
+            onContentSizeChange={() => scrollRef.current?.scrollToEnd()}
+          >
             {messages.length === 0 ? (
               <Text style={{ textAlign: 'center', color: ui.colors.textMuted, marginTop: 40 }}>No hay mensajes aún</Text>
             ) : (
               messages.map((msg: any) => {
                 const isOwn = msg.userId === user?.id || msg.user_id === user?.id;
+                const senderName = msg.userName || msg.user_name || '?';
                 return (
-                  <View key={msg.id} style={{ flexDirection: 'row', marginBottom: 12, justifyContent: isOwn ? 'flex-end' : 'flex-start' }}>
-                    {!isOwn && <Avatar name={msg.userName || msg.user_name || '?'} size="sm" style={{ marginRight: 8 }} />}
-                    <View
-                      style={{
-                        maxWidth: '75%',
-                        backgroundColor: isOwn ? ui.colors.primary : ui.colors.surface,
-                        borderRadius: ui.radius.md,
-                        padding: 10,
-                      }}
-                    >
-                      <Text style={{ color: isOwn ? '#fff' : ui.colors.textInverse, fontSize: 14 }}>{msg.content}</Text>
-                      <Text style={{ fontSize: 10, color: isOwn ? 'rgba(255,255,255,0.7)' : ui.colors.textMuted, marginTop: 4 }}>
-                        {formatRelativeTime(msg.createdAt || msg.created_at)}
-                      </Text>
+                  <View
+                    key={msg.id}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'flex-end',
+                      marginBottom: 10,
+                      justifyContent: isOwn ? 'flex-end' : 'flex-start',
+                    }}
+                  >
+                    {!isOwn && <Avatar name={senderName} size="sm" style={{ marginRight: 8 }} />}
+                    <View style={{ flexShrink: 1, maxWidth: '85%' }}>
+                      <ChatBubble
+                        mine={isOwn}
+                        content={msg.content}
+                        senderName={isOwn ? undefined : senderName}
+                        timeLabel={formatRelativeTime(msg.createdAt || msg.created_at)}
+                      />
                     </View>
                   </View>
                 );
@@ -641,10 +685,10 @@ export default function MatchDetailScreen() {
               onPress={sendMessage}
               style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: ui.colors.primary, alignItems: 'center', justifyContent: 'center' }}
             >
-              <Ionicons name="send" size={20} color="#fff" />
+              <Ionicons name="send" size={20} color={ui.colors.onPrimary} />
             </TouchableOpacity>
           </View>
-        </KeyboardAvoidingView>
+        </View>
       ) : (
         <>
           <ScrollView contentContainerStyle={{ padding: ui.spacing.lg, paddingBottom: hasFooterActions ? 200 : 120 }}>
@@ -780,22 +824,48 @@ export default function MatchDetailScreen() {
             {match.courtBooking === 'in_app' && isParticipant && deposit?.required && !deposit?.paid && (
               <AppCard style={{ marginBottom: ui.spacing.sm, backgroundColor: 'rgba(245,158,11,0.08)' }}>
                 <Text style={{ fontWeight: '700', color: ui.colors.accent, marginBottom: 6 }}>
-                  Reservar cancha con tu seña
+                  Pagá tu parte del turno
                 </Text>
                 <Text style={{ fontSize: 13, color: ui.colors.textSecondary, marginBottom: 12, lineHeight: 19 }}>
-                  La cancha se bloquea recién cuando todos pagan la seña
+                  La cancha queda reservada al pagar el turno completo
                   {deposit.clubName ? ` en ${deposit.clubName}` : ''}. Hasta entonces el turno sigue
                   disponible.
                 </Text>
                 <PrimaryButton
-                  label={`Pagar seña${deposit.amount ? ` (${formatCurrency(deposit.amount, deposit.currency)})` : ''}`}
-                  onPress={() => depositCheckoutMutation.mutate()}
-                  loading={depositCheckoutMutation.isPending}
+                  label={`Pagar mi parte${deposit.amount ? ` (${formatCurrency(deposit.amount, deposit.currency)})` : ''}`}
+                  onPress={() => depositCheckoutMutation.mutate({})}
+                  loading={depositCheckoutMutation.isPending && !depositCheckoutMutation.variables?.fullCourt}
+                  disabled={depositCheckoutMutation.isPending}
                   fullWidth
                   size="md"
-                  icon={<Ionicons name="card" size={18} color="#fff" />}
-                  style={{ marginBottom: deposit.checkoutUrl ? 8 : 0 }}
+                  icon={<Ionicons name="card" size={18} color={ui.colors.onPrimary} />}
+                  style={{ marginBottom: canPayFullCourt || deposit.checkoutUrl ? 8 : 0 }}
                 />
+                {canPayFullCourt ? (
+                  <PrimaryButton
+                    label={`Pagar turno completo (${formatCurrency(deposit.fullCourtAmount!, deposit.currency)})`}
+                    onPress={confirmPayFullCourt}
+                    loading={depositCheckoutMutation.isPending && !!depositCheckoutMutation.variables?.fullCourt}
+                    disabled={depositCheckoutMutation.isPending}
+                    fullWidth
+                    size="md"
+                    variant="outline"
+                    icon={<Ionicons name="flash" size={18} color={ui.colors.primary} />}
+                    style={{ marginBottom: deposit.checkoutUrl ? 8 : 0 }}
+                  />
+                ) : null}
+                {canPayFullCourt ? (
+                  <Text
+                    style={{
+                      fontSize: 12,
+                      color: ui.colors.textMuted,
+                      marginBottom: deposit.checkoutUrl ? 8 : 0,
+                      lineHeight: 17,
+                    }}
+                  >
+                    Pagando el turno completo la cancha se reserva al instante y el resto solo confirma asistencia.
+                  </Text>
+                ) : null}
                 {deposit.checkoutUrl ? (
                   <PrimaryButton
                     label="Compartir link de pago"
@@ -895,7 +965,7 @@ export default function MatchDetailScreen() {
             {deposit?.required && (isParticipant || isClubAccount) && (
               <AppCard style={{ marginBottom: ui.spacing.sm }}>
                 <Text style={{ fontWeight: '700', color: ui.colors.textPrimary, marginBottom: 8 }}>
-                  Seña de cancha
+                  Pago del turno
                 </Text>
                 <Text style={{ fontSize: 13, color: ui.colors.textSecondary, marginBottom: 8 }}>
                   {deposit.clubName ? `${deposit.clubName} · ` : ''}
@@ -910,20 +980,29 @@ export default function MatchDetailScreen() {
                     Incluye a {deposit.coveredGuests.map((guest) => guest.name).join(', ')}
                   </Text>
                 )}
-                {isParticipant && deposit.paid ? (
+                {deposit.fullCourtPaidBy ? (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                    <Ionicons name="checkmark-circle" size={18} color={ui.colors.success} />
+                    <Text style={{ flex: 1, color: ui.colors.success, fontWeight: '600' }}>
+                      {deposit.coversFullCourt
+                        ? 'Pagaste el turno completo: la cancha está reservada'
+                        : `Cancha reservada: ${deposit.fullCourtPaidBy.userName} pagó el turno completo`}
+                    </Text>
+                  </View>
+                ) : isParticipant && deposit.paid ? (
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                     <Ionicons name="checkmark-circle" size={18} color={ui.colors.success} />
-                    <Text style={{ color: ui.colors.success, fontWeight: '600' }}>Tu seña está paga</Text>
+                    <Text style={{ color: ui.colors.success, fontWeight: '600' }}>Tu parte está paga</Text>
                   </View>
                 ) : null}
                 {isParticipant && !deposit.paid ? (
                   <Text style={{ fontSize: 12, color: ui.colors.warning, marginBottom: 8 }}>
-                    Pagá la seña: la cancha se reserva cuando todos hayan pagado
+                    Pagá tu parte: la cancha queda reservada al pagar el turno completo
                   </Text>
                 ) : null}
                 {isClubAccount && !isParticipant ? (
                   <Text style={{ fontSize: 12, color: ui.colors.textSecondary, marginBottom: 8 }}>
-                    Desde recepción podés marcar señas pendientes como cobradas.
+                    Desde recepción podés marcar pagos pendientes como cobrados.
                   </Text>
                 ) : null}
                 {depositPlayers.length > 0 && (
@@ -938,23 +1017,32 @@ export default function MatchDetailScreen() {
                               style={{
                                 fontSize: 12,
                                 fontWeight: '600',
-                                color: p.status === 'APPROVED' ? ui.colors.success : ui.colors.danger,
+                                color:
+                                  p.status === 'APPROVED'
+                                    ? ui.colors.success
+                                    : deposit.fullCourtPaidBy
+                                      ? ui.colors.textMuted
+                                      : ui.colors.danger,
                               }}
                             >
                               {p.status === 'APPROVED'
-                                ? `Pagó seña${p.coveredGuestSlots ? ` (+${p.coveredGuestSlots} invitado${p.coveredGuestSlots > 1 ? 's' : ''})` : ''}`
-                                : 'Pendiente'}
+                                ? p.coversFullCourt
+                                  ? 'Pagó turno completo'
+                                  : `Pagó${p.coveredGuestSlots ? ` (+${p.coveredGuestSlots} invitado${p.coveredGuestSlots > 1 ? 's' : ''})` : ''}`
+                                : deposit.fullCourtPaidBy
+                                  ? 'Cubierto'
+                                  : 'Pendiente'}
                             </Text>
                           </View>
                           {isClubAccount && pending && p.id && clubId ? (
                             <PrimaryButton
-                              label="Marcar seña pagada"
+                              label="Marcar como cobrado"
                               size="sm"
                               loading={markDepositPaidMutation.isPending}
                               onPress={() => {
                                 Alert.alert(
                                   'Confirmar cobro',
-                                  `¿${p.userName} pagó la seña de ${formatCurrency(p.amount)}?`,
+                                  `¿${p.userName} pagó su parte de ${formatCurrency(p.amount)}?`,
                                   [
                                     { text: 'Cancelar', style: 'cancel' },
                                     {
@@ -987,6 +1075,34 @@ export default function MatchDetailScreen() {
                 canConfirmPayments={isClubAccount}
               />
             )}
+
+            {liveScore?.status === 'LIVE' || liveScore?.status === 'FINISHED' ? (
+              <TouchableOpacity
+                activeOpacity={0.85}
+                onPress={() => router.push(`/match/${id}/live` as any)}
+                style={{ marginBottom: ui.spacing.md }}
+              >
+                <LiveScoreboard live={liveScore} compact />
+                <Text
+                  style={{ color: ui.colors.primary, fontSize: 13, fontWeight: '700', textAlign: 'center', marginTop: 8 }}
+                >
+                  {liveScore.status === 'LIVE'
+                    ? liveScore.viewer?.canScore
+                      ? 'Abrir marcador para sumar puntos'
+                      : 'Ver marcador en vivo'
+                    : 'Ver marcador final'}
+                </Text>
+              </TouchableOpacity>
+            ) : liveScore?.viewer?.canStart && !isClubAccount ? (
+              <PrimaryButton
+                label="Llevar marcador en vivo"
+                variant="outline"
+                fullWidth
+                onPress={() => router.push(`/match/${id}/live` as any)}
+                icon={<Ionicons name="radio-outline" size={18} color={ui.colors.primary} />}
+                style={{ marginBottom: ui.spacing.md }}
+              />
+            ) : null}
 
             {showResultSection && (
               <AppCard
@@ -1307,8 +1423,8 @@ export default function MatchDetailScreen() {
               )}
               {needsDepositPayment && (
                 <PrimaryButton
-                  label={`Pagar seña${deposit?.amount ? ` (${formatCurrency(deposit.amount, deposit.currency)})` : ''}`}
-                  onPress={() => depositCheckoutMutation.mutate()}
+                  label={`Pagar mi parte${deposit?.amount ? ` (${formatCurrency(deposit.amount, deposit.currency)})` : ''}`}
+                  onPress={() => depositCheckoutMutation.mutate({})}
                   loading={depositCheckoutMutation.isPending}
                   fullWidth
                   size="lg"

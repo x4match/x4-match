@@ -8,6 +8,8 @@ const SIZES = {
   md: { box: 40, font: 13 },
   lg: { box: 56, font: 16 },
   xl: { box: 80, font: 22 },
+  xxl: { box: 100, font: 28 },
+  xxxl: { box: 120, font: 32 },
 };
 
 type AvatarProps = {

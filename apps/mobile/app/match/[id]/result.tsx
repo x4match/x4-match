@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { mapMatch } from '@/lib/mappers';
 import { ui } from '@/theme/tokens';
-import { Screen, StackHeader, MatchResultComposer } from '@/components/padely';
+import { Screen, StackHeader, MatchResultComposer } from '@/components/x4match';
 import { useAuth } from '@/contexts/AuthContext';
 import type { PlayerMatchRating, SetScore } from '@/lib/types';
 

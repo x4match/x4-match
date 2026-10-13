@@ -1,7 +1,7 @@
 import { ReactNode } from 'react';
-import { View, Text, TouchableOpacity } from 'react-native';
+import { View, Text, TouchableOpacity, KeyboardAvoidingView, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useSwipeBack } from '@/lib/use-swipe-back';
+import { useSwipeBack } from '@/lib/hooks/use-swipe-back';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -112,14 +112,17 @@ export function Screen({
   children,
   padded = false,
   swipeBack = false,
+  keyboardAvoiding = true,
 }: {
   children: ReactNode;
   padded?: boolean;
   swipeBack?: boolean;
+  /** Evita que el teclado tape inputs. Desactivar solo si la pantalla maneja el teclado a mano. */
+  keyboardAvoiding?: boolean;
 }) {
   const swipeHandlers = useSwipeBack(swipeBack);
 
-  return (
+  const content = (
     <View
       style={{
         flex: 1,
@@ -130,5 +133,16 @@ export function Screen({
     >
       {children}
     </View>
+  );
+
+  if (!keyboardAvoiding) return content;
+
+  return (
+    <KeyboardAvoidingView
+      style={{ flex: 1, backgroundColor: ui.colors.bg }}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
+      {content}
+    </KeyboardAvoidingView>
   );
 }

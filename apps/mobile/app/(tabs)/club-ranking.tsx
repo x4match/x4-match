@@ -1,18 +1,18 @@
 import { useMemo, useState } from 'react';
-import { Alert, RefreshControl, ScrollView, Share, Text, View } from 'react-native';
+import { Alert, RefreshControl, Share, Text, View } from 'react-native';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/contexts/AuthContext';
 import { isClub } from '@/lib/roles';
-import { buildClubRankingShareText } from '@/lib/club-share';
+import { buildClubRankingShareText } from '@/lib/club/club-share';
 import { formatShortDate } from '@/lib/format';
 import {
   approveClubTournamentValidation,
   fetchClubTournamentValidations,
   rejectClubTournamentValidation,
 } from '@/lib/tournament/api';
-import { formatTournamentCategory } from '@/lib/tournament/types';
+import { formatTournamentCategory, tournamentOrganizerLabel } from '@/lib/tournament/types';
 import { ui } from '@/theme/tokens';
 import { tabScreenPadding } from '@/lib/layout';
 import {
@@ -26,7 +26,8 @@ import {
   SectionHeader,
   FadeInUp,
   SkeletonCard,
-} from '@/components/padely';
+  TabScrollView,
+} from '@/components/x4match';
 import {
   ClubPicker,
   resolveActiveClubId,
@@ -202,7 +203,7 @@ export default function ClubRankingScreen() {
   return (
     <Screen>
       <AppHeader title="Ranking" />
-      <ScrollView
+      <TabScrollView
         contentContainerStyle={{ ...tabScreenPadding, paddingBottom: 120 }}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={ui.colors.primary} />
@@ -236,11 +237,17 @@ export default function ClubRankingScreen() {
             {pendingCount > 0 ? (
               <>
                 <SectionHeader
-                  title="Partidos pendientes"
-                  subtitle={`${pendingCount} torneo${pendingCount === 1 ? '' : 's'} por validar`}
+                  title="Torneos por validar"
+                  subtitle={`${pendingCount} torneo${pendingCount === 1 ? '' : 's'} pendientes`}
                 />
                 <View style={{ marginBottom: 20 }}>
-                  {(pendingTournaments || []).map((tournament) => (
+                  {(pendingTournaments || []).map((tournament) => {
+                    const organizer =
+                      tournamentOrganizerLabel(tournament) || 'Sin organizador';
+                    const organizerPhoto =
+                      (tournament as { organizer_photo_url?: string | null }).organizer_photo_url ??
+                      null;
+                    return (
                     <AppCard key={tournament.id} style={{ marginBottom: 8 }}>
                       <Text style={{ fontWeight: '700', color: ui.colors.textPrimary, fontSize: 15 }}>
                         {tournament.name}
@@ -249,11 +256,34 @@ export default function ClubRankingScreen() {
                         {formatTournamentCategory(tournament.category, tournament.gender)}
                         {tournament.start_date ? ` · ${formatShortDate(tournament.start_date)}` : ''}
                       </Text>
-                      {(tournament as any).organizer_name ? (
-                        <Text style={{ fontSize: 12, color: ui.colors.textMuted, marginTop: 4 }}>
-                          Organizador: {(tournament as any).organizer_name}
-                        </Text>
-                      ) : null}
+                      <View
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          gap: 10,
+                          marginTop: 10,
+                          paddingVertical: 8,
+                          paddingHorizontal: 10,
+                          borderRadius: ui.radius.md,
+                          backgroundColor: ui.colors.cardMuted,
+                        }}
+                      >
+                        <Avatar name={organizer} photo={organizerPhoto} size="sm" />
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ fontSize: 11, color: ui.colors.textMuted }}>Organizado por</Text>
+                          <Text
+                            style={{
+                              fontSize: 13,
+                              fontWeight: '700',
+                              color: ui.colors.textPrimary,
+                              marginTop: 1,
+                            }}
+                            numberOfLines={1}
+                          >
+                            {organizer}
+                          </Text>
+                        </View>
+                      </View>
                       <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
                         <View style={{ flex: 1 }}>
                           <PrimaryButton
@@ -293,7 +323,8 @@ export default function ClubRankingScreen() {
                         onPress={() => router.push(`/tournament/${tournament.id}` as any)}
                       />
                     </AppCard>
-                  ))}
+                    );
+                  })}
                 </View>
               </>
             ) : loadingTournaments ? (
@@ -458,7 +489,7 @@ export default function ClubRankingScreen() {
             )}
           </>
         )}
-      </ScrollView>
+      </TabScrollView>
     </Screen>
   );
 }

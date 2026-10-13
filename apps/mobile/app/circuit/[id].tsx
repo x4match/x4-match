@@ -5,6 +5,8 @@ import {
   RefreshControl,
   TouchableOpacity,
   Alert,
+  Image,
+  Linking,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -12,12 +14,24 @@ import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
-import { safeMapCircuit, isCircuitOwner } from '@/lib/mappers';
+import { safeMapCircuit } from '@/lib/mappers';
 import { formatDateRange } from '@/lib/format';
-import { canOrganizeEvents } from '@/lib/roles';
+import { CIRCUIT_ROLE_LABELS, NO_CIRCUIT_ACCESS, hasCircuitPermission } from '@/lib/circuits/staff';
 import { FIXED_CATEGORY_OPTIONS, CIRCUIT_CATEGORY_GENDER_OPTIONS, formatCircuitCategory, type CircuitCategoryGender } from '@/lib/tournament/types';
 import { ui } from '@/theme/tokens';
-import { Screen, StackHeader, AppCard, SectionHeader, StatusPill, EmptyState, InputField, PrimaryButton } from '@/components/padely';
+import {
+  Screen,
+  StackHeader,
+  AppCard,
+  SectionHeader,
+  StatusPill,
+  EmptyState,
+  InputField,
+  PrimaryButton,
+  Avatar,
+  withCircuitsEnabled,
+} from '@/components/x4match';
+import { CircuitOrganizerSections } from '@/components/circuit/CircuitOrganizerSections';
 
 const iconBoxPrimary = {
   width: 56,
@@ -41,7 +55,9 @@ function circuitCategoryKey(label: string, gender?: string | null) {
   return `${label.trim().toLowerCase()}|${(gender ?? '').trim().toLowerCase()}`;
 }
 
-export default function CircuitDetailScreen() {
+export default withCircuitsEnabled(CircuitDetailScreen);
+
+function CircuitDetailScreen() {
   const { id: rawId, categoryId } = useLocalSearchParams<{ id: string; categoryId?: string }>();
   const id = Array.isArray(rawId) ? rawId[0] : rawId;
   const circuitId = id && id !== 'undefined' && id !== 'null' ? id : null;
@@ -57,6 +73,7 @@ export default function CircuitDetailScreen() {
   const [stageCategoryId, setStageCategoryId] = useState('');
   const [eventName, setEventName] = useState('');
   const [eventClubId, setEventClubId] = useState('');
+  const [eventVenueIds, setEventVenueIds] = useState<string[]>([]);
   const [eventStart, setEventStart] = useState('');
   const [eventPrice, setEventPrice] = useState('');
   const [publishTournaments, setPublishTournaments] = useState(true);
@@ -82,10 +99,27 @@ export default function CircuitDetailScreen() {
     circuit?.categories?.forEach((cat) => keys.add(circuitCategoryKey(cat.label, cat.gender)));
     return keys;
   }, [circuit?.categories]);
-  const isOrganizer =
-    !!user?.id &&
-    canOrganizeEvents(user.role) &&
-    ((data && isCircuitOwner(data as Record<string, unknown>, user.id)) || user.role === 'SUPER_ADMIN');
+  const access = circuit?.viewer ?? NO_CIRCUIT_ACCESS;
+  const isOrganizer = !!user?.id && hasCircuitPermission(access, 'circuit.edit');
+  const activeStaff = (circuit?.staff ?? []).filter((m) => m.status === 'ACTIVE');
+  const contactLinks = [
+    circuit?.instagram
+      ? { icon: 'logo-instagram' as const, label: `@${circuit.instagram}`, url: `https://instagram.com/${circuit.instagram}` }
+      : null,
+    circuit?.website
+      ? {
+        icon: 'globe-outline' as const,
+        label: circuit.website.replace(/^https?:\/\//, ''),
+        url: /^https?:\/\//.test(circuit.website) ? circuit.website : `https://${circuit.website}`,
+      }
+      : null,
+    circuit?.contactPhone
+      ? { icon: 'call-outline' as const, label: circuit.contactPhone, url: `tel:${circuit.contactPhone}` }
+      : null,
+    circuit?.contactEmail
+      ? { icon: 'mail-outline' as const, label: circuit.contactEmail, url: `mailto:${circuit.contactEmail}` }
+      : null,
+  ].filter((link): link is NonNullable<typeof link> => !!link);
 
   const { data: clubs = [] } = useQuery({
     queryKey: ['clubs-for-circuit'],
@@ -192,11 +226,16 @@ export default function CircuitDetailScreen() {
       const parsed = new Date(eventStart);
       if (Number.isNaN(parsed.getTime())) throw new Error('Fecha inválida');
       if (!eventName.trim()) throw new Error('Indicá el nombre de la etapa');
-      if (!eventClubId) throw new Error('Elegí la sede');
+      const venueIds = eventVenueIds.length ? eventVenueIds : eventClubId ? [eventClubId] : [];
+      if (!venueIds.length) throw new Error('Elegí al menos una sede');
       const price = eventPrice.trim() ? Number(eventPrice.replace(',', '.')) : undefined;
       return api.post(`/circuits/${circuitId}/events`, {
         name: eventName.trim(),
-        clubId: eventClubId,
+        venues: venueIds.map((clubId, index) => ({
+          clubId,
+          courtsCount: 4,
+          isPrimary: index === 0,
+        })),
         startDate: parsed.toISOString(),
         price: Number.isFinite(price) ? price : undefined,
         publishTournaments,
@@ -206,15 +245,27 @@ export default function CircuitDetailScreen() {
     },
     onSuccess: (res) => {
       const count = res.data?.stages?.length ?? 0;
+      const eventId = res.data?.eventId;
       Alert.alert(
         'Etapa creada',
         publishTournaments
-          ? `Se abrieron ${count} torneos (uno por categoría), listos para inscripción.`
+          ? `Se abrieron ${count} torneos (uno por categoría) en ${res.data?.venues?.length ?? 1} sedes.`
           : `Se crearon ${count} fechas. Publicá cada torneo cuando quieras.`,
+        eventId
+          ? [
+            { text: 'OK' },
+            {
+              text: 'Ver en vivo',
+              onPress: () => router.push(`/circuit/${circuitId}/event/${eventId}` as any),
+            },
+          ]
+          : undefined,
       );
       setEventName('');
       setEventStart('');
       setEventPrice('');
+      setEventVenueIds([]);
+      setEventClubId('');
       invalidate();
       refetch();
     },
@@ -316,13 +367,25 @@ export default function CircuitDetailScreen() {
         <AppCard>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 }}>
             <View style={{ flexDirection: 'row', gap: 12, flex: 1 }}>
-              <View style={iconBoxPrimary}>
-                <Ionicons name="git-network" size={28} color={ui.colors.primary} />
-              </View>
+              {circuit.logoUrl ? (
+                <Image source={{ uri: circuit.logoUrl }} style={{ width: 56, height: 56, borderRadius: 14 }} />
+              ) : (
+                <View style={iconBoxPrimary}>
+                  {circuit.shortName ? (
+                    <Text style={{ fontSize: 14, fontWeight: '900', color: ui.colors.primary }} numberOfLines={1}>
+                      {circuit.shortName.slice(0, 4)}
+                    </Text>
+                  ) : (
+                    <Ionicons name="git-network" size={28} color={ui.colors.primary} />
+                  )}
+                </View>
+              )}
               <View style={{ flex: 1 }}>
                 <Text style={{ fontSize: 20, fontWeight: '800', color: ui.colors.textPrimary }}>{circuit.name}</Text>
-                {circuit.season ? (
-                  <Text style={{ fontSize: 12, color: ui.colors.textSecondary, marginTop: 4 }}>{circuit.season}</Text>
+                {circuit.season || circuit.city ? (
+                  <Text style={{ fontSize: 12, color: ui.colors.textSecondary, marginTop: 4 }}>
+                    {[circuit.season, circuit.city].filter(Boolean).join(' · ')}
+                  </Text>
                 ) : null}
               </View>
             </View>
@@ -330,6 +393,40 @@ export default function CircuitDetailScreen() {
           </View>
           {circuit.description ? (
             <Text style={{ fontSize: 13, color: ui.colors.textSecondary, lineHeight: 20 }}>{circuit.description}</Text>
+          ) : null}
+          {contactLinks.length > 0 ? (
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
+              {contactLinks.map((link) => (
+                <TouchableOpacity
+                  key={link.url}
+                  onPress={() => Linking.openURL(link.url).catch(() => undefined)}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 6,
+                    paddingHorizontal: 10,
+                    paddingVertical: 6,
+                    borderRadius: ui.radius.pill,
+                    backgroundColor: ui.colors.cardMuted,
+                  }}
+                >
+                  <Ionicons name={link.icon} size={14} color={ui.colors.primary} />
+                  <Text style={{ fontSize: 12, color: ui.colors.textPrimary }} numberOfLines={1}>
+                    {link.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          ) : null}
+          {isOrganizer ? (
+            <PrimaryButton
+              label="Editar datos del circuito"
+              variant="outline"
+              size="sm"
+              fullWidth
+              style={{ marginTop: 14 }}
+              onPress={() => router.push(`/circuit/${circuitId}/edit` as any)}
+            />
           ) : null}
           {circuit.categories && circuit.categories.length > 0 ? (
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 14 }}>
@@ -350,6 +447,51 @@ export default function CircuitDetailScreen() {
               ))}
             </View>
           ) : null}
+        </AppCard>
+
+        <CircuitOrganizerSections
+          circuitId={circuitId!}
+          access={access}
+          news={Array.isArray((data as any)?.news) ? (data as any).news : []}
+          sponsors={Array.isArray((data as any)?.sponsors) ? (data as any).sponsors : []}
+        />
+
+        <SectionHeader
+          title="Staff del circuito"
+          subtitle={activeStaff.length ? `${activeStaff.length} miembro${activeStaff.length !== 1 ? 's' : ''}` : undefined}
+        />
+        <AppCard onPress={() => router.push(`/circuit/${circuitId}/staff` as any)}>
+          {activeStaff.slice(0, 5).map((member, index) => (
+            <View
+              key={member.id}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 12,
+                paddingVertical: 8,
+                borderBottomWidth: index < Math.min(activeStaff.length, 5) - 1 ? 1 : 0,
+                borderBottomColor: ui.colors.border,
+              }}
+            >
+              <Avatar name={member.userName} photo={member.photoUrl} size="sm" />
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontWeight: '600', color: ui.colors.textPrimary }}>{member.userName}</Text>
+                <Text style={{ fontSize: 12, color: ui.colors.textSecondary }}>{member.displayTitle}</Text>
+              </View>
+              <Text style={{ fontSize: 11, fontWeight: '700', color: ui.colors.primary }}>
+                {CIRCUIT_ROLE_LABELS[member.role]}
+              </Text>
+            </View>
+          ))}
+          {activeStaff.length === 0 ? (
+            <Text style={{ fontSize: 13, color: ui.colors.textSecondary }}>Sin staff cargado.</Text>
+          ) : null}
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 10 }}>
+            <Text style={{ fontSize: 13, fontWeight: '700', color: ui.colors.primary }}>
+              {hasCircuitPermission(access, 'circuit.staff.manage') ? 'Gestionar staff' : 'Ver staff completo'}
+            </Text>
+            <Ionicons name="chevron-forward" size={16} color={ui.colors.primary} />
+          </View>
         </AppCard>
 
         <SectionHeader
@@ -386,7 +528,7 @@ export default function CircuitDetailScreen() {
                   <View style={{ flex: 1 }}>
                     <Text style={{ fontWeight: '600', color: ui.colors.textPrimary }}>{venue.clubName}</Text>
                     <Text style={{ fontSize: 13, color: ui.colors.textSecondary, marginTop: 2 }}>
-                      {[venue.city, venue.zone].filter(Boolean).join(', ') || venue.address || 'Sin ubicación'}
+                      {[venue.city, venue.address].filter(Boolean).join(', ') || 'Sin ubicación'}
                     </Text>
                   </View>
                   <Text style={{ fontSize: 12, color: ui.colors.textMuted, alignSelf: 'center' }}>
@@ -402,6 +544,42 @@ export default function CircuitDetailScreen() {
           </AppCard>
         )}
 
+        {((data as any)?.events || []).length > 0 ? (
+          <>
+            <SectionHeader title="Etapas en vivo" subtitle="Grilla multi-sede · resultados" />
+            {((data as any).events as Array<{
+              id: string;
+              name: string;
+              schedule_status: string;
+              venue_count: number;
+              stage_count: number;
+              start_date: string;
+              end_date?: string;
+            }>).map((ev) => (
+              <AppCard
+                key={ev.id}
+                style={{ marginBottom: 8 }}
+                onPress={() => router.push(`/circuit/${circuitId}/event/${ev.id}` as any)}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                  <View style={iconBoxSm}>
+                    <Ionicons name="pulse-outline" size={22} color={ui.colors.primary} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontWeight: '700', color: ui.colors.textPrimary }}>{ev.name}</Text>
+                    <Text style={{ fontSize: 12, color: ui.colors.textSecondary, marginTop: 4 }}>
+                      {formatDateRange(ev.start_date, ev.end_date)} · {ev.venue_count} sedes ·{' '}
+                      {ev.stage_count} categorías
+                    </Text>
+                  </View>
+                  <StatusPill status={ev.schedule_status === 'PUBLISHED' ? 'ACTIVE' : 'DRAFT'} />
+                  <Ionicons name="chevron-forward" size={18} color={ui.colors.textMuted} />
+                </View>
+              </AppCard>
+            ))}
+          </>
+        ) : null}
+
         <SectionHeader
           title="Etapas y torneos"
           subtitle={
@@ -413,7 +591,7 @@ export default function CircuitDetailScreen() {
         {(!circuit.stages || circuit.stages.length === 0) && (
           <AppCard>
             <Text style={{ fontSize: 13, color: ui.colors.textSecondary }}>
-              Todavía no hay etapas. El organizador puede crear una etapa WPE (todas las categorías a la vez).
+              Todavía no hay etapas. El organizador puede crear una etapa con todas las categorías a la vez.
             </Text>
           </AppCard>
         )}
@@ -501,7 +679,7 @@ export default function CircuitDetailScreen() {
           )}
           {rankings.length === 0 ? (
             <Text style={{ fontSize: 13, color: ui.colors.textSecondary }}>
-              El ranking se actualiza al finalizar los torneos de cada etapa (puntos WPE).
+              El ranking se actualiza al finalizar los torneos de cada etapa, según la tabla de puntos del circuito.
             </Text>
           ) : (
             rankings.slice(0, 30).map((entry, index) => (
@@ -534,7 +712,7 @@ export default function CircuitDetailScreen() {
 
         {circuit.pointRules && circuit.pointRules.length > 0 ? (
           <>
-            <SectionHeader title="Puntaje del ranking" subtitle="Tabla estilo WPE" />
+            <SectionHeader title="Puntaje del ranking" subtitle="Puntos por instancia alcanzada" />
             <AppCard>
               {circuit.pointRules.map((rule) => (
                 <View
@@ -716,11 +894,9 @@ export default function CircuitDetailScreen() {
                 marginBottom: 6,
               }}
             >
-              Crear etapa (estilo WPE)
+              Crear etapa
             </Text>
-            <Text style={{ fontSize: 12, color: ui.colors.textMuted, marginBottom: 10 }}>
-              Una etapa = un torneo por cada categoría, mismo nombre, fecha y sede.
-            </Text>
+
             <InputField
               label="Nombre de la etapa"
               value={eventName}
@@ -743,29 +919,39 @@ export default function CircuitDetailScreen() {
               style={{ marginTop: 8 }}
             />
             <Text style={{ fontSize: 13, fontWeight: '600', color: ui.colors.textInverse, marginTop: 10, marginBottom: 6 }}>
-              Sede de la etapa
+              Sedes de la etapa (podés marcar varias)
             </Text>
             {(circuit.venues || []).length === 0 ? (
               <Text style={{ fontSize: 12, color: ui.colors.textMuted, marginBottom: 8 }}>
                 Agregá al menos una sede arriba.
               </Text>
             ) : (
-              (circuit.venues || []).map((v) => (
-                <TouchableOpacity
-                  key={v.clubId}
-                  onPress={() => setEventClubId(eventClubId === v.clubId ? '' : v.clubId)}
-                  style={{ paddingVertical: 8 }}
-                >
-                  <Text
-                    style={{
-                      color: eventClubId === v.clubId ? ui.colors.primary : ui.colors.textInverse,
-                      fontWeight: '600',
+              (circuit.venues || []).map((v) => {
+                const selected = eventVenueIds.includes(v.clubId);
+                return (
+                  <TouchableOpacity
+                    key={v.clubId}
+                    onPress={() => {
+                      setEventVenueIds((prev) =>
+                        prev.includes(v.clubId)
+                          ? prev.filter((id) => id !== v.clubId)
+                          : [...prev, v.clubId],
+                      );
                     }}
+                    style={{ paddingVertical: 8 }}
                   >
-                    {v.clubName}
-                  </Text>
-                </TouchableOpacity>
-              ))
+                    <Text
+                      style={{
+                        color: selected ? ui.colors.primary : ui.colors.textInverse,
+                        fontWeight: '600',
+                      }}
+                    >
+                      {selected ? '✓ ' : ''}
+                      {v.clubName}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })
             )}
             <TouchableOpacity
               onPress={() => setPublishTournaments((v) => !v)}
@@ -810,8 +996,8 @@ export default function CircuitDetailScreen() {
                   Alert.alert('Fecha inválida', 'Usá el formato AAAA-MM-DD.');
                   return;
                 }
-                if (!eventClubId) {
-                  Alert.alert('Falta la sede', 'Elegí una sede para la etapa.');
+                if (!eventVenueIds.length) {
+                  Alert.alert('Faltan sedes', 'Elegí al menos una sede para la etapa.');
                   return;
                 }
                 if ((circuit.categories?.length ?? 0) === 0) {
@@ -834,7 +1020,7 @@ export default function CircuitDetailScreen() {
               Agregar fecha (avanzado)
             </Text>
             <Text style={{ fontSize: 12, color: ui.colors.textMuted, marginBottom: 10 }}>
-              Solo una categoría. Preferí “Crear etapa” para el flujo WPE completo.
+              Solo una categoría. Preferí “Crear etapa” para armar todas las categorías de una fecha juntas.
             </Text>
             <InputField
               label="Fecha de la etapa"

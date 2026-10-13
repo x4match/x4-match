@@ -4,15 +4,13 @@ import {
   Text,
   Alert,
   ScrollView,
-  KeyboardAvoidingView,
-  Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { api } from '@/lib/api';
 import { ui } from '@/theme/tokens';
-import { Screen, InputField, PrimaryButton, FadeInUp, PressableScale, StackHeader } from '@/components/padely';
+import { Screen, InputField, PrimaryButton, FadeInUp, PressableScale, StackHeader } from '@/components/x4match';
 
 export default function ForgotPasswordScreen() {
   const router = useRouter();
@@ -75,8 +73,7 @@ export default function ForgotPasswordScreen() {
     <Screen>
       <LinearGradient colors={[ui.colors.bg, ui.colors.bgElevated, ui.colors.surface0]} style={{ flex: 1 }}>
         <StackHeader title="Recuperar contraseña" />
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-          <ScrollView
+        <ScrollView
             contentContainerStyle={{
               flexGrow: 1,
               paddingHorizontal: ui.spacing.lg,
@@ -157,7 +154,6 @@ export default function ForgotPasswordScreen() {
               </PressableScale>
             </FadeInUp>
           </ScrollView>
-        </KeyboardAvoidingView>
       </LinearGradient>
     </Screen>
   );

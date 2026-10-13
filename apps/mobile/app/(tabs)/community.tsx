@@ -7,7 +7,7 @@ import { api } from '@/lib/api';
 import { safeMapCircuit, mapTournament } from '@/lib/mappers';
 import type { Circuit, Tournament } from '@/lib/types';
 import { formatShortDate, formatRelativeTime } from '@/lib/format';
-import { buildClubRankingShareText } from '@/lib/club-share';
+import { buildClubRankingShareText } from '@/lib/club/club-share';
 import { ClubImpactBanner, type ClubImpactSummary } from '@/components/club/ClubImpactBanner';
 import { useAuth } from '@/contexts/AuthContext';
 import { isClub } from '@/lib/roles';
@@ -24,7 +24,10 @@ import {
   SectionHeader,
   StatusPill,
   InputField,
-} from '@/components/padely';
+  TournamentCard,
+  CircuitsUnderConstruction,
+} from '@/components/x4match';
+import { useCircuitsEnabled } from '@/lib/features';
 
 type Tab = 'ranking' | 'rewards' | 'tournaments';
 type RankingPeriod = 'weekly' | 'monthly' | 'annual';
@@ -45,17 +48,29 @@ interface RewardRow {
   title: string;
   description?: string;
   points_required: number;
+  pointsRequired?: number;
   reward_type: string;
   active: boolean;
+  stock?: number | null;
+  maxPerUser?: number | null;
+  max_per_user?: number | null;
 }
 
 interface RedemptionRow {
   id: string;
   points_spent: number;
+  pointsSpent?: number;
   created_at: string;
+  createdAt?: string;
   user_name: string;
+  userName?: string;
   user_nickname?: string;
+  userNickname?: string;
   reward_title: string;
+  rewardTitle?: string;
+  status?: string;
+  redemption_code?: string;
+  redemptionCode?: string;
 }
 
 const RANKING_PERIODS: { key: RankingPeriod; label: string }[] = [
@@ -110,6 +125,7 @@ function TabBar({ active, onChange }: { active: Tab; onChange: (t: Tab) => void 
 
 export default function CommunityScreen() {
   const router = useRouter();
+  const circuitsEnabled = useCircuitsEnabled();
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const canManage = isClub(user?.role);
@@ -124,6 +140,8 @@ export default function CommunityScreen() {
   const [rewardTitle, setRewardTitle] = useState('');
   const [rewardDesc, setRewardDesc] = useState('');
   const [rewardPoints, setRewardPoints] = useState('50');
+  const [rewardStock, setRewardStock] = useState('');
+  const [rewardMaxPerUser, setRewardMaxPerUser] = useState('');
 
   const { data: clubs } = useQuery({
     queryKey: ['club-community-clubs'],
@@ -176,7 +194,7 @@ export default function CommunityScreen() {
   const { data: tournamentsRaw, refetch: refetchTournaments, isLoading: loadingTournaments } = useQuery({
     queryKey: ['club-community-tournaments'],
     queryFn: async () => {
-      const res = await api.get('/tournaments');
+      const res = await api.get('/tournaments', { params: { includePast: true } });
       return res.data;
     },
     enabled: canManage && tab === 'tournaments' && tournamentMode !== 'circuits',
@@ -188,7 +206,7 @@ export default function CommunityScreen() {
       const res = await api.get('/circuits');
       return res.data;
     },
-    enabled: canManage && tab === 'tournaments' && tournamentMode === 'circuits',
+    enabled: circuitsEnabled && canManage && tab === 'tournaments' && tournamentMode === 'circuits',
   });
 
   const resetRewardForm = () => {
@@ -197,13 +215,21 @@ export default function CommunityScreen() {
     setRewardTitle('');
     setRewardDesc('');
     setRewardPoints('50');
+    setRewardStock('');
+    setRewardMaxPerUser('');
   };
 
   const openEditReward = (reward: RewardRow) => {
     setEditingRewardId(reward.id);
     setRewardTitle(reward.title);
     setRewardDesc(reward.description || '');
-    setRewardPoints(String(reward.points_required));
+    setRewardPoints(String(reward.pointsRequired ?? reward.points_required));
+    setRewardStock(reward.stock != null ? String(reward.stock) : '');
+    setRewardMaxPerUser(
+      (reward.maxPerUser ?? reward.max_per_user) != null
+        ? String(reward.maxPerUser ?? reward.max_per_user)
+        : '',
+    );
     setShowRewardForm(true);
   };
 
@@ -214,6 +240,8 @@ export default function CommunityScreen() {
         title: rewardTitle.trim(),
         description: rewardDesc.trim() || undefined,
         pointsRequired: parseInt(rewardPoints, 10) || 50,
+        stock: rewardStock.trim() ? parseInt(rewardStock, 10) : null,
+        maxPerUser: rewardMaxPerUser.trim() ? parseInt(rewardMaxPerUser, 10) : null,
       };
       if (editingRewardId) {
         const res = await api.patch(`/clubs/${activeClubId}/rewards/${editingRewardId}`, payload);
@@ -242,6 +270,32 @@ export default function CommunityScreen() {
     onError: (err: any) => Alert.alert('Error', err.response?.data?.message || 'No se pudo desactivar'),
   });
 
+  const fulfillRedemption = useMutation({
+    mutationFn: async (redemptionId: string) => {
+      if (!activeClubId) return;
+      await api.post(`/clubs/${activeClubId}/redemptions/${redemptionId}/fulfill`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['club-reward-redemptions', activeClubId] });
+      Alert.alert('Listo', 'Premio entregado');
+    },
+    onError: (err: any) => Alert.alert('Error', err.response?.data?.message || 'No se pudo entregar'),
+  });
+
+  const cancelRedemption = useMutation({
+    mutationFn: async (redemptionId: string) => {
+      if (!activeClubId) return;
+      await api.post(`/clubs/${activeClubId}/redemptions/${redemptionId}/cancel`, {
+        reason: 'Cancelado por el club',
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['club-reward-redemptions', activeClubId] });
+      Alert.alert('Listo', 'Canje cancelado y puntos reintegrados');
+    },
+    onError: (err: any) => Alert.alert('Error', err.response?.data?.message || 'No se pudo cancelar'),
+  });
+
   const onRefresh = () => {
     refetchImpact();
     if (tab === 'ranking') refetchRanking();
@@ -250,8 +304,8 @@ export default function CommunityScreen() {
       refetchRedemptions();
     }
     if (tab === 'tournaments') {
-      if (tournamentMode === 'circuits') refetchCircuits();
-      else refetchTournaments();
+      if (tournamentMode !== 'circuits') refetchTournaments();
+      else if (circuitsEnabled) refetchCircuits();
     }
   };
 
@@ -259,7 +313,8 @@ export default function CommunityScreen() {
     loadingImpact ||
     (tab === 'ranking' && loadingRanking) ||
     (tab === 'rewards' && loadingRewards) ||
-    (tab === 'tournaments' && (tournamentMode === 'circuits' ? loadingCircuits : loadingTournaments));
+    (tab === 'tournaments' &&
+      (tournamentMode === 'circuits' ? circuitsEnabled && loadingCircuits : loadingTournaments));
 
   const tournamentList: Tournament[] = (tournamentsRaw || []).map(mapTournament);
   const regularTournaments = tournamentList.filter((t) => !isMasterTournament(t));
@@ -430,6 +485,20 @@ export default function CommunityScreen() {
                       onChangeText={setRewardPoints}
                       keyboardType="number-pad"
                     />
+                    <InputField
+                      label="Stock (vacío = ilimitado)"
+                      value={rewardStock}
+                      onChangeText={setRewardStock}
+                      keyboardType="number-pad"
+                      placeholder="Ej: 20"
+                    />
+                    <InputField
+                      label="Máx. por jugador (vacío = sin tope)"
+                      value={rewardMaxPerUser}
+                      onChangeText={setRewardMaxPerUser}
+                      keyboardType="number-pad"
+                      placeholder="Ej: 1"
+                    />
                     <View style={{ flexDirection: 'row', gap: 8 }}>
                       <View style={{ flex: 1 }}>
                         <SelectionChip label="Cancelar" selected={false} onPress={resetRewardForm} flex />
@@ -473,7 +542,11 @@ export default function CommunityScreen() {
                             </Text>
                           ) : null}
                           <Text style={{ fontSize: 13, color: ui.colors.primary, fontWeight: '700', marginTop: 8 }}>
-                            {reward.points_required} puntos
+                            {reward.pointsRequired ?? reward.points_required} puntos
+                            {reward.stock != null ? ` · stock ${reward.stock}` : ''}
+                            {(reward.maxPerUser ?? reward.max_per_user) != null
+                              ? ` · máx ${reward.maxPerUser ?? reward.max_per_user}/jugador`
+                              : ''}
                           </Text>
                         </View>
                         {reward.active && (
@@ -498,7 +571,7 @@ export default function CommunityScreen() {
                   ))
                 )}
 
-                <SectionHeader title="Historial de ganadores" subtitle="Canjes realizados" />
+                <SectionHeader title="Historial de canjes" subtitle="Entregar o cancelar en recepción" />
                 {!redemptions?.length ? (
                   <AppCard>
                     <Text style={{ color: ui.colors.textSecondary, fontSize: 13 }}>
@@ -506,21 +579,78 @@ export default function CommunityScreen() {
                     </Text>
                   </AppCard>
                 ) : (
-                  redemptions.map((item) => (
-                    <AppCard key={item.id} padding="sm" style={{ marginBottom: 8 }}>
-                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 8 }}>
-                        <View style={{ flex: 1 }}>
-                          <Text style={{ fontWeight: '700', color: ui.colors.textPrimary }}>{item.reward_title}</Text>
-                          <Text style={{ fontSize: 12, color: ui.colors.textSecondary, marginTop: 4 }}>
-                            {item.user_nickname || item.user_name} · {item.points_spent} pts
+                  redemptions.map((item) => {
+                    const title = item.rewardTitle || item.reward_title;
+                    const name = item.userNickname || item.user_nickname || item.userName || item.user_name;
+                    const spent = item.pointsSpent ?? item.points_spent;
+                    const code = item.redemptionCode || item.redemption_code;
+                    const created = item.createdAt || item.created_at;
+                    const pending = item.status === 'PENDING' || !item.status;
+                    return (
+                      <AppCard key={item.id} padding="sm" style={{ marginBottom: 8 }}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 8 }}>
+                          <View style={{ flex: 1 }}>
+                            <Text style={{ fontWeight: '700', color: ui.colors.textPrimary }}>{title}</Text>
+                            <Text style={{ fontSize: 12, color: ui.colors.textSecondary, marginTop: 4 }}>
+                              {name} · {spent} pts · {item.status || 'PENDING'}
+                            </Text>
+                            {code ? (
+                              <Text
+                                style={{
+                                  marginTop: 8,
+                                  fontSize: 16,
+                                  fontWeight: '800',
+                                  letterSpacing: 1,
+                                  color: ui.colors.primary,
+                                }}
+                              >
+                                {code}
+                              </Text>
+                            ) : null}
+                          </View>
+                          <Text style={{ fontSize: 11, color: ui.colors.textMuted }}>
+                            {formatRelativeTime(created)}
                           </Text>
                         </View>
-                        <Text style={{ fontSize: 11, color: ui.colors.textMuted }}>
-                          {formatRelativeTime(item.created_at)}
-                        </Text>
-                      </View>
-                    </AppCard>
-                  ))
+                        {pending ? (
+                          <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
+                            <View style={{ flex: 1 }}>
+                              <PrimaryButton
+                                label="Entregar"
+                                size="sm"
+                                fullWidth
+                                loading={fulfillRedemption.isPending}
+                                onPress={() => fulfillRedemption.mutate(item.id)}
+                              />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                              <PrimaryButton
+                                label="Cancelar"
+                                size="sm"
+                                fullWidth
+                                variant="ghost"
+                                loading={cancelRedemption.isPending}
+                                onPress={() =>
+                                  Alert.alert(
+                                    'Cancelar canje',
+                                    'Se reintegrarán los puntos al jugador.',
+                                    [
+                                      { text: 'No', style: 'cancel' },
+                                      {
+                                        text: 'Cancelar canje',
+                                        style: 'destructive',
+                                        onPress: () => cancelRedemption.mutate(item.id),
+                                      },
+                                    ],
+                                  )
+                                }
+                              />
+                            </View>
+                          </View>
+                        ) : null}
+                      </AppCard>
+                    );
+                  })
                 )}
               </>
             )}
@@ -541,7 +671,9 @@ export default function CommunityScreen() {
                 </View>
 
                 {tournamentMode === 'circuits' ? (
-                  loadingCircuits ? (
+                  !circuitsEnabled ? (
+                    <CircuitsUnderConstruction />
+                  ) : loadingCircuits ? (
                     <Text style={{ color: ui.colors.textMuted, fontSize: 13 }}>Cargando circuitos...</Text>
                   ) : !circuitList.length ? (
                     <AppCard>
@@ -577,22 +709,11 @@ export default function CommunityScreen() {
                   </AppCard>
                 ) : (
                   (tournamentMode === 'masters' ? masterTournaments : regularTournaments).map((tournament) => (
-                    <AppCard
+                    <TournamentCard
                       key={tournament.id}
+                      tournament={tournament}
                       onPress={() => router.push(`/tournament/${tournament.id}` as any)}
-                      style={{ marginBottom: 8 }}
-                    >
-                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
-                        <Text style={{ fontWeight: '700', fontSize: 15, color: ui.colors.textPrimary, flex: 1 }}>
-                          {tournament.name}
-                        </Text>
-                        <StatusPill status={tournament.status} />
-                      </View>
-                      <Text style={{ fontSize: 12, color: ui.colors.textSecondary }}>
-                        {tournament.category || 'Categoría abierta'}
-                        {tournament.startDate ? ` · ${formatShortDate(tournament.startDate)}` : ''}
-                      </Text>
-                    </AppCard>
+                    />
                   ))
                 )}
 

@@ -1,13 +1,15 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import * as SecureStore from 'expo-secure-store';
 import { api } from '@/lib/api';
-import { signOutFromGoogle } from '@/lib/google-auth';
+import { signOutFromGoogle } from '@/lib/auth/google-auth';
+import { getAccountVerificationState } from '@/lib/auth/verification';
 import { queryClient } from '@/lib/query-client';
 import { resolveSkillScore } from '@/lib/skill';
+import { isPlayer } from '@/lib/roles';
 import {
   registerForPushNotifications,
   unregisterPushNotifications,
-} from '@/lib/push-notifications';
+} from '@/lib/notifications/push-notifications';
 
 interface User {
   id: string;
@@ -83,7 +85,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Header primero: evita 401 si Home monta en el mismo tick que setUser.
         api.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
         setToken(storedToken);
-        setUser(normalizeUser(JSON.parse(storedUser)));
+
+        let nextUser = normalizeUser(JSON.parse(storedUser));
+        try {
+          const me = await api.get('/auth/me');
+          if (me.data) {
+            // Merge: /auth/me a veces no trae preferencias; no pisamos lo ya guardado.
+            nextUser = normalizeUser({ ...nextUser, ...me.data });
+          }
+          if (isPlayer(nextUser.role)) {
+            const profileRes = await api.get('/users/profile');
+            const profile = profileRes.data ?? {};
+            nextUser = normalizeUser({
+              ...nextUser,
+              nickname: profile.nickname || nextUser.nickname,
+              gender: profile.gender || nextUser.gender,
+              birthDate: profile.birthDate || nextUser.birthDate,
+              declaredCategory: profile.declaredCategory || nextUser.declaredCategory,
+              preferredHand:
+                profile.preferences?.preferredHand || nextUser.preferredHand,
+              courtPosition:
+                profile.preferences?.courtPosition || nextUser.courtPosition,
+              location: profile.location || nextUser.location,
+              photo: profile.photo || nextUser.photo,
+            });
+          }
+          await SecureStore.setItemAsync('auth_user', JSON.stringify(nextUser));
+        } catch (refreshError) {
+          if (getAccountVerificationState(refreshError)) {
+            delete api.defaults.headers.common['Authorization'];
+            await SecureStore.deleteItemAsync('auth_token');
+            await SecureStore.deleteItemAsync('auth_user');
+            setToken(null);
+            return;
+          }
+          // Si falla el refresh, seguimos con el usuario cacheado.
+        }
+        setUser(nextUser);
       }
     } catch (error) {
       console.error('Error loading auth:', error);
@@ -124,7 +162,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const updateUser = async (updatedFields: Partial<User>) => {
     if (user) {
-      const updatedUser = normalizeUser({ ...user, ...updatedFields });
+      const cleaned = Object.fromEntries(
+        Object.entries(updatedFields).filter(([, value]) => value !== undefined),
+      ) as Partial<User>;
+      const updatedUser = normalizeUser({ ...user, ...cleaned });
       setUser(updatedUser);
       await SecureStore.setItemAsync('auth_user', JSON.stringify(updatedUser));
     }

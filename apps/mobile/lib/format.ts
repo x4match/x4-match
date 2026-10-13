@@ -1,4 +1,5 @@
 import type { TimeSlot } from './types';
+import { formatCurrency as formatCurrencyAscii } from './currency';
 
 const LOCALE = 'es-AR';
 
@@ -24,7 +25,11 @@ function isSameDay(a: Date, b: Date): boolean {
 }
 
 export function formatTime(date: string | Date): string {
-  return toDate(date).toLocaleTimeString(LOCALE, { hour: '2-digit', minute: '2-digit' });
+  return toDate(date).toLocaleTimeString(LOCALE, {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
 }
 
 export function formatDateRange(start: string | Date, end?: string | Date | null): string {
@@ -160,36 +165,92 @@ export function formatPlayPeriodLabel(start: string | Date, end?: string | Date 
   return `${period.label} · ${period.hint}`;
 }
 
-/** Fecha + franja horaria del partido (rango si hay fin, hora puntual si no). */
+/** True when the match already has a concrete court/slot time (not just a search period). */
+export function matchHasExactCourtTime(match: {
+  date: string | Date;
+  endsAt?: string | Date | null;
+  courtBooking?: string | null;
+  courtSlotId?: string | null;
+  courtInfo?: {
+    label?: string | null;
+    durationMinutes?: number;
+    startHour?: number;
+    endHour?: number;
+  } | null;
+}): boolean {
+  if (match.courtBooking === 'in_app') return true;
+  if (match.courtSlotId) return true;
+  if (match.courtInfo?.label) return true;
+  if (match.courtInfo?.startHour != null && match.courtInfo?.endHour != null) return true;
+  if (match.endsAt) {
+    const mins = (toDate(match.endsAt).getTime() - toDate(match.date).getTime()) / 60000;
+    if (mins > 0 && mins <= 180) return true;
+  }
+  return false;
+}
+
+function formatClockFromDecimalHour(hour: number): string {
+  const whole = Math.floor(hour);
+  const minutes = Math.round((hour - whole) * 60);
+  return `${String(whole).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+}
+
+/** Hora exacta de cancha (inicio - fin), o franja de búsqueda si todavía no hay turno. */
+export function formatMatchCourtWhen(
+  match: {
+    date: string | Date;
+    endsAt?: string | Date | null;
+    courtBooking?: string | null;
+    courtSlotId?: string | null;
+    courtInfo?: {
+      label?: string | null;
+      durationMinutes?: number;
+      startHour?: number;
+      endHour?: number;
+    } | null;
+  },
+  dayLabel?: string,
+): string {
+  const day = dayLabel ?? formatShortDate(match.date);
+
+  if (matchHasExactCourtTime(match)) {
+    const slotStart = match.courtInfo?.startHour;
+    const slotEnd = match.courtInfo?.endHour;
+    if (slotStart != null && slotEnd != null && slotEnd > slotStart) {
+      return `${day} · ${formatClockFromDecimalHour(slotStart)} - ${formatClockFromDecimalHour(slotEnd)}`;
+    }
+
+    const start = formatTime(match.date);
+    const duration = match.courtInfo?.durationMinutes;
+    if (duration && duration > 0 && duration <= 180) {
+      const end = new Date(toDate(match.date).getTime() + duration * 60000);
+      return `${day} · ${start} - ${formatTime(end)}`;
+    }
+    if (match.endsAt) {
+      const mins = (toDate(match.endsAt).getTime() - toDate(match.date).getTime()) / 60000;
+      if (mins > 0 && mins <= 180) {
+        return `${day} · ${start} - ${formatTime(match.endsAt)}`;
+      }
+    }
+    // Cancha reservada sin fin explícito: turno típico de 90 min.
+    const fallbackEnd = new Date(toDate(match.date).getTime() + 90 * 60000);
+    return `${day} · ${start} - ${formatTime(fallbackEnd)}`;
+  }
+
+  return `${day} · ${formatPlayPeriodLabel(match.date, match.endsAt)}`;
+}
+
+/** Fecha + franja horaria del partido (rango corto = hora de cancha; largo = franja de búsqueda). */
 export function formatMatchSchedule(start: string | Date, end?: string | Date | null): string {
-  const startDate = toDate(start);
-  const endDate = end ? toDate(end) : null;
-  const day = formatShortDate(startDate);
-
-  if (!endDate) {
-    return formatMatchDate(startDate);
-  }
-
-  const diffHours = (endDate.getTime() - startDate.getTime()) / 3600000;
-  if (diffHours > 0 && diffHours <= 3) {
-    return `${day} · ${formatTime(startDate)}–${formatTime(endDate)}`;
-  }
-
-  const periodLabel = formatPlayPeriodLabel(startDate, endDate);
-  if (periodLabel !== formatTime(startDate)) {
-    return `${day} · ${periodLabel}`;
-  }
-
-  return `${day} · ${formatTime(startDate)}–${formatTime(endDate)}`;
+  if (!end) return formatMatchDate(start);
+  return formatMatchCourtWhen({ date: start, endsAt: end });
 }
 
 /** Horas jugables típicas (6:00–22:00) */
 export const PLAY_HOURS = Array.from({ length: 17 }, (_, i) => i + 6);
 
-export function formatCurrency(amount: number, currency = 'ARS'): string {
-  return new Intl.NumberFormat('es-AR', { style: 'currency', currency, maximumFractionDigits: 0 }).format(
-    amount,
-  );
+export function formatCurrency(amount: number | string, currency = 'ARS'): string {
+  return formatCurrencyAscii(amount, currency);
 }
 
 export function formatHour(hour: number): string {

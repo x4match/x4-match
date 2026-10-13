@@ -1,4 +1,5 @@
 import { normalizeMatchLevelValue } from './skill';
+import { mapViewerAccess, type CircuitStaffMember } from './circuits/staff';
 import type { Circuit, CircuitRankingEntry, CircuitStage, CircuitVenue, Match, MatchPlayer, PlayerMatchHistory, PlayerMatchHistoryEntry, Tournament } from './types';
 
 function asArray<T>(value: unknown): T[] {
@@ -36,8 +37,8 @@ export function mapMatch(raw: any): Match {
     id: p.id || p.user_id,
     name: p.name || p.user?.name || 'Jugador',
     photo: p.photo || p.photo_url,
-    rating: p.rating ?? p.level,
-    skillScore: p.skillScore ?? p.skill_score ?? p.rating ?? p.level,
+    rating: p.rating,
+    skillScore: p.skillScore ?? p.skill_score ?? p.rating,
     levelCategory: p.levelCategory || p.level_category,
     declaredCategory: p.declaredCategory || p.declared_category,
     categoryStatus: p.categoryStatus || p.category_status,
@@ -60,20 +61,82 @@ export function mapMatch(raw: any): Match {
     date: raw.date,
     endsAt: raw.ends_at ?? raw.endsAt ?? undefined,
     status: raw.status,
-    club:
-      raw.club ||
-      (raw.club_name || raw.clubName
-        ? {
-            id: raw.club_id ?? raw.clubId,
-            name: raw.club_name ?? raw.clubName,
-          }
-        : undefined),
+    club: (() => {
+      const nested = raw.club;
+      if (nested && typeof nested === 'object') {
+        return {
+          id: nested.id,
+          name: nested.name,
+          address: nested.address,
+          city: nested.city,
+          location: nested.location,
+          description: nested.description,
+          phone: nested.phone,
+          logoUrl: nested.logoUrl ?? nested.logo_url ?? null,
+          coverUrl: nested.coverUrl ?? nested.cover_url ?? null,
+          cardPhotoUrl: nested.cardPhotoUrl ?? nested.card_photo_url ?? null,
+        };
+      }
+      if (raw.club_name || raw.clubName) {
+        return {
+          id: raw.club_id ?? raw.clubId,
+          name: raw.club_name ?? raw.clubName,
+          city: raw.club_city ?? raw.clubCity,
+          address: raw.club_address ?? raw.clubAddress,
+          location: raw.club_location ?? raw.clubLocation,
+          logoUrl: raw.club_logo_url ?? raw.clubLogoUrl ?? null,
+          coverUrl: raw.club_cover_url ?? raw.clubCoverUrl ?? null,
+          cardPhotoUrl: raw.club_card_photo_url ?? raw.clubCardPhotoUrl ?? null,
+        };
+      }
+      return undefined;
+    })(),
     clubId: raw.club_id ?? raw.clubId ?? raw.club?.id,
     createdByUserId: raw.created_by_user_id ?? raw.createdByUserId,
     createdAt: raw.created_at ?? raw.createdAt ?? undefined,
-    zone: raw.zone,
     courtBooking: (raw.courtBooking ?? raw.court_booking ?? 'none') as Match['courtBooking'],
     venueNote: raw.venueNote ?? raw.venue_note ?? undefined,
+    courtSlotId: raw.courtSlotId ?? raw.court_slot_id ?? undefined,
+    courtInfo: (() => {
+      const nested = raw.courtInfo ?? raw.court_info;
+      if (nested && typeof nested === 'object') {
+        const startHour =
+          nested.startHour != null || nested.start_hour != null
+            ? Number(nested.startHour ?? nested.start_hour)
+            : undefined;
+        const endHour =
+          nested.endHour != null || nested.end_hour != null
+            ? Number(nested.endHour ?? nested.end_hour)
+            : undefined;
+        return {
+          label: nested.label ?? null,
+          startHour: Number.isFinite(startHour) ? startHour : undefined,
+          endHour: Number.isFinite(endHour) ? endHour : undefined,
+          durationMinutes:
+            nested.durationMinutes != null || nested.duration_minutes != null
+              ? Number(nested.durationMinutes ?? nested.duration_minutes)
+              : startHour != null && endHour != null && endHour > startHour
+                ? Math.round((endHour - startHour) * 60)
+                : undefined,
+          cancelPolicy: nested.cancelPolicy ?? nested.cancel_policy ?? undefined,
+        };
+      }
+      const slotLabel = raw.court_slot_label ?? raw.courtSlotLabel;
+      const startHourRaw = raw.court_slot_start_hour ?? raw.courtSlotStartHour;
+      const endHourRaw = raw.court_slot_end_hour ?? raw.courtSlotEndHour;
+      if (slotLabel || startHourRaw != null) {
+        const start = startHourRaw != null ? Number(startHourRaw) : undefined;
+        const end = endHourRaw != null ? Number(endHourRaw) : undefined;
+        return {
+          label: slotLabel ?? null,
+          startHour: Number.isFinite(start) ? start : undefined,
+          endHour: Number.isFinite(end) ? end : undefined,
+          durationMinutes:
+            start != null && end != null && end > start ? Math.round((end - start) * 60) : undefined,
+        };
+      }
+      return undefined;
+    })(),
     distanceKm:
       raw.distanceKm != null || raw.distance_km != null
         ? Number(raw.distanceKm ?? raw.distance_km)
@@ -136,16 +199,8 @@ export function mapMatch(raw: any): Match {
             status: player.status,
             paidAt: player.paidAt ?? player.paid_at,
             coveredGuestSlots: player.coveredGuestSlots ?? player.covered_guest_slots,
+            coversFullCourt: !!(player.coversFullCourt ?? player.covers_full_court),
           })),
-        }
-      : undefined,
-    courtInfo: raw.courtInfo ?? raw.court_info
-      ? {
-          label: raw.courtInfo?.label ?? raw.court_info?.label ?? null,
-          durationMinutes:
-            raw.courtInfo?.durationMinutes ?? raw.court_info?.duration_minutes ?? undefined,
-          cancelPolicy:
-            raw.courtInfo?.cancelPolicy ?? raw.court_info?.cancel_policy ?? undefined,
         }
       : undefined,
     pricing: raw.pricing
@@ -163,24 +218,46 @@ export function mapMatch(raw: any): Match {
 }
 
 export function mapTournament(raw: any): Tournament {
+  const featuredPriority = Number(raw.active_featured_priority ?? raw.featured_priority ?? raw.featuredPriority ?? 0);
+  const priceRaw = raw.price ?? raw.entryFee;
+  const approvedCount = Number(raw.approved_count ?? raw.approvedCount ?? NaN);
+  const pendingCount = Number(raw.pending_count ?? raw.pendingCount ?? NaN);
   return {
     id: raw.id,
     name: raw.name,
     category: raw.category,
     gender: raw.gender,
     startDate: raw.startDate || raw.start_date,
+    endDate: raw.endDate || raw.end_date,
     maxTeams: raw.maxTeams ?? raw.max_teams,
     status: raw.status,
     description: raw.description,
-    photos: raw.photos || [],
+    photos: (raw.photos || []).map((p: any) => ({
+      id: p.id,
+      url: p.url ?? p.photo_url ?? p.photoUrl,
+      caption: p.caption ?? undefined,
+    })),
     format: raw.format,
-    entryFee: raw.entryFee,
+    entryFee: priceRaw != null ? Number(priceRaw) : undefined,
+    price: priceRaw != null ? Number(priceRaw) : undefined,
     clubName: raw.club_name ?? raw.clubName,
     clubId: raw.club_id ?? raw.clubId,
     modality: raw.modality,
     clubValidationStatus: raw.club_validation_status ?? raw.clubValidationStatus,
     inviteToken: raw.invite_token ?? raw.inviteToken,
     publicSlug: raw.publicSlug,
+    flyerUrl: raw.flyer_url ?? raw.flyerUrl ?? undefined,
+    featuredPriority: Number.isFinite(featuredPriority) ? featuredPriority : 0,
+    featuredUntil: raw.featured_until ?? raw.featuredUntil ?? undefined,
+    approvedCount: Number.isFinite(approvedCount) ? approvedCount : undefined,
+    pendingCount: Number.isFinite(pendingCount) ? pendingCount : undefined,
+    scheduleType: raw.schedule_type ?? raw.scheduleType ?? undefined,
+    isPast: raw.is_past ?? raw.isPast ?? undefined,
+    isClosed: raw.is_closed ?? raw.isClosed ?? undefined,
+    venueCount: (() => {
+      const n = Number(raw.venue_count ?? raw.venueCount ?? NaN);
+      return Number.isFinite(n) ? n : undefined;
+    })(),
   };
 }
 
@@ -191,6 +268,17 @@ export function mapCircuit(raw: any): Circuit {
   return {
     id: String(raw.id ?? raw.circuit_id ?? raw.circuitId ?? ''),
     name: String(raw.name ?? 'Circuito'),
+    shortName: raw.short_name ?? raw.shortName ?? null,
+    logoUrl: raw.logo_url ?? raw.logoUrl ?? null,
+    city: raw.city ?? null,
+    contactPhone: raw.contact_phone ?? raw.contactPhone ?? null,
+    contactEmail: raw.contact_email ?? raw.contactEmail ?? null,
+    instagram: raw.instagram ?? null,
+    website: raw.website ?? null,
+    staff: asArray<CircuitStaffMember>(raw.staff),
+    viewer: mapViewerAccess(raw.viewer),
+    myRole: raw.my_role ?? raw.myRole ?? null,
+    myDisplayTitle: raw.my_display_title ?? raw.myDisplayTitle ?? null,
     description: raw.description ?? undefined,
     season: raw.season ?? undefined,
     status: raw.status ?? 'DRAFT',
@@ -233,7 +321,6 @@ export function mapCircuitVenue(raw: any): CircuitVenue {
     clubId: String(raw.club_id ?? raw.clubId ?? raw.id ?? ''),
     clubName: String(raw.club_name ?? raw.clubName ?? raw.name ?? 'Club'),
     city: raw.city,
-    zone: raw.zone,
     address: raw.address,
     stageCount: raw.stage_count ?? raw.stageCount ?? 0,
   };
@@ -342,12 +429,14 @@ export function mapPlayer(raw: any) {
     name: raw.name || raw.nickname || 'Jugador',
     nickname: raw.nickname,
     photo_url: raw.photo_url,
-    level: raw.level,
     rating: raw.rating,
-    skillScore: raw.skillScore ?? raw.skill_score ?? raw.rating ?? raw.level,
-    zone: raw.zone,
+    skillScore: raw.skillScore ?? raw.skill_score ?? raw.rating,
     city: raw.city,
-    position: raw.position,
+    location: raw.location || undefined,
+    position: raw.position ?? raw.courtPosition ?? raw.court_position,
+    preferredHand: raw.preferredHand ?? raw.preferred_hand,
+    gender: raw.gender,
+    birthDate: raw.birthDate ?? raw.birth_date,
     bio: raw.bio,
     levelCategory: raw.levelCategory || raw.level_category,
     declaredCategory: raw.declaredCategory || raw.declared_category,
@@ -365,5 +454,23 @@ export function mapPlayer(raw: any) {
       raw.distanceKm != null || raw.distance_km != null
         ? Number(raw.distanceKm ?? raw.distance_km)
         : null,
+    competitiveMonthly: raw.competitiveMonthly
+      ? {
+          monthKey: raw.competitiveMonthly.monthKey,
+          points: Number(raw.competitiveMonthly.points ?? 0),
+          matchesPlayed: Number(raw.competitiveMonthly.matchesPlayed ?? 0),
+        }
+      : undefined,
+    mainClubId: raw.mainClubId ?? raw.main_club_id,
+    mainClub: (() => {
+      const club = raw.mainClub ?? raw.main_club;
+      if (!club) return undefined;
+      return {
+        id: club.id,
+        name: club.name,
+        city: club.city,
+        location: club.location,
+      };
+    })(),
   };
 }

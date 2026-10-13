@@ -11,7 +11,7 @@ import {
   PrimaryButton,
   SectionHeader,
   SelectionChip,
-} from '@/components/padely';
+} from '@/components/x4match';
 
 const WEEKDAYS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
 const SLOT_START_MINUTES = 8 * 60;

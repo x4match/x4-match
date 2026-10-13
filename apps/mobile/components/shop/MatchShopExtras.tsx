@@ -3,9 +3,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '@/lib/api';
 import { formatCurrency } from '@/lib/currency';
-import { confirmShopPurchase } from '@/lib/shop-api';
+import { confirmShopPurchase } from '@/lib/shop/shop-api';
 import { ui } from '@/theme/tokens';
-import { AppCard, PrimaryButton, SectionHeader } from '@/components/padely';
+import { AppCard, PrimaryButton, SectionHeader } from '@/components/x4match';
 
 export interface ShopProduct {
   id: string;

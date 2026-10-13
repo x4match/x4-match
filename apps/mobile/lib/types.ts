@@ -1,3 +1,5 @@
+import type { CircuitStaffMember, CircuitStaffRole, CircuitViewerAccess } from './circuits/staff';
+
 export type UserRole = 'PLAYER' | 'CLUB_ADMIN' | 'ORGANIZER' | 'SUPER_ADMIN';
 
 export type MatchStatus =
@@ -26,9 +28,12 @@ export interface Club {
   name: string;
   address?: string;
   city?: string;
-  zone?: string;
+  location?: string;
   description?: string;
   phone?: string;
+  logoUrl?: string | null;
+  coverUrl?: string | null;
+  cardPhotoUrl?: string | null;
 }
 
 export interface MatchPlayer {
@@ -104,6 +109,12 @@ export type MatchDepositInfo = {
   checkoutUrl?: string | null;
   coveredGuestSlots?: number;
   coveredGuests?: { id: string; name: string }[];
+  /** Lo que falta para pagar el turno completo (null si ya no aplica). */
+  fullCourtAmount?: number | null;
+  /** Quién pagó el turno completo, si alguien lo hizo. */
+  fullCourtPaidBy?: { userId: string; userName: string } | null;
+  /** El viewer pagó el turno completo. */
+  coversFullCourt?: boolean;
   players?: {
     id?: string;
     userId: string;
@@ -112,6 +123,7 @@ export type MatchDepositInfo = {
     status: string;
     paidAt?: string;
     coveredGuestSlots?: number;
+    coversFullCourt?: boolean;
   }[];
 };
 
@@ -127,6 +139,8 @@ export type MatchJoinRequest = {
 export type MatchCourtInfo = {
   label?: string | null;
   durationMinutes?: number;
+  startHour?: number;
+  endHour?: number;
   cancelPolicy?: string;
 };
 
@@ -148,9 +162,9 @@ export interface Match {
   clubId?: string;
   createdByUserId?: string;
   createdAt?: string;
-  zone?: string;
   courtBooking?: CourtBookingMode;
   venueNote?: string;
+  courtSlotId?: string;
   distanceKm?: number | null;
   gender?: string;
   mode?: MatchType | string;
@@ -179,6 +193,8 @@ export interface Tournament {
   gender?: string;
   startDate?: string;
   start_date?: string;
+  endDate?: string;
+  end_date?: string;
   maxTeams?: number;
   max_teams?: number;
   status: TournamentStatus | string;
@@ -186,12 +202,22 @@ export interface Tournament {
   photos?: { id: string; url: string; caption?: string }[];
   format?: string;
   entryFee?: number;
+  price?: number;
   clubName?: string;
   clubId?: string;
   modality?: string;
   clubValidationStatus?: string;
   inviteToken?: string;
   publicSlug?: string;
+  flyerUrl?: string;
+  featuredPriority?: number;
+  featuredUntil?: string;
+  approvedCount?: number;
+  pendingCount?: number;
+  scheduleType?: string;
+  venueCount?: number;
+  isPast?: boolean;
+  isClosed?: boolean;
 }
 
 export type CircuitStatus = 'DRAFT' | 'ACTIVE' | 'FINISHED' | 'CANCELLED';
@@ -207,7 +233,6 @@ export interface CircuitVenue {
   clubId: string;
   clubName: string;
   city?: string;
-  zone?: string;
   address?: string;
   stageCount: number;
 }
@@ -253,6 +278,18 @@ export interface CircuitRankingEntry {
 export interface Circuit {
   id: string;
   name: string;
+  shortName?: string | null;
+  logoUrl?: string | null;
+  city?: string | null;
+  contactPhone?: string | null;
+  contactEmail?: string | null;
+  instagram?: string | null;
+  website?: string | null;
+  staff?: CircuitStaffMember[];
+  viewer?: CircuitViewerAccess;
+  /** Solo en GET /circuits/mine. */
+  myRole?: CircuitStaffRole | null;
+  myDisplayTitle?: string | null;
   description?: string;
   season?: string;
   status: CircuitStatus | string;
@@ -273,7 +310,8 @@ export type MessageAccessReason =
   | 'need_request'
   | 'pending_outgoing'
   | 'pending_incoming'
-  | 'rejected';
+  | 'rejected'
+  | 'blocked';
 
 export interface MessageAccess {
   canMessage: boolean;
@@ -322,6 +360,8 @@ export interface DirectConversation {
   other_user_id: string;
   other_user_name: string;
   other_user_photo?: string;
+  /** Si el otro participante es una cuenta de club, el chat muestra y enlaza al club. */
+  other_club_id?: string | null;
   last_message?: string;
   last_message_at?: string;
 }
@@ -340,12 +380,14 @@ export interface Player {
   name: string;
   nickname?: string;
   photo_url?: string;
-  level?: number;
   rating?: number;
   skillScore?: number;
-  zone?: string;
   city?: string;
+  location?: string;
   position?: string;
+  preferredHand?: string;
+  gender?: string;
+  birthDate?: string;
   bio?: string;
   levelCategory?: string;
   declaredCategory?: PlayerCategory;
@@ -353,6 +395,14 @@ export interface Player {
   placementMatchesPlayed?: number;
   placementMatchesRequired?: number;
   distanceKm?: number | null;
+  matchStats?: PlayerMatchStats;
+  competitiveMonthly?: {
+    monthKey: string;
+    points: number;
+    matchesPlayed: number;
+  };
+  mainClubId?: string;
+  mainClub?: { id: string; name: string; city?: string; location?: string };
 }
 
 export interface UserBadge {

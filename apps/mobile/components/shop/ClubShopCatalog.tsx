@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { api } from '@/lib/api';
 import { formatCurrency } from '@/lib/currency';
 import { ui } from '@/theme/tokens';
-import { AppCard, PrimaryButton, SectionHeader } from '@/components/padely';
+import { AppCard, PrimaryButton, SectionHeader } from '@/components/x4match';
 import type { ShopProduct } from './MatchShopExtras';
 
 type ClubShopCatalogProps = {

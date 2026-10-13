@@ -26,7 +26,7 @@ import {
   PrimaryButton,
   StatusPill,
   SegmentedControl,
-} from '@/components/padely';
+} from '@/components/x4match';
 
 type HistoryFilter = 'active' | 'finished' | 'all';
 
@@ -64,7 +64,7 @@ export default function HistoryScreen() {
   if (!canManage) {
     return (
       <Screen>
-        <AppHeader title="Historial" />
+        <AppHeader title="Historial" showBack />
         <EmptyState
           icon={<Ionicons name="lock-closed-outline" size={32} color={ui.colors.textMuted} />}
           title="Acceso restringido"
@@ -77,7 +77,7 @@ export default function HistoryScreen() {
 
   return (
     <Screen>
-      <AppHeader title="Historial" />
+      <AppHeader title="Historial" showBack />
       <ScrollView
         contentContainerStyle={{
           ...tabScreenPadding,

@@ -7,6 +7,7 @@ import { api } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { isClub } from '@/lib/roles';
 import { formatShortDate, startOfDay } from '@/lib/format';
+import { formatCurrency, parseMoneyInput } from '@/lib/currency';
 import { ui } from '@/theme/tokens';
 import { tabScreenPadding } from '@/lib/layout';
 import {
@@ -15,12 +16,14 @@ import {
   AppCard,
   PrimaryButton,
   InputField,
+  MoneyInputField,
   EmptyState,
   SectionHeader,
   SelectionChip,
   MonthlyCalendar,
   useToast,
-} from '@/components/padely';
+  TabScrollView,
+} from '@/components/x4match';
 import { ClubCourtsManager } from '@/components/club/ClubCourtsManager';
 import type { ClubCourt } from '@/components/club/ClubCourtsManager';
 import {
@@ -29,6 +32,26 @@ import {
   useMineClubs,
 } from '@/components/club/ClubPicker';
 import { ManagerQuickActions } from '@/components/club/ManagerQuickActions';
+import { TourTarget, useScreenTour, type TourStep } from '@/components/tour/ScreenTour';
+
+const GESTION_TOUR_STEPS: TourStep[] = [
+  {
+    target: 'gestion.clubPicker',
+    title: 'Sede',
+    description: 'Si tenés más de una sede, elegí cuál estás gestionando.',
+  },
+  {
+    target: 'gestion.quickActions',
+    title: 'Accesos rápidos',
+    description: 'Atajos para crear una cancha, crear una promoción o ver tus clientes.',
+  },
+  {
+    target: 'gestion.tabs',
+    title: 'Canchas, horarios, promociones y estadísticas',
+    description:
+      '"Canchas": cargá tus canchas. "Horarios": publicá turnos libres con precio para que los jugadores reserven. "Promociones": horarios valle que multiplican los puntos canjeables. "Estadísticas": ocupación de los últimos 30 días y Smart Fill para llenar huecos automáticamente.',
+  },
+];
 
 const SLOT_START_MINUTES = 8 * 60;
 const SLOT_END_MINUTES = 24 * 60;
@@ -204,6 +227,7 @@ export default function CourtSlotsScreen() {
     ? (params.tab as Tab)
     : 'courts';
   const [tab, setTab] = useState<Tab>(initialTab);
+  useScreenTour('court-slots', GESTION_TOUR_STEPS, { enabled: canManage });
 
   useEffect(() => {
     if ((['courts', 'slots', 'promotions', 'stats'] as Tab[]).includes(params.tab as Tab)) {
@@ -313,7 +337,8 @@ export default function CourtSlotsScreen() {
   }, [clubDetail]);
 
   const slotPricePerHour = useMemo(() => {
-    const parsed = slotPrice.trim() === '' ? Number(defaultSlotPrice) : Number(slotPrice.replace(',', '.'));
+    const parsed =
+      slotPrice.trim() === '' ? parseMoneyInput(defaultSlotPrice) : parseMoneyInput(slotPrice);
     return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
   }, [slotPrice, defaultSlotPrice]);
 
@@ -482,7 +507,7 @@ export default function CourtSlotsScreen() {
     mutationFn: async () => {
       if (!activeClubId) throw new Error('Seleccioná un club');
       const raw = slotPrice.trim() || defaultSlotPrice;
-      const parsedPrice = raw === '' ? undefined : Number(raw.replace(',', '.'));
+      const parsedPrice = raw === '' ? undefined : parseMoneyInput(raw);
       if (parsedPrice != null && (!Number.isFinite(parsedPrice) || parsedPrice < 0)) {
         throw new Error('Precio por hora inválido');
       }
@@ -525,7 +550,7 @@ export default function CourtSlotsScreen() {
         'Horario publicado',
         count > 0
           ? `Se avisó a ${count} jugador${count === 1 ? '' : 'es'}.`
-          : 'Publicado sin jugadores en la zona para notificar.',
+          : 'Publicado. No había jugadores cercanos para notificar.',
       );
     },
     onError: (err: any) => {
@@ -679,15 +704,17 @@ export default function CourtSlotsScreen() {
   }
 
   const clubPicker = (
-    <ClubPicker
-      selectedClubId={activeClubId}
-      onSelect={setSelectedClubId}
-      enabled={canManage}
-    />
+    <TourTarget id="gestion.clubPicker">
+      <ClubPicker
+        selectedClubId={activeClubId}
+        onSelect={setSelectedClubId}
+        enabled={canManage}
+      />
+    </TourTarget>
   );
 
   const quickActions = (
-    <>
+    <TourTarget id="gestion.quickActions">
       <SectionHeader title="Accesos rápidos" subtitle="Atajos de operación del club" />
       <ManagerQuickActions
         actions={[
@@ -715,7 +742,7 @@ export default function CourtSlotsScreen() {
           },
         ]}
       />
-    </>
+    </TourTarget>
   );
 
   const promoTimeRange = (
@@ -769,7 +796,7 @@ export default function CourtSlotsScreen() {
   return (
     <Screen>
       <AppHeader title="Gestión" />
-      <ScrollView contentContainerStyle={{ ...tabScreenPadding }}>
+      <TabScrollView contentContainerStyle={{ ...tabScreenPadding }}>
         <Text style={{ fontSize: 14, color: ui.colors.textMuted, marginBottom: ui.spacing.md }}>
           Administrá canchas, horarios, promociones y estadísticas de tu club.
         </Text>
@@ -782,7 +809,7 @@ export default function CourtSlotsScreen() {
             action={
               <PrimaryButton
                 label="Crear club"
-                onPress={() => router.push('/(tabs)/profile' as any)}
+                onPress={() => router.push('/(tabs)/home' as any)}
               />
             }
           />
@@ -790,7 +817,9 @@ export default function CourtSlotsScreen() {
           <>
             {clubPicker}
             {quickActions}
-            <TabBar active={tab} onChange={setTab} />
+            <TourTarget id="gestion.tabs">
+              <TabBar active={tab} onChange={setTab} />
+            </TourTarget>
 
             {tab === 'courts' && activeClubId && (
               <ClubCourtsManager clubId={activeClubId} clubName={activeClub?.name} />
@@ -867,17 +896,16 @@ export default function CourtSlotsScreen() {
                         ))}
                       </View>
                     </ScrollView>
-                    <InputField
+                    <MoneyInputField
                       label="Precio por hora"
                       value={slotPrice}
-                      onChangeText={(text) => setSlotPrice(text.replace(/[^\d.,]/g, ''))}
-                      placeholder={defaultSlotPrice || 'Ej: 12000'}
-                      keyboardType="numeric"
+                      onChangeText={setSlotPrice}
+                      placeholder={defaultSlotPrice || '12000'}
                       hint={
                         estimatedSlotTotal != null
-                          ? `Total estimado: $${estimatedSlotTotal.toLocaleString('es-AR')}`
+                          ? `Total estimado: ${formatCurrency(estimatedSlotTotal)}`
                           : defaultSlotPrice
-                            ? `Se usa la tarifa base del club (${defaultSlotPrice}/h). Podés cambiarla solo para este turno.`
+                            ? `Se usa la tarifa base del club (${formatCurrency(defaultSlotPrice)}/h). Podés cambiarla solo para este turno.`
                             : 'Configurá la tarifa base en Perfil → Datos, o ingresala acá.'
                       }
                     />
@@ -977,8 +1005,8 @@ export default function CourtSlotsScreen() {
                               if (!Number.isFinite(hourly) || hourly <= 0) return '';
                               const hours = Number(slot.end_hour) - Number(slot.start_hour);
                               const total =
-                                hours > 0 ? ` · ≈$${Math.round(hourly * hours).toLocaleString('es-AR')}` : '';
-                              return ` · $${Math.round(hourly).toLocaleString('es-AR')}/h${total}`;
+                                hours > 0 ? ` · ≈${formatCurrency(Math.round(hourly * hours))}` : '';
+                              return ` · ${formatCurrency(Math.round(hourly))}/h${total}`;
                             })()}
                           </Text>
                           <Text style={{ fontSize: 11, color: ui.colors.textMuted, marginTop: 2 }}>
@@ -1025,7 +1053,7 @@ export default function CourtSlotsScreen() {
               <>
                 <SectionHeader
                   title="Horario valle"
-                  subtitle="Si configurás una promo en un valle, las notificaciones automáticas la mencionan; si no, solo avisan cancha libre."
+                  subtitle="Multiplica puntos canjeables en esa franja. No suman al ranking competitivo ni al ranking del club."
                 />
                 <AppCard style={{ marginBottom: 16 }}>
                   <InputField label="Nombre" value={promoLabel} onChangeText={setPromoLabel} placeholder="Horario valle" />
@@ -1050,7 +1078,9 @@ export default function CourtSlotsScreen() {
                             <Text style={{ fontSize: 12, color: ui.colors.textSecondary, marginTop: 4 }}>
                               {p.day_of_week != null ? WEEKDAYS[p.day_of_week] : 'Todos los días'} ·{' '}
                               {formatSlotTime(p.start_hour, true)}–{formatSlotTime(p.end_hour, true)}
-                              {p.bonus_points > 0 ? ` · +${p.bonus_points} pts` : ''}
+                              {p.bonus_points > 0
+                                ? ` · +${p.bonus_points} pts canjeables`
+                                : ' · boost canjeable'}
                             </Text>
                           </View>
                           <TouchableOpacity onPress={() => handleDeletePromotion(p)}>
@@ -1287,7 +1317,7 @@ export default function CourtSlotsScreen() {
             )}
           </>
         )}
-      </ScrollView>
+      </TabScrollView>
     </Screen>
   );
 }

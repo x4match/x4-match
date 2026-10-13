@@ -2,14 +2,15 @@ import { View, Text, Image } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { ui } from '@/theme/tokens';
-import { Avatar, PrimaryButton } from '@/components/padely';
+import { Avatar, PrimaryButton } from '@/components/x4match';
 
+const FALLBACK_COVER = require('../../assets/figma/shared/x4match-degrade.png');
 type ClubHeroHeaderProps = {
   name: string;
   logoUrl?: string | null;
   coverUrl?: string | null;
-  zone?: string | null;
   city?: string | null;
+  location?: string | null;
   playersCount?: number;
   matchesCount?: number;
   statsPeriodLabel?: string;
@@ -40,8 +41,8 @@ export function ClubHeroHeader({
   name,
   logoUrl,
   coverUrl,
-  zone,
   city,
+  location,
   playersCount = 0,
   matchesCount = 0,
   statsPeriodLabel = 'últimos 30 días',
@@ -49,7 +50,7 @@ export function ClubHeroHeader({
   showPoints = false,
   onRedeemPress,
 }: ClubHeroHeaderProps) {
-  const locationLabel = [zone, city].filter(Boolean).join(' · ');
+  const locationLabel = [city, location].filter(Boolean).join(' · ');
 
   return (
     <View style={{ marginBottom: 16 }}>
@@ -62,18 +63,15 @@ export function ClubHeroHeader({
           backgroundColor: ui.colors.surface1,
         }}
       >
-        <View style={{ height: 168, position: 'relative' }}>
+        <View style={{ height: 168, position: 'relative', backgroundColor: '#000000' }}>
           {coverUrl ? (
             <Image source={{ uri: coverUrl }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
           ) : (
-            <LinearGradient
-              colors={[ui.colors.surface2, ui.colors.surface0]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}
-            >
-              <Ionicons name="image-outline" size={28} color={ui.colors.textMuted} />
-            </LinearGradient>
+            <Image
+              source={FALLBACK_COVER}
+              style={{ width: '60%', height: '100%', alignSelf: 'center', marginTop: '-10%' }}
+              resizeMode="contain"
+            />
           )}
           <LinearGradient
             colors={['transparent', 'rgba(0,0,0,0.88)']}

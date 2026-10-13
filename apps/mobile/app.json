@@ -3,7 +3,7 @@
     "name": "x4 match",
     "slug": "x4match",
     "platforms": ["ios", "android"],
-    "version": "1.0.0",
+    "version": "1.0.3",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -13,6 +13,8 @@
       "bundleIdentifier": "com.x4match.app",
       "usesAppleSignIn": true,
       "infoPlist": {
+        "CFBundleDevelopmentRegion": "es",
+        "CFBundleLocalizations": ["es"],
         "NSLocationWhenInUseUsageDescription": "x4 match usa tu ubicación para mostrarte partidos y jugadores cerca tuyo.",
         "NSCameraUsageDescription": "x4 match usa la cámara para que puedas tomar fotos dentro de la app, por ejemplo tu foto de perfil, el logo o la portada del club, un flyer de torneo o la foto de un producto de la tienda.",
         "NSPhotoLibraryUsageDescription": "x4 match accede a tu galería para que puedas elegir fotos dentro de la app, por ejemplo tu foto de perfil, el logo o la portada del club, un flyer de torneo o la foto de un producto de la tienda.",
@@ -25,6 +27,7 @@
         "backgroundColor": "#000000"
       },
       "package": "x4.match",
+      "softwareKeyboardLayoutMode": "resize",
       "permissions": ["ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION"]
     },
     "scheme": "x4match",
@@ -37,7 +40,8 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/splash.png",
+          "image": "./assets/splash-logo.png",
+          "imageWidth": 240,
           "resizeMode": "contain",
           "backgroundColor": "#000000"
         }

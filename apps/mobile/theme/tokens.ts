@@ -1,11 +1,12 @@
 import { Platform, TextStyle, ViewStyle } from 'react-native';
 
+/** Utendo Regular — única face global de la app. */
 export const fontFamily = {
-  regular: 'Geist_400Regular',
-  medium: 'Geist_500Medium',
-  semibold: 'Geist_600SemiBold',
-  bold: 'Geist_700Bold',
-  extrabold: 'Geist_800ExtraBold',
+  regular: 'Utendo-Regular',
+  medium: 'Utendo-Regular',
+  semibold: 'Utendo-Regular',
+  bold: 'Utendo-Regular',
+  extrabold: 'Utendo-Regular',
 } as const;
 
 export type ThemeMode = 'light' | 'dark';
@@ -52,7 +53,7 @@ export const darkColors: AppColors = {
   bg: '#000000',
   bgElevated: '#0A0A0A',
   surface0: '#111111',
-  surface1: '#161616',
+  surface1: '#0D0D11',
   surface2: '#1C1C1C',
   surface3: '#242424',
   surface: '#161616',
@@ -60,14 +61,14 @@ export const darkColors: AppColors = {
   card: '#161616',
   cardMuted: '#111111',
   textPrimary: '#FAFAFA',
-  textSecondary: '#A3A3A3',
+  textSecondary: '#858585',
   textMuted: '#737373',
   textInverse: '#FAFAFA',
   onPrimary: '#0A0A0A',
-  primary: '#F5C518',
+  primary: '#D7FF00',
   primarySoft: 'rgba(245,197,24,0.14)',
   primaryDark: '#D4A017',
-  primaryGlow: 'rgba(245,197,24,0.35)',
+  primaryGlow: '#D7FF0026',
   accent: '#FFE566',
   accentSoft: 'rgba(255,229,102,0.14)',
   accentDark: '#EAB308',

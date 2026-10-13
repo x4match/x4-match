@@ -13,10 +13,24 @@ import {
   approveClubTournamentValidation,
   rejectClubTournamentValidation,
 } from '@/lib/tournament/api';
-import { formatTournamentCategory } from '@/lib/tournament/types';
-import { invalidateRedeemablePoints, useRedeemablePoints } from '@/lib/redeemable-points';
+import {
+  FIXED_CATEGORY_OPTIONS,
+  formatTournamentCategory,
+  tournamentOrganizerLabel,
+} from '@/lib/tournament/types';
+import { invalidateRedeemablePoints, useRedeemablePoints } from '@/lib/shop/redeemable-points';
 import { ui } from '@/theme/tokens';
-import { Screen, StackHeader, AppCard, PrimaryButton, SectionHeader, Avatar, SelectionChip } from '@/components/padely';
+import {
+  Screen,
+  StackHeader,
+  AppCard,
+  PrimaryButton,
+  SectionHeader,
+  Avatar,
+  SelectionChip,
+  InputField,
+  SearchableSelect,
+} from '@/components/x4match';
 import { ClubCommentsSection } from '@/components/club/ClubCommentsSection';
 import { ClubHeroHeader } from '@/components/club/ClubHeroHeader';
 import { ClubLocationMap } from '@/components/club/ClubLocationMap';
@@ -32,14 +46,55 @@ interface LeaderboardEntry {
   points: number;
   matches_at_club: number;
   rank: string | number;
+  level_category?: string | null;
 }
+
+const ALL_CATEGORIES = '__all__';
+const TOP_CATEGORY_OPTIONS = [
+  { value: ALL_CATEGORIES, label: 'Todas las categorías' },
+  ...FIXED_CATEGORY_OPTIONS.map((cat) => ({ value: cat, label: cat })),
+];
+
+type TopGender = 'male' | 'female';
+const ALL_GENDERS = '__all__';
+const TOP_GENDER_OPTIONS: { value: string; label: string }[] = [
+  { value: ALL_GENDERS, label: 'Todos' },
+  { value: 'male', label: 'Caballeros' },
+  { value: 'female', label: 'Damas' },
+];
 
 interface RewardItem {
   id: string;
   title: string;
   description?: string;
   points_required: number;
+  pointsRequired?: number;
   reward_type: string;
+  stock?: number | null;
+  maxPerUser?: number | null;
+  max_per_user?: number | null;
+}
+
+interface ClaimableCoupon {
+  id: string;
+  code: string;
+  label: string;
+  pointsCost?: number;
+  points_cost?: number;
+  claimed: boolean;
+}
+
+interface MyRedemption {
+  id: string;
+  status: string;
+  pointsSpent?: number;
+  points_spent?: number;
+  redemptionCode?: string;
+  redemption_code?: string;
+  rewardTitle?: string;
+  reward_title?: string;
+  createdAt?: string;
+  created_at?: string;
 }
 
 interface CourtSlot {
@@ -101,6 +156,68 @@ function resolveClubId(raw: string | string[] | undefined): string | null {
   return value;
 }
 
+function TopFilterSelect({
+  icon,
+  accessibilityLabel,
+  placeholder,
+  searchPlaceholder,
+  value,
+  options,
+  active,
+  onChange,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  accessibilityLabel: string;
+  placeholder: string;
+  searchPlaceholder: string;
+  value: string;
+  options: { value: string; label: string }[];
+  active: boolean;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <SearchableSelect
+      placeholder={placeholder}
+      searchPlaceholder={searchPlaceholder}
+      value={value}
+      options={options}
+      onChange={onChange}
+      renderTrigger={({ open, selected, placeholder: triggerPlaceholder }) => (
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel={accessibilityLabel}
+          onPress={open}
+          activeOpacity={0.85}
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 8,
+            backgroundColor: 'rgba(255,255,255,0.06)',
+            borderRadius: 16,
+            borderWidth: 1,
+            borderColor: active ? ui.colors.primary : 'rgba(255,255,255,0.08)',
+            paddingHorizontal: 12,
+            minHeight: 48,
+          }}
+        >
+          <Ionicons name={icon} size={18} color={active ? ui.colors.primary : ui.colors.textMuted} />
+          <Text
+            style={{
+              flex: 1,
+              fontSize: 14,
+              color: active ? ui.colors.textPrimary : ui.colors.textMuted,
+            }}
+            numberOfLines={1}
+          >
+            {selected?.label || triggerPlaceholder}
+          </Text>
+          <Ionicons name="chevron-down" size={16} color={ui.colors.textMuted} />
+        </TouchableOpacity>
+      )}
+    />
+  );
+}
+
 export default function ClubDetailScreen() {
   const { id: rawId, tab: initialTab } = useLocalSearchParams<{ id: string; tab?: Tab }>();
   const id = resolveClubId(rawId);
@@ -112,6 +229,7 @@ export default function ClubDetailScreen() {
   const [tab, setTab] = useState<Tab>(
     initialTab === 'shop' || initialTab === 'ranking' || initialTab === 'rewards' ? initialTab : 'info',
   );
+  const [couponCode, setCouponCode] = useState('');
 
   const { data: club, isLoading, refetch } = useQuery({
     queryKey: ['club', id],
@@ -130,6 +248,31 @@ export default function ClubDetailScreen() {
     },
     enabled: !!id,
   });
+
+  const [topCategory, setTopCategory] = useState<string | null>(null);
+  const [topGender, setTopGender] = useState<TopGender | null>(null);
+  const topFiltered = Boolean(topCategory || topGender);
+  const {
+    data: categoryLeaderboard,
+    isFetching: loadingCategoryLb,
+    refetch: refetchCategoryLb,
+  } = useQuery({
+    queryKey: ['club-leaderboard', id, topCategory, topGender],
+    queryFn: async () => {
+      const res = await api.get(`/clubs/${id}/leaderboard`, {
+        params: { category: topCategory ?? undefined, gender: topGender ?? undefined },
+      });
+      return res.data as LeaderboardEntry[];
+    },
+    enabled: !!id && topFiltered,
+  });
+  const topEntries = topFiltered ? categoryLeaderboard : leaderboard;
+  const topFilterLabel = [
+    topCategory,
+    topGender ? TOP_GENDER_OPTIONS.find((o) => o.value === topGender)?.label : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
 
   const { data: clubDashboard } = useQuery({
     queryKey: ['club-dashboard-public', id],
@@ -167,6 +310,24 @@ export default function ClubDetailScreen() {
       return res.data as RewardItem[];
     },
     enabled: !!id && tab === 'rewards',
+  });
+
+  const { data: myRedemptions, refetch: refetchMyRedemptions } = useQuery({
+    queryKey: ['club-my-redemptions', id],
+    queryFn: async () => {
+      const res = await api.get(`/clubs/${id}/my-redemptions`);
+      return res.data as MyRedemption[];
+    },
+    enabled: !!id && tab === 'rewards' && isPlayerAccount,
+  });
+
+  const { data: claimableCoupons, refetch: refetchCoupons } = useQuery({
+    queryKey: ['club-claimable-coupons', id],
+    queryFn: async () => {
+      const res = await api.get(`/clubs/${id}/shop/coupons/claimable`);
+      return res.data as ClaimableCoupon[];
+    },
+    enabled: !!id && tab === 'rewards' && isPlayerAccount,
   });
 
   const { data: myPoints, refetch: refetchPoints } = useRedeemablePoints(
@@ -242,14 +403,37 @@ export default function ClubDetailScreen() {
   const redeemMutation = useMutation({
     mutationFn: async (rewardId: string) => {
       const res = await api.post(`/clubs/${id}/rewards/${rewardId}/redeem`);
-      return res.data;
+      return res.data as {
+        rewardTitle: string;
+        remainingPoints: number;
+        redemptionCode?: string;
+        status?: string;
+      };
     },
     onSuccess: (data) => {
       invalidateRedeemablePoints(queryClient);
+      queryClient.invalidateQueries({ queryKey: ['club-my-redemptions', id] });
+      queryClient.invalidateQueries({ queryKey: ['club-rewards-catalog', id] });
       Alert.alert(
         '¡Canje exitoso!',
-        `${data.rewardTitle}\nTe quedan ${data.remainingPoints} puntos globales.`,
+        `${data.rewardTitle}\nCódigo: ${data.redemptionCode || '—'}\nPresentate en recepción.\nTe quedan ${data.remainingPoints} puntos.`,
       );
+    },
+    onError: (err: any) => {
+      Alert.alert('No se pudo canjear', err.response?.data?.message || 'Error');
+    },
+  });
+
+  const claimCouponMutation = useMutation({
+    mutationFn: async (code: string) => {
+      const res = await api.post(`/clubs/${id}/shop/coupons/claim`, { code });
+      return res.data as { pointsAwarded: number; message: string; label: string };
+    },
+    onSuccess: (data) => {
+      setCouponCode('');
+      invalidateRedeemablePoints(queryClient);
+      queryClient.invalidateQueries({ queryKey: ['club-claimable-coupons', id] });
+      Alert.alert('Cupón canjeado', data.message || `+${data.pointsAwarded} puntos canjeables`);
     },
     onError: (err: any) => {
       Alert.alert('No se pudo canjear', err.response?.data?.message || 'Error');
@@ -258,11 +442,12 @@ export default function ClubDetailScreen() {
 
   const handleRedeem = (reward: RewardItem) => {
     const pts = myPoints?.points ?? 0;
-    if (pts < reward.points_required) {
-      Alert.alert('Puntos globales insuficientes', `Necesitás ${reward.points_required} pts. Tenés ${pts}.`);
+    const required = reward.pointsRequired ?? reward.points_required;
+    if (pts < required) {
+      Alert.alert('Puntos globales insuficientes', `Necesitás ${required} pts. Tenés ${pts}.`);
       return;
     }
-    Alert.alert('Canjear premio', `¿Canjear "${reward.title}" por ${reward.points_required} puntos globales?`, [
+    Alert.alert('Canjear premio', `¿Canjear "${reward.title}" por ${required} puntos globales?`, [
       { text: 'Cancelar', style: 'cancel' },
       { text: 'Canjear', onPress: () => redeemMutation.mutate(reward.id) },
     ]);
@@ -271,7 +456,10 @@ export default function ClubDetailScreen() {
   const onRefresh = () => {
     refetch();
     refetchLb();
+    if (topFiltered) refetchCategoryLb();
     refetchRewards();
+    refetchMyRedemptions();
+    refetchCoupons();
     refetchPoints();
     refetchSlots();
     refetchTournamentValidations();
@@ -312,8 +500,8 @@ export default function ClubDetailScreen() {
           name={club.name}
           logoUrl={club.logo_url || club.logoUrl}
           coverUrl={club.cover_url || club.coverUrl}
-          zone={club.zone}
           city={club.city}
+          location={club.location}
           playersCount={clubStats.players}
           matchesCount={clubStats.matches}
           statsPeriodLabel={clubStats.periodLabel}
@@ -333,7 +521,13 @@ export default function ClubDetailScreen() {
                   subtitle={`${pendingTournaments?.length ?? 0} pendientes`}
                   dark
                 />
-                {(pendingTournaments || []).map((tournament) => (
+                {(pendingTournaments || []).map((tournament) => {
+                  const organizer =
+                    tournamentOrganizerLabel(tournament) || 'Sin organizador';
+                  const organizerPhoto =
+                    (tournament as { organizer_photo_url?: string | null }).organizer_photo_url ??
+                    null;
+                  return (
                   <AppCard key={tournament.id}>
                     <Text style={{ fontWeight: '700', color: ui.colors.textPrimary, fontSize: 15 }}>
                       {tournament.name}
@@ -342,11 +536,34 @@ export default function ClubDetailScreen() {
                       {formatTournamentCategory(tournament.category, tournament.gender)}
                       {tournament.start_date ? ` · ${formatShortDate(tournament.start_date)}` : ''}
                     </Text>
-                    {(tournament as any).organizer_name ? (
-                      <Text style={{ fontSize: 12, color: ui.colors.textMuted, marginTop: 4 }}>
-                        Organizador: {(tournament as any).organizer_name}
-                      </Text>
-                    ) : null}
+                    <View
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 10,
+                        marginTop: 10,
+                        paddingVertical: 8,
+                        paddingHorizontal: 10,
+                        borderRadius: ui.radius.md,
+                        backgroundColor: ui.colors.cardMuted,
+                      }}
+                    >
+                      <Avatar name={organizer} photo={organizerPhoto} size="sm" />
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 11, color: ui.colors.textMuted }}>Organizado por</Text>
+                        <Text
+                          style={{
+                            fontSize: 13,
+                            fontWeight: '700',
+                            color: ui.colors.textPrimary,
+                            marginTop: 1,
+                          }}
+                          numberOfLines={1}
+                        >
+                          {organizer}
+                        </Text>
+                      </View>
+                    </View>
                     <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
                       <View style={{ flex: 1 }}>
                         <PrimaryButton
@@ -390,7 +607,8 @@ export default function ClubDetailScreen() {
                       onPress={() => router.push(`/tournament/${tournament.id}` as any)}
                     />
                   </AppCard>
-                ))}
+                  );
+                })}
               </>
             ) : null}
 
@@ -415,7 +633,6 @@ export default function ClubDetailScreen() {
               name={club.name}
               address={club.address}
               city={club.city}
-              zone={club.zone}
               latitude={club.latitude}
               longitude={club.longitude}
             />
@@ -516,15 +733,54 @@ export default function ClubDetailScreen() {
             )}
 
             <SectionHeader title="Top del club" subtitle="Competencia interna" dark />
-            {!leaderboard?.length ? (
+            <View style={{ flexDirection: 'row', gap: 8, marginBottom: 10 }}>
+              <View style={{ flex: 1.4 }}>
+                <TopFilterSelect
+                  icon="podium-outline"
+                  accessibilityLabel="Filtrar top del club por categoría"
+                  placeholder="Todas las categorías"
+                  searchPlaceholder="Buscar categoría..."
+                  value={topCategory ?? ALL_CATEGORIES}
+                  options={TOP_CATEGORY_OPTIONS}
+                  active={!!topCategory}
+                  onChange={(value) => setTopCategory(value === ALL_CATEGORIES ? null : value)}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <TopFilterSelect
+                  icon="people-outline"
+                  accessibilityLabel="Filtrar top del club por caballeros o damas"
+                  placeholder="Todos"
+                  searchPlaceholder="Buscar..."
+                  value={topGender ?? ALL_GENDERS}
+                  options={TOP_GENDER_OPTIONS}
+                  active={!!topGender}
+                  onChange={(value) =>
+                    setTopGender(value === ALL_GENDERS ? null : (value as TopGender))
+                  }
+                />
+              </View>
+            </View>
+            {topFiltered && loadingCategoryLb && !categoryLeaderboard ? (
+              <AppCard>
+                <Text style={{ fontSize: 13, color: ui.colors.textSecondary }}>Cargando ranking...</Text>
+              </AppCard>
+            ) : !topEntries?.length ? (
               <AppCard>
                 <Text style={{ fontSize: 13, color: ui.colors.textSecondary }}>
-                  Todavía no hay ranking. Jugá partidos acá para sumar puntos.
+                  {topFiltered
+                    ? `Todavía no hay jugadores de ${topFilterLabel} en el ranking de este mes.`
+                    : 'Todavía no hay ranking. Jugá partidos acá para sumar puntos.'}
                 </Text>
               </AppCard>
             ) : (
-              leaderboard.slice(0, 5).map((entry) => (
-                <AppCard key={entry.user_id} padding="sm">
+              topEntries.slice(0, 5).map((entry) => (
+                <AppCard
+                  key={entry.user_id}
+                  padding="sm"
+                  onPress={() => router.push(`/player/${entry.user_id}` as any)}
+                  accessibilityLabel={`Ver perfil de ${entry.nickname || entry.name}`}
+                >
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
                     <Text style={{ fontWeight: '800', fontSize: 16, color: ui.colors.primary, width: 28 }}>
                       #{entry.rank}
@@ -533,12 +789,16 @@ export default function ClubDetailScreen() {
                     <View style={{ flex: 1 }}>
                       <Text style={{ fontWeight: '600', color: ui.colors.textPrimary }}>
                         {entry.nickname || entry.name}
+                        {entry.user_id === user?.id ? ' (vos)' : ''}
                       </Text>
                       <Text style={{ fontSize: 11, color: ui.colors.textSecondary }}>
-                        {entry.matches_at_club} partidos
+                        {[entry.level_category, `${entry.matches_at_club} partidos`]
+                          .filter(Boolean)
+                          .join(' · ')}
                       </Text>
                     </View>
                     <Text style={{ fontWeight: '700', color: ui.colors.textPrimary }}>{entry.points} pts</Text>
+                    <Ionicons name="chevron-forward" size={16} color={ui.colors.textMuted} />
                   </View>
                 </AppCard>
               ))
@@ -570,7 +830,7 @@ export default function ClubDetailScreen() {
 
         {tab === 'ranking' && (
           <>
-            <SectionHeader title="Ranking mensual" subtitle="Puntos del mes · promos x1.5 o x2 según plan" dark />
+            <SectionHeader title="Ranking mensual" subtitle="Puntos del mes · promos con puntos extra" dark />
             {!leaderboard?.length ? (
               <AppCard>
                 <Text style={{ color: ui.colors.textSecondary, fontSize: 13 }}>
@@ -585,6 +845,7 @@ export default function ClubDetailScreen() {
                     key={entry.user_id}
                     padding="sm"
                     style={isMe ? { borderWidth: 2, borderColor: ui.colors.primary } : undefined}
+                    onPress={() => router.push(`/player/${entry.user_id}` as any)}
                   >
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
                       <Text style={{ fontWeight: '800', fontSize: 20, color: ui.colors.primary, width: 32 }}>
@@ -613,6 +874,58 @@ export default function ClubDetailScreen() {
 
         {tab === 'rewards' && (
           <>
+            {isPlayerAccount ? (
+              <>
+                <SectionHeader
+                  title="Cupones"
+                  subtitle="Sumá puntos canjeables (no competitivos)"
+                  dark
+                />
+                <AppCard style={{ marginBottom: 16 }}>
+                  <InputField
+                    label="Código"
+                    value={couponCode}
+                    onChangeText={setCouponCode}
+                    placeholder="PUNTOS100"
+                    autoCapitalize="characters"
+                  />
+                  <PrimaryButton
+                    label="Canjear cupón"
+                    size="sm"
+                    fullWidth
+                    loading={claimCouponMutation.isPending}
+                    disabled={!couponCode.trim()}
+                    onPress={() => claimCouponMutation.mutate(couponCode.trim())}
+                  />
+                </AppCard>
+                {(claimableCoupons || []).length > 0 ? (
+                  <View style={{ marginBottom: 16 }}>
+                    {claimableCoupons!.map((coupon) => {
+                      const pts = coupon.pointsCost ?? coupon.points_cost ?? 0;
+                      return (
+                        <AppCard key={coupon.id} padding="sm" style={{ marginBottom: 8 }}>
+                          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                            <View style={{ flex: 1 }}>
+                              <Text style={{ fontWeight: '800', color: ui.colors.primary }}>{coupon.code}</Text>
+                              <Text style={{ fontSize: 12, color: ui.colors.textSecondary, marginTop: 2 }}>
+                                {coupon.label} · +{pts} pts canjeables
+                              </Text>
+                            </View>
+                            <PrimaryButton
+                              label={coupon.claimed ? 'Ya canjeado' : 'Canjear'}
+                              size="sm"
+                              disabled={coupon.claimed || claimCouponMutation.isPending}
+                              onPress={() => claimCouponMutation.mutate(coupon.code)}
+                            />
+                          </View>
+                        </AppCard>
+                      );
+                    })}
+                  </View>
+                ) : null}
+              </>
+            ) : null}
+
             <SectionHeader
               title="Premios del club"
               subtitle={isPlayerAccount ? `Tenés ${myPoints?.points ?? 0} puntos` : 'Catálogo de beneficios'}
@@ -626,7 +939,9 @@ export default function ClubDetailScreen() {
               </AppCard>
             ) : (
               rewards.map((reward) => {
-                const canAfford = (myPoints?.points ?? 0) >= reward.points_required;
+                const required = reward.pointsRequired ?? reward.points_required;
+                const canAfford = (myPoints?.points ?? 0) >= required;
+                const stock = reward.stock;
                 return (
                   <AppCard key={reward.id}>
                     <View style={{ flexDirection: 'row', gap: 12 }}>
@@ -657,7 +972,8 @@ export default function ClubDetailScreen() {
                             marginTop: 8,
                           }}
                         >
-                          {reward.points_required} puntos
+                          {required} puntos
+                          {stock != null ? ` · stock ${stock}` : ''}
                         </Text>
                       </View>
                     </View>
@@ -676,6 +992,64 @@ export default function ClubDetailScreen() {
                 );
               })
             )}
+
+            {isPlayerAccount ? (
+              <>
+                <SectionHeader
+                  title="Mis canjes"
+                  subtitle="Mostrá el código en recepción"
+                  dark
+                  style={{ marginTop: 20 }}
+                />
+                {!myRedemptions?.length ? (
+                  <AppCard>
+                    <Text style={{ color: ui.colors.textSecondary, fontSize: 13 }}>
+                      Todavía no canjeaste premios en este club.
+                    </Text>
+                  </AppCard>
+                ) : (
+                  myRedemptions.map((item) => {
+                    const code = item.redemptionCode || item.redemption_code;
+                    const title = item.rewardTitle || item.reward_title || 'Premio';
+                    const spent = item.pointsSpent ?? item.points_spent ?? 0;
+                    const pending = item.status === 'PENDING';
+                    return (
+                      <AppCard
+                        key={item.id}
+                        style={{
+                          marginBottom: 8,
+                          borderWidth: pending ? 1 : 0,
+                          borderColor: ui.colors.accent,
+                        }}
+                      >
+                        <Text style={{ fontWeight: '700', color: ui.colors.textPrimary }}>{title}</Text>
+                        <Text style={{ fontSize: 12, color: ui.colors.textSecondary, marginTop: 4 }}>
+                          {spent} pts · {item.status}
+                        </Text>
+                        {code ? (
+                          <Text
+                            style={{
+                              marginTop: 10,
+                              fontSize: 20,
+                              fontWeight: '800',
+                              letterSpacing: 1,
+                              color: ui.colors.primary,
+                            }}
+                          >
+                            {code}
+                          </Text>
+                        ) : null}
+                        {pending ? (
+                          <Text style={{ marginTop: 6, fontSize: 12, color: ui.colors.accent }}>
+                            Presentate en recepción con este código
+                          </Text>
+                        ) : null}
+                      </AppCard>
+                    );
+                  })
+                )}
+              </>
+            ) : null}
           </>
         )}
       </ScrollView>

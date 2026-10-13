@@ -1,0 +1,913 @@
+<!DOCTYPE html>
+<html lang="es" data-resolution="portrait">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=1080, height=1920">
+    <script src="assets/vendor/gsap.min.js"></script>
+    <style>
+      @font-face {
+        font-family: "Anton";
+        src: url("assets/fonts/Anton-Regular.ttf") format("truetype");
+        font-weight: 400;
+        font-style: normal;
+      }
+      @font-face {
+        font-family: "DM Sans";
+        src: url("assets/fonts/DMSans.ttf") format("truetype");
+        font-weight: 100 1000;
+        font-style: normal;
+      }
+
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        width: 1080px;
+        height: 1920px;
+        overflow: hidden;
+        background: #0b0b0b;
+      }
+      #root {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #0b0b0b;
+        font-family: "DM Sans", sans-serif;
+        color: #ffffff;
+      }
+      .scene {
+        position: absolute;
+        inset: 0;
+        overflow: hidden;
+      }
+      .display {
+        font-family: "Anton", sans-serif;
+        font-weight: 400;
+        line-height: 1.04;
+        text-transform: uppercase;
+        letter-spacing: 0.005em;
+      }
+      .mono {
+        font-family: "IBM Plex Mono", monospace;
+        font-weight: 500;
+        letter-spacing: 0.28em;
+        text-transform: uppercase;
+      }
+      .row-center {
+        position: absolute;
+        left: 0;
+        width: 1080px;
+        text-align: center;
+      }
+      .glow {
+        position: absolute;
+        border-radius: 50%;
+        pointer-events: none;
+      }
+
+      /* ---------- Scene 1 — Hook ---------- */
+      #s1 {
+        background: #0b0b0b;
+      }
+      #s1-glow {
+        left: 90px;
+        top: 760px;
+        width: 900px;
+        height: 900px;
+        background: radial-gradient(circle, rgba(215, 255, 0, 0.26) 0%, rgba(215, 255, 0, 0) 66%);
+        opacity: 0;
+      }
+      #s1-meta {
+        top: 300px;
+        font-size: 28px;
+        color: #858585;
+      }
+      #s1-a {
+        top: 520px;
+        font-size: 230px;
+        color: #ffffff;
+      }
+      #s1-b1 {
+        top: 860px;
+        font-size: 300px;
+        color: #d7ff00;
+      }
+      #s1-b2 {
+        top: 1170px;
+        font-size: 300px;
+        color: #d7ff00;
+      }
+
+      /* ---------- Scene 2 — Promesa ---------- */
+      #s2 {
+        background: #0b0b0b;
+      }
+      .s2-line {
+        font-size: 158px;
+        color: #f1f0ea;
+      }
+      #s2-h1 {
+        top: 250px;
+      }
+      #s2-h2 {
+        top: 420px;
+      }
+      #s2-h3 {
+        top: 590px;
+      }
+      .volt {
+        color: #d7ff00;
+      }
+      #s2-sub {
+        top: 830px;
+        font-size: 62px;
+        font-weight: 600;
+        color: #ffffff;
+        letter-spacing: -0.01em;
+      }
+      #s2-wa {
+        position: relative;
+        display: inline-block;
+      }
+      #s2-strike {
+        position: absolute;
+        left: -10px;
+        right: -10px;
+        top: 52%;
+        height: 10px;
+        border-radius: 5px;
+        background: #d7ff00;
+        transform-origin: left center;
+      }
+      #s2-photo {
+        position: absolute;
+        left: 0;
+        top: 1060px;
+        width: 1080px;
+        height: 560px;
+        overflow: hidden;
+      }
+      #s2-photo img {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 1080px;
+        height: 560px;
+        object-fit: cover;
+        filter: brightness(0.62) contrast(1.06) saturate(0.9);
+      }
+      #s2-photo-shade {
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(
+          180deg,
+          #0b0b0b 0%,
+          rgba(11, 11, 11, 0) 26%,
+          rgba(11, 11, 11, 0) 70%,
+          #0b0b0b 100%
+        );
+      }
+
+      /* ---------- Scene 3 — Partidos abiertos ---------- */
+      #s3 {
+        background: #0b0b0b;
+      }
+      #s3-cap {
+        top: 210px;
+        left: 170px;
+        width: 740px;
+        font-size: 54px;
+        line-height: 1.18;
+        font-weight: 600;
+        color: #f1f0ea;
+        text-align: center;
+        letter-spacing: -0.01em;
+      }
+      #s3-glow {
+        left: 40px;
+        top: 500px;
+        width: 1000px;
+        height: 1000px;
+        background: radial-gradient(circle, rgba(215, 255, 0, 0.2) 0%, rgba(215, 255, 0, 0) 64%);
+        opacity: 0.5;
+      }
+      #phone {
+        position: absolute;
+        left: 150px;
+        top: 420px;
+        width: 780px;
+        height: 1150px;
+        border-radius: 96px;
+        background: #000000;
+        border: 5px solid #262626;
+        overflow: hidden;
+      }
+      #phone-notch {
+        position: absolute;
+        left: 290px;
+        top: 26px;
+        width: 190px;
+        height: 44px;
+        border-radius: 22px;
+        background: #141414;
+      }
+      #phone-body {
+        position: absolute;
+        left: 56px;
+        top: 130px;
+        width: 658px;
+      }
+      #app-title {
+        font-size: 60px;
+        font-weight: 700;
+        color: #fafafa;
+        letter-spacing: -0.02em;
+      }
+      #app-sub {
+        margin-top: 10px;
+        font-size: 36px;
+        color: #858585;
+      }
+      #card {
+        position: relative;
+        margin-top: 44px;
+        padding: 22px 22px 30px;
+        border-radius: 40px;
+        background: #161616;
+        border: 2px solid rgba(255, 255, 255, 0.08);
+      }
+      #card-photo {
+        position: relative;
+        width: 610px;
+        height: 330px;
+        border-radius: 30px;
+        overflow: hidden;
+      }
+      #card-photo img {
+        width: 610px;
+        height: 330px;
+        object-fit: cover;
+      }
+      #card-pill {
+        position: absolute;
+        right: 22px;
+        bottom: 22px;
+        height: 62px;
+        width: 200px;
+        border-radius: 31px;
+        background: rgba(0, 0, 0, 0.78);
+      }
+      .pill-state {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        font-size: 30px;
+        font-weight: 600;
+        color: #ffffff;
+      }
+      #card-club {
+        margin-top: 30px;
+        padding: 0 6px;
+        font-size: 44px;
+        font-weight: 600;
+        color: #fafafa;
+        letter-spacing: -0.01em;
+      }
+      #card-cat {
+        margin-top: 12px;
+        padding: 0 6px;
+        font-size: 31px;
+        font-weight: 600;
+        color: #d7ff00;
+        letter-spacing: 0.06em;
+      }
+      #card-when {
+        margin-top: 18px;
+        padding: 0 6px;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        font-size: 32px;
+        color: #8f8f8f;
+      }
+      #card-bar {
+        position: relative;
+        margin: 26px 6px 28px;
+        height: 6px;
+        border-radius: 3px;
+        background: #242424;
+        overflow: hidden;
+      }
+      #card-bar-fill {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        border-radius: 3px;
+        background: #d7ff00;
+        transform-origin: left center;
+      }
+      #card-btn {
+        position: relative;
+        height: 104px;
+        border-radius: 52px;
+        background: #242424;
+        border: 2px solid rgba(255, 255, 255, 0.12);
+      }
+      .btn-label {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 36px;
+        font-weight: 700;
+        color: #ffffff;
+      }
+      #tap {
+        position: absolute;
+        left: 400px;
+        top: 30px;
+        width: 96px;
+        height: 96px;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.34);
+        border: 3px solid rgba(255, 255, 255, 0.8);
+      }
+      #tap-ring {
+        position: absolute;
+        left: 400px;
+        top: 30px;
+        width: 96px;
+        height: 96px;
+        border-radius: 50%;
+        border: 4px solid #d7ff00;
+      }
+
+      /* ---------- Scene 4 — Ranking real ---------- */
+      #s4 {
+        background: #0b0b0b;
+      }
+      #s4-glow {
+        left: 40px;
+        top: 700px;
+        width: 1000px;
+        height: 1000px;
+        background: radial-gradient(circle, rgba(215, 255, 0, 0.18) 0%, rgba(215, 255, 0, 0) 64%);
+        opacity: 0.4;
+      }
+      #s4-t1 {
+        top: 210px;
+        font-size: 250px;
+        color: #ffffff;
+      }
+      #s4-t2 {
+        top: 470px;
+        font-size: 250px;
+        color: #d7ff00;
+      }
+      #s4-card {
+        position: absolute;
+        left: 110px;
+        top: 820px;
+        width: 860px;
+        padding: 50px 60px 56px;
+        border-radius: 48px;
+        background: #131313;
+        border: 2px solid rgba(255, 255, 255, 0.08);
+      }
+      .s4-label {
+        font-size: 28px;
+        color: #8f8f8f;
+      }
+      #s4-score {
+        margin-top: 8px;
+        font-size: 128px;
+        color: #ffffff;
+      }
+      #s4-div {
+        margin: 34px 0 30px;
+        height: 2px;
+        background: rgba(255, 255, 255, 0.1);
+      }
+      #s4-rating-row {
+        display: flex;
+        align-items: center;
+        gap: 34px;
+        margin-top: 4px;
+      }
+      #s4-num {
+        font-size: 200px;
+        color: #d7ff00;
+        font-variant-numeric: tabular-nums;
+        width: 400px;
+      }
+      #s4-plus {
+        padding: 12px 30px;
+        border-radius: 999px;
+        background: #d7ff00;
+        color: #0b0b0b;
+        font-size: 56px;
+        font-weight: 700;
+      }
+      #s4-line {
+        top: 1500px;
+        left: 110px;
+        width: 860px;
+        font-size: 44px;
+        line-height: 1.3;
+        color: #f1f0ea;
+        text-align: center;
+      }
+
+      /* ---------- Scene 5 — Logo ---------- */
+      #s5 {
+        background: #000000;
+      }
+      #s5-glow {
+        left: 0;
+        top: 280px;
+        width: 1080px;
+        height: 1080px;
+        background: radial-gradient(circle, rgba(230, 250, 10, 0.16) 0%, rgba(230, 250, 10, 0) 62%);
+        opacity: 0;
+      }
+      #logo {
+        position: absolute;
+        left: 160px;
+        top: 420px;
+        width: 760px;
+        height: 692px;
+        overflow: visible;
+      }
+      .s5-tag {
+        font-size: 100px;
+        color: #ffffff;
+      }
+      #s5-tag1 {
+        top: 1210px;
+      }
+      #s5-tag2 {
+        top: 1320px;
+      }
+      #s5-free {
+        top: 1490px;
+        font-size: 30px;
+        color: #d7ff00;
+      }
+    </style>
+  </head>
+  <body>
+    <div data-hf-id="hf-6lcs" id="root" data-composition-id="main" data-start="0" data-duration="21.5" data-width="1080" data-height="1920">
+      <!-- Scene 1 — Hook -->
+      <section data-hf-id="hf-sgop" id="s1" class="scene clip" data-start="0" data-duration="3.8" data-track-index="0">
+        <div data-hf-id="hf-fssp" id="s1-glow" class="glow"></div>
+        <div data-hf-id="hf-lkke" id="s1-meta" class="row-center mono">Pádel competitivo · Argentina</div>
+        <div data-hf-id="hf-w9nl" id="s1-a" class="row-center display" data-layout-allow-overlap="">Sos uno.</div>
+        <div data-hf-id="hf-wtzw" id="s1-b1" class="row-center display" data-layout-allow-overlap="">Faltan</div>
+        <div data-hf-id="hf-maur" id="s1-b2" class="row-center display" data-layout-allow-overlap="">tres.</div>
+      </section>
+
+      <!-- Scene 2 — La promesa -->
+      <section data-hf-id="hf-xeez" id="s2" class="scene clip" data-start="3.8" data-duration="4.9" data-track-index="0">
+        <div data-hf-id="hf-hcq1" id="s2-photo">
+          <img data-hf-id="hf-0qik" id="s2-img" src="assets/img/cancha.png" alt="">
+          <div data-hf-id="hf-kw5d" id="s2-photo-shade"></div>
+        </div>
+        <div data-hf-id="hf-dkbj" id="s2-h1" class="row-center display s2-line" data-layout-allow-overlap="">Encontrá los</div>
+        <div data-hf-id="hf-k6fy" id="s2-h2" class="row-center display s2-line" data-layout-allow-overlap=""><span data-hf-id="hf-lo3v" class="volt" data-layout-allow-overlap="">3</span> jugadores</div>
+        <div data-hf-id="hf-2uxg" id="s2-h3" class="row-center display s2-line" data-layout-allow-overlap="">que faltan</div>
+        <div data-hf-id="hf-sar5" id="s2-sub" class="row-center">
+          sin grupos de <span data-hf-id="hf-v9gm" id="s2-wa">WhatsApp.<span data-hf-id="hf-vr5c" id="s2-strike"></span></span>
+        </div>
+      </section>
+
+      <!-- Scene 3 — Partidos abiertos -->
+      <section data-hf-id="hf-1w4f" id="s3" class="scene clip" data-start="8.7" data-duration="4.4" data-track-index="0">
+        <div data-hf-id="hf-2wxn" id="s3-glow" class="glow"></div>
+        <div data-hf-id="hf-34fu" id="s3-cap" class="row-center">Unite a partidos cerca tuyo según tu nivel</div>
+        <div data-hf-id="hf-5iuv" id="phone">
+          <div data-hf-id="hf-yzzq" id="phone-notch"></div>
+          <div data-hf-id="hf-zi84" id="phone-body">
+            <div data-hf-id="hf-5dri" id="app-title">Partidos abiertos</div>
+            <div data-hf-id="hf-waah" id="app-sub">1 buscando jugadores</div>
+            <div data-hf-id="hf-55rf" id="card">
+              <div data-hf-id="hf-7dqo" id="card-photo">
+                <img data-hf-id="hf-n1ak" src="assets/img/card-cancha.jpg" alt="">
+                <div data-hf-id="hf-z8ql" id="card-pill">
+                  <div data-hf-id="hf-2pq4" id="pill-a" class="pill-state">
+                    <svg data-hf-id="hf-zwzc" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle data-hf-id="hf-1jcf" cx="9" cy="8" r="3.5" /><path data-hf-id="hf-qlgt" d="M2.5 20c.6-3.6 3.2-5.5 6.5-5.5s5.9 1.9 6.5 5.5" /><circle data-hf-id="hf-3l7j" cx="17" cy="9" r="2.6" /><path data-hf-id="hf-qiex" d="M16.5 14.6c2.7.2 4.5 1.9 5 5.4" /></svg>
+                    <span data-hf-id="hf-xt0n">3/4 Join</span>
+                  </div>
+                  <div data-hf-id="hf-bdlz" id="pill-b" class="pill-state">
+                    <svg data-hf-id="hf-4osl" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#d7ff00" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle data-hf-id="hf-e1qn" cx="9" cy="8" r="3.5" /><path data-hf-id="hf-00yp" d="M2.5 20c.6-3.6 3.2-5.5 6.5-5.5s5.9 1.9 6.5 5.5" /><circle data-hf-id="hf-qilb" cx="17" cy="9" r="2.6" /><path data-hf-id="hf-oa6l" d="M16.5 14.6c2.7.2 4.5 1.9 5 5.4" /></svg>
+                    <span data-hf-id="hf-0kdw">4/4 Join</span>
+                  </div>
+                </div>
+              </div>
+              <div data-hf-id="hf-4uxo" id="card-club">Club Norte Pádel</div>
+              <div data-hf-id="hf-ibqd" id="card-cat">CATEGORÍA 5ª – 6ª</div>
+              <div data-hf-id="hf-u9n8" id="card-when">
+                <svg data-hf-id="hf-nvex" width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#8f8f8f" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect data-hf-id="hf-0znw" x="3.5" y="5" width="17" height="15.5" rx="2.5" /><path data-hf-id="hf-707r" d="M3.5 10h17M8 3v4M16 3v4" /></svg>
+                <span data-hf-id="hf-a6lw">Jue 20:00 · Cancha 2</span>
+              </div>
+              <div data-hf-id="hf-l25f" id="card-bar"><div data-hf-id="hf-pwo7" id="card-bar-fill"></div></div>
+              <div data-hf-id="hf-ahvo" id="card-btn">
+                <div data-hf-id="hf-7hp5" id="btn-a" class="btn-label">Unirse a Partido</div>
+                <div data-hf-id="hf-7av0" id="btn-b" class="btn-label">Ver partido</div>
+                <div data-hf-id="hf-y3zn" id="tap-ring"></div>
+                <div data-hf-id="hf-u8x4" id="tap"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Scene 4 — Ranking real -->
+      <section data-hf-id="hf-rwfa" id="s4" class="scene clip" data-start="13.1" data-duration="4.4" data-track-index="0">
+        <div data-hf-id="hf-fgfi" id="s4-glow" class="glow"></div>
+        <div data-hf-id="hf-f2sv" id="s4-t1" class="row-center display" data-layout-allow-overlap="">Ranking</div>
+        <div data-hf-id="hf-hql8" id="s4-t2" class="row-center display" data-layout-allow-overlap="">real</div>
+        <div data-hf-id="hf-dm8r" id="s4-card">
+          <div data-hf-id="hf-ckwu" class="s4-label mono" data-layout-allow-overlap="">Resultado</div>
+          <div data-hf-id="hf-ucn6" id="s4-score" class="display" data-layout-allow-overlap="">6-4 · 6-3</div>
+          <div data-hf-id="hf-oezy" id="s4-div"></div>
+          <div data-hf-id="hf-vf9w" class="s4-label mono" data-layout-allow-overlap="">Rating</div>
+          <div data-hf-id="hf-0iqt" id="s4-rating-row">
+            <div data-hf-id="hf-nf7x" id="s4-num" class="display" data-layout-allow-overlap="">1000</div>
+            <div data-hf-id="hf-mdi5" id="s4-plus">+12</div>
+          </div>
+        </div>
+        <div data-hf-id="hf-4mu5" id="s4-line" class="row-center">
+          Subí de categoría con resultados verificados y historial competitivo.
+        </div>
+      </section>
+
+      <!-- Scene 5 — Logo -->
+      <section data-hf-id="hf-8ya9" id="s5" class="scene clip" data-start="17.5" data-duration="4" data-track-index="0">
+        <div data-hf-id="hf-ltbp" id="s5-glow" class="glow"></div>
+        <svg data-hf-id="hf-xz16" id="logo" viewBox="32 52 448 408" xmlns="http://www.w3.org/2000/svg">
+          <defs data-hf-id="hf-mh0t">
+            <mask data-hf-id="hf-fvbv" id="mask-desc" maskUnits="userSpaceOnUse" x="0" y="0" width="512" height="512">
+              <path data-hf-id="hf-3gbm" id="mask-desc-path" fill="none" stroke="#ffffff" stroke-width="46" stroke-linecap="butt" />
+            </mask>
+            <mask data-hf-id="hf-q7vl" id="mask-asc" maskUnits="userSpaceOnUse" x="0" y="0" width="512" height="512">
+              <path data-hf-id="hf-yoeq" id="mask-asc-path" fill="none" stroke="#ffffff" stroke-width="46" stroke-linecap="butt" />
+            </mask>
+          </defs>
+          <g data-hf-id="hf-93hv" id="logo-text" stroke-width="0.75" stroke-miterlimit="10">
+            <path data-hf-id="hf-snka" fill="#FFFFFF" stroke="#FFFFFF" d="M256.36 359.95H233.44L204.49 329.24L178.56 359.95H153.46L193.62 317.49L154.47 276.37H178.57L205.17 304.73L230.27 276.37H254.53L217.72 317.66L256.37 359.95H256.36Z" />
+            <path data-hf-id="hf-5277" fill="#FFFFFF" stroke="#FFFFFF" d="M355.33 341.66H335.92V360.96H319.02V341.66H258.28V326.22L318.35 276.04H335.92V326.22H355.33V341.66ZM319.02 326.22V295.67L280.2 326.22H319.02Z" />
+            <path data-hf-id="hf-ky8n" fill="#E6FA0A" stroke="#E6FA0A" d="M181.08 421.34H173.52V394.02L157.31 407.45L140.95 394.02V421.34H133.61V383.61H141.17L157.31 397.57L173.67 383.61H181.09V421.34H181.08Z" />
+            <path data-hf-id="hf-0h1f" fill="#E6FA0A" stroke="#E6FA0A" d="M240.6 421.34H232.53L227.8 413.11H204.24L199.73 421.34H191.37L211.8 383.61H219.87L240.59 421.34H240.6ZM224.02 406.25L215.88 390.93L207.81 406.25H224.02Z" />
+            <path data-hf-id="hf-1rij" fill="#E6FA0A" stroke="#E6FA0A" d="M277.47 390.48H261.48V421.35H252.97V390.48H237.05V383.76H277.47V390.48Z" />
+            <path data-hf-id="hf-5rtf" fill="#E6FA0A" stroke="#E6FA0A" d="M323.85 411.71C323.85 415.23 323.21 417.6 321.92 418.8C320.63 420.01 318.27 420.61 314.83 420.61H293.24C289.8 420.61 287.44 420.01 286.15 418.8C284.87 417.59 284.22 415.23 284.22 411.71V391.86C284.22 388.39 284.86 386.04 286.15 384.8C287.43 383.57 289.8 382.95 293.24 382.95H314.83C320.65 383 323.65 385.09 323.84 389.21V394.72H315.41V389.66H292.65V413.51H315.41V408H323.84V411.7L323.85 411.71Z" />
+            <path data-hf-id="hf-zcy0" fill="#E6FA0A" stroke="#E6FA0A" d="M375.18 421.34H366.67V405.87H341.01V421.34H332.58V383.68H341.01V398.25H366.67V383.68H375.18V421.34Z" />
+          </g>
+          <g data-hf-id="hf-lwmz" mask="url(#mask-asc)">
+            <path data-hf-id="hf-l81j" fill="#E6FA0A" d="M229.84 226.21C248.97 166.5 295.17 102.28 363.52 98.84C368.65 98.58 376.86 97.71 380.89 100.98C303.54 110.99 253.06 182.35 229.83 251.11Z" />
+          </g>
+          <g data-hf-id="hf-nnc9" mask="url(#mask-desc)">
+            <path data-hf-id="hf-qw35" fill="#E6FA0A" d="M63.57 237.29C82.71 148.31 149.37 86.64 212.98 185.64L229.84 226.21L229.83 251.11L210.93 207.04C159.3 110.34 90.3 154.93 64.94 240.05C63.86 240.96 63.4 240.03 63.55 237.28L63.57 237.29Z" />
+            <path data-hf-id="hf-vmvw" fill="#E6FA0A" d="M64.95 240.06C63.47 245.02 62.89 246.17 59.42 256.67C60 250.08 62.19 243.7 63.56 237.3L64.95 240.07V240.06Z" />
+          </g>
+          <g data-hf-id="hf-j93w" id="ball">
+            <circle data-hf-id="hf-6yvq" cx="425.7" cy="93.7" r="28" fill="#000000" />
+            <path data-hf-id="hf-e657" fill="#E6FA0A" d="M445.76 116.77C443.26 119.06 440.38 120.94 437.25 122.26C429.17 125.68 419.54 125.05 411.87 120.8C408.04 118.69 404.73 115.73 402.13 112.22C407.13 116.85 414.19 119.38 420.93 118.32C427.72 117.25 433.92 112.32 435.9 105.74C436.02 105.32 436.13 104.9 436.23 104.47C437.31 99.44 436.11 94.07 433.94 89.38C432.52 86.32 430.69 83.42 429.85 80.15C428.45 74.59 430.36 68.32 434.63 64.49L434.68 64.33C434.94 64.41 435.21 64.49 435.47 64.59C445.49 68.17 453.3 77.31 455.34 87.75C455.53 88.76 455.68 89.78 455.77 90.8C456.61 100.35 452.84 110.26 445.75 116.76L445.76 116.77Z" />
+            <path data-hf-id="hf-h2k9" fill="#000000" stroke="#000000" stroke-width="0.75" stroke-miterlimit="10" d="M436.24 104.46C436.15 104.89 436.04 105.31 435.91 105.73C433.93 112.31 427.74 117.25 420.94 118.31C414.2 119.37 407.14 116.84 402.14 112.21C400.24 109.67 397.35 106.58 396.29 103.6C400.65 109.45 409.23 114.35 416.51 114.49C422.88 114.6 429.41 110.79 431.86 105.03C432.21 104.21 432.47 103.34 432.65 102.45C433.51 97.94 431.98 93.33 430.17 89.11C428.35 84.89 426.19 80.71 425.66 76.14C425.13 71.58 427.5 65.73 431.5 63.49C432.57 63.7 433.64 63.96 434.69 64.31L434.64 64.47C430.37 68.3 428.46 74.56 429.86 80.13C430.69 83.4 432.53 86.3 433.95 89.36C436.12 94.05 437.32 99.42 436.24 104.45V104.46Z" />
+            <path data-hf-id="hf-3jfh" fill="#E6FA0A" d="M432.64 102.46C432.47 103.35 432.2 104.23 431.85 105.04C429.4 110.79 422.88 114.61 416.5 114.5C409.22 114.36 400.34 108.84 397.8 103.83C397.27 102.64 396.45 100.94 396.22 99.7C394.62 91.04 396.15 84.81 399.82 78.15C401.45 75.18 403.56 72.5 406.12 70.27C412.88 64.39 422.51 61.76 431.49 63.52C427.48 65.76 425.12 71.61 425.65 76.17C426.17 80.74 428.34 84.92 430.16 89.14C431.97 93.36 433.5 97.97 432.64 102.48V102.46Z" />
+          </g>
+        </svg>
+        <div data-hf-id="hf-ocrk" id="s5-tag1" class="row-center display s5-tag" data-layout-allow-overlap="">Pádel competitivo,</div>
+        <div data-hf-id="hf-bums" id="s5-tag2" class="row-center display s5-tag" data-layout-allow-overlap="">partidos reales.</div>
+        <div data-hf-id="hf-73wn" id="s5-free" class="row-center mono">Siempre gratis para jugadores</div>
+      </section>
+
+      <!-- Audio -->
+      <audio data-hf-id="hf-58fn" id="music" data-start="0" data-duration="21.5" data-track-index="10" data-volume="0.55" data-automation="{&quot;version&quot;:1,&quot;lanes&quot;:[{&quot;target&quot;:&quot;volume&quot;,&quot;points&quot;:[{&quot;t&quot;:0,&quot;v&quot;:0.8},{&quot;t&quot;:8.55,&quot;v&quot;:0.8},{&quot;t&quot;:8.75,&quot;v&quot;:1},{&quot;t&quot;:20.2,&quot;v&quot;:1},{&quot;t&quot;:21.5,&quot;v&quot;:0}]}]}" src="assets/music/happy-beats-business-moves-vol-12-by-ende-dot-app.mp3"></audio>
+      <audio data-hf-id="hf-fr74" id="sfx-hook" data-start="1.637" data-duration="0.6" data-track-index="11" data-volume="0.8" src="assets/sfx/impactSoft_heavy_001.ogg"></audio>
+      <audio data-hf-id="hf-zmil" id="sfx-tap" data-start="10.925" data-duration="0.01" data-track-index="12" data-volume="0.85" src="assets/sfx/click_003.ogg"></audio>
+      <audio data-hf-id="hf-1krk" id="sfx-full" data-start="11.0" data-duration="0.18" data-track-index="13" data-volume="0.6" src="assets/sfx/impactSoft_medium_001.ogg"></audio>
+      <audio data-hf-id="hf-zofg" id="sfx-bounce" data-start="18.3" data-duration="0.15" data-track-index="14" data-volume="0.75" src="assets/sfx/impactSoft_medium_004.ogg"></audio>
+      <audio data-hf-id="hf-6qze" id="sfx-logo" data-start="19.098" data-duration="0.65" data-track-index="15" data-volume="0.6" src="assets/sfx/impactBell_heavy_003.ogg"></audio>
+    </div>
+
+    <script>
+      window.__timelines = window.__timelines || {};
+      const tl = gsap.timeline({ paused: true });
+
+      /* ---------- Scene 1 — Hook ---------- */
+      tl.fromTo("#s1-meta", { opacity: 0 }, { opacity: 1, duration: 0.6, ease: "power2.out" }, 0.15);
+      // beat-grid: 0.557s
+      tl.fromTo(
+        "#s1-a",
+        { opacity: 0, y: 50 },
+        { opacity: 1, y: 0, duration: 0.55, ease: "power3.out" },
+        0.557,
+      );
+      // beat-locked: 1.637s
+      tl.fromTo(
+        ["#s1-b1", "#s1-b2"],
+        { opacity: 0, scale: 1.4 },
+        { opacity: 1, scale: 1, duration: 0.38, ease: "power4.out", stagger: 0.07 },
+        1.637,
+      );
+      tl.fromTo("#s1-glow", { opacity: 0, scale: 0.7 }, { opacity: 1, scale: 1, duration: 0.3, ease: "power2.out" }, 1.637);
+      tl.to("#s1-glow", { opacity: 0.45, duration: 1.2, ease: "sine.inOut" }, 1.95);
+      tl.to(["#s1-meta", "#s1-a", "#s1-b1", "#s1-b2", "#s1-glow"], { opacity: 0, y: -40, duration: 0.32, ease: "power2.in" }, 3.45);
+
+      /* ---------- Scene 2 — Promesa ---------- */
+      tl.fromTo("#s2-photo", { opacity: 0 }, { opacity: 1, duration: 1.1, ease: "power1.out" }, 4.0);
+      tl.fromTo("#s2-img", { scale: 1.14 }, { scale: 1, duration: 4.7, ease: "none" }, 3.8);
+      // beat-grid: 3.82s, 4.39s, 4.91s
+      [
+        ["#s2-h1", 3.82],
+        ["#s2-h2", 4.389],
+        ["#s2-h3", 4.911],
+      ].forEach(([sel, t]) => {
+        tl.fromTo(sel, { opacity: 0, y: 70 }, { opacity: 1, y: 0, duration: 0.6, ease: "power3.out" }, t);
+      });
+      // beat-grid: 6.00s, 6.56s
+      tl.fromTo("#s2-sub", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.5, ease: "power2.out" }, 6.0);
+      tl.fromTo("#s2-strike", { scaleX: 0 }, { scaleX: 1, duration: 0.36, ease: "power2.inOut" }, 6.56);
+      tl.to(["#s2-h1", "#s2-h2", "#s2-h3", "#s2-sub", "#s2-photo"], { opacity: 0, duration: 0.35, ease: "power2.in" }, 8.3);
+
+      /* ---------- Scene 3 — Partidos abiertos ---------- */
+      // beat-locked: 8.742s
+      tl.fromTo("#s3-cap", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.55, ease: "power3.out" }, 8.742);
+      tl.fromTo("#phone", { opacity: 0, y: 160 }, { opacity: 1, y: 0, duration: 0.85, ease: "power3.out" }, 8.742);
+      tl.fromTo("#card", { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.6, ease: "power2.out" }, 9.288);
+      tl.set("#card-bar-fill", { scaleX: 0.75 }, 0);
+      tl.set(["#pill-b", "#btn-b"], { opacity: 0 }, 0);
+      tl.set(["#tap", "#tap-ring"], { opacity: 0 }, 0);
+
+      tl.fromTo("#tap", { opacity: 0, scale: 1.3 }, { opacity: 1, scale: 1, duration: 0.25, ease: "power2.out" }, 10.6);
+      // beat-locked: 10.925s — tap on "Unirse a Partido"
+      tl.to(["#card-btn", "#tap"], { scale: 0.94, duration: 0.09, ease: "power2.in" }, 10.925);
+      tl.to(["#card-btn", "#tap"], { scale: 1, duration: 0.22, ease: "back.out(2.4)" }, 11.015);
+      tl.fromTo("#tap-ring", { opacity: 0.9, scale: 1 }, { opacity: 0, scale: 2.6, duration: 0.6, ease: "power2.out" }, 10.925);
+      tl.to("#tap", { opacity: 0, duration: 0.3, ease: "power1.out" }, 11.2);
+
+      tl.to("#pill-a", { opacity: 0, duration: 0.15 }, 10.98);
+      tl.fromTo("#pill-b", { opacity: 0, scale: 0.7 }, { opacity: 1, scale: 1, duration: 0.3, ease: "back.out(2)" }, 11.0);
+      tl.to("#card-bar-fill", { scaleX: 1, duration: 0.45, ease: "power2.out" }, 11.0);
+      tl.to("#card-btn", { backgroundColor: "rgba(0,0,0,0)", borderColor: "#d7ff00", duration: 0.3, ease: "power1.out" }, 11.0);
+      tl.to("#btn-a", { opacity: 0, duration: 0.15 }, 11.0);
+      tl.fromTo("#btn-b", { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.3, ease: "power2.out" }, 11.08);
+      tl.to(["#s3-cap", "#phone", "#s3-glow"], { opacity: 0, duration: 0.32, ease: "power2.in" }, 12.75);
+
+      /* ---------- Scene 4 — Ranking real ---------- */
+      // beat-locked: 13.108s
+      tl.fromTo("#s4-t1", { opacity: 0, scale: 1.3 }, { opacity: 1, scale: 1, duration: 0.4, ease: "power4.out" }, 13.108);
+      tl.fromTo("#s4-t2", { opacity: 0, scale: 1.3 }, { opacity: 1, scale: 1, duration: 0.4, ease: "power4.out" }, 13.2);
+      // beat-grid: 13.64s
+      tl.fromTo("#s4-card", { opacity: 0, y: 80 }, { opacity: 1, y: 0, duration: 0.6, ease: "power3.out" }, 13.642);
+      const rating = { v: 1000 };
+      const ratingEl = document.getElementById("s4-num");
+      tl.fromTo(
+        rating,
+        { v: 1000 },
+        {
+          v: 1012,
+          duration: 1.09,
+          ease: "power2.out",
+          immediateRender: false,
+          onUpdate: () => {
+            ratingEl.textContent = String(Math.round(rating.v));
+          },
+        },
+        14.199,
+      );
+      // beat-grid: 15.29s, 15.84s
+      tl.fromTo("#s4-plus", { opacity: 0, scale: 0.4 }, { opacity: 1, scale: 1, duration: 0.35, ease: "back.out(2.2)" }, 15.29);
+      tl.fromTo("#s4-line", { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.5, ease: "power2.out" }, 15.836);
+      tl.to(["#s4-t1", "#s4-t2", "#s4-card", "#s4-line", "#s4-glow"], { opacity: 0, duration: 0.32, ease: "power2.in" }, 17.1);
+
+      /* Volt glows breathe on the music's beat grid. */
+      const beats = [
+        9.288, 9.834, 10.368, 10.925, 11.459, 12.016, 12.55,
+        13.642, 14.199, 14.733, 15.29, 15.836, 16.382, 16.927,
+      ];
+      beats.forEach((b) => {
+        const glow = b < 13.1 ? "#s3-glow" : "#s4-glow";
+        tl.fromTo(glow, { opacity: 0.85 }, { opacity: 0.45, duration: 0.42, ease: "power2.out", immediateRender: false }, b);
+      });
+
+      /* ---------- Scene 5 — Logo (same trajectory and bounce as X4MatchLoading) ---------- */
+      const P = (x, y) => ({ x, y });
+      const lerpP = (a, b, t) => P(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t);
+      const straight = (a, b) => [a, lerpP(a, b, 1 / 3), lerpP(a, b, 2 / 3), b];
+      const cubicAt = ([p0, p1, p2, p3], t) => {
+        const u = 1 - t;
+        const a = u * u * u, b = 3 * u * u * t, c = 3 * u * t * t, d = t * t * t;
+        return P(a * p0.x + b * p1.x + c * p2.x + d * p3.x, a * p0.y + b * p1.y + c * p2.y + d * p3.y);
+      };
+      const flatten = (curves, steps = 48) => {
+        const pts = [curves[0][0]];
+        curves.forEach((cv) => {
+          for (let i = 1; i <= steps; i += 1) pts.push(cubicAt(cv, i / steps));
+        });
+        return pts;
+      };
+      const polyLen = (pts) => {
+        let l = 0;
+        for (let i = 1; i < pts.length; i += 1) l += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+        return l;
+      };
+      const toPathData = (curves) =>
+        curves.reduce(
+          (d, [, c1, c2, p]) => `${d} C${c1.x} ${c1.y} ${c2.x} ${c2.y} ${p.x} ${p.y}`,
+          `M${curves[0][0].x} ${curves[0][0].y}`,
+        );
+      const extend = (from, toward, dist) => {
+        const len = Math.hypot(toward.x - from.x, toward.y - from.y) || 1;
+        return P(from.x + ((toward.x - from.x) / len) * dist, from.y + ((toward.y - from.y) / len) * dist);
+      };
+      const interp = (v, xs, ys) => {
+        if (v <= xs[0]) return ys[0];
+        for (let i = 1; i < xs.length; i += 1) {
+          if (v <= xs[i]) return ys[i - 1] + ((ys[i] - ys[i - 1]) * (v - xs[i - 1])) / (xs[i] - xs[i - 1]);
+        }
+        return ys[ys.length - 1];
+      };
+
+      const BALL_CENTER = P(425.7, 93.7);
+      const BALL_RADIUS = 30.5;
+      const START = P(64.26, 238.67);
+      const BOUNCE = P(229.84, 238.66);
+      const TRAIL_END = P(374, 99.8);
+      const DESCENT_CURVES = [
+        [START, P(86.5, 151.62), P(154.34, 98.49), P(211.96, 196.34)],
+        straight(P(211.96, 196.34), BOUNCE),
+      ];
+      const ASCENT_CURVES = [
+        [BOUNCE, P(251, 174.4), P(299.4, 106.6), TRAIL_END],
+        [TRAIL_END, P(389.9, 98.3), P(410, 95.5), BALL_CENTER],
+      ];
+      const TAIL_TIP = P(59.42, 256.67);
+      const TRAIL_TIP = P(386, 100.6);
+      const ASCENT_LEAD = 14;
+      const DESCENT_MASK_CURVES = [
+        straight(TAIL_TIP, START),
+        ...DESCENT_CURVES,
+        straight(BOUNCE, extend(P(211.96, 196.34), BOUNCE, Math.hypot(17.88, 42.32) + 24)),
+      ];
+      const ASCENT_MASK_CURVES = [
+        straight(extend(BOUNCE, ASCENT_CURVES[0][1], -ASCENT_LEAD), BOUNCE),
+        ASCENT_CURVES[0],
+        straight(TRAIL_END, TRAIL_TIP),
+      ];
+      const TAIL_LENGTH = Math.hypot(START.x - TAIL_TIP.x, START.y - TAIL_TIP.y);
+      const DESC_MASK_LEN = polyLen(flatten(DESCENT_MASK_CURVES));
+      const ASC_MASK_LEN = polyLen(flatten(ASCENT_MASK_CURVES));
+
+      const buildTrack = (curves, speedAt, samples = 96) => {
+        const pts = flatten(curves);
+        const dist = [0];
+        for (let i = 1; i < pts.length; i += 1) dist.push(dist[i - 1] + Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y));
+        const length = dist[dist.length - 1];
+        const apexY = Math.min(...pts.map((p) => p.y));
+        const time = [0];
+        for (let i = 1; i < pts.length; i += 1) {
+          const midY = (pts[i].y + pts[i - 1].y) / 2;
+          const midS = (dist[i] + dist[i - 1]) / 2;
+          const speed = Math.max(0.5, speedAt(midY, apexY, midS, length - midS));
+          time.push(time[i - 1] + (dist[i] - dist[i - 1]) / speed);
+        }
+        const total = time[time.length - 1];
+        const x = [], y = [], s = [];
+        let j = 0;
+        for (let k = 0; k <= samples; k += 1) {
+          const target = (total * k) / samples;
+          while (j < pts.length - 2 && time[j + 1] < target) j += 1;
+          const f = Math.min(1, Math.max(0, (target - time[j]) / (time[j + 1] - time[j] || 1)));
+          const p = lerpP(pts[j], pts[j + 1], f);
+          x.push(p.x);
+          y.push(p.y);
+          s.push(dist[j] + (dist[j + 1] - dist[j]) * f);
+        }
+        return { x, y, s, length, time: total };
+      };
+      const projectileSpeed = (y, apexY, apexSq) => Math.sqrt(apexSq + Math.max(0, y - apexY));
+      const DESCENT = buildTrack(DESCENT_CURVES, (y, apexY, traveled) => Math.min(projectileSpeed(y, apexY, 30), Math.sqrt(4.2 * traveled)));
+      const ASCENT = buildTrack(ASCENT_CURVES, (y, apexY, _t, remaining) => Math.min(projectileSpeed(y, apexY, 40), Math.sqrt(0.84 * remaining)));
+      const TOTAL_LENGTH = DESCENT.length + ASCENT.length;
+      const BALL_TURNS = Math.max(1, Math.round((TOTAL_LENGTH / (2 * Math.PI * BALL_RADIUS)) * 0.9));
+      const DEG_PER_UNIT = (360 * BALL_TURNS) / TOTAL_LENGTH;
+
+      const SQUASH = 0.42;
+      const STRETCH = 0.16;
+      const BOUNCE_STEPS = [0, 0.28, 0.45, 0.8, 1];
+      const BOUNCE_SHAPE = [0, SQUASH, SQUASH, -STRETCH, -STRETCH];
+      const PRE_STRETCH_WINDOW = 0.14;
+      const POST_STRETCH_WINDOW = 0.16;
+      const FADE_IN_UNTIL = 0.08;
+
+      const sampleTrack = (track, u) => {
+        const n = track.x.length - 1;
+        const f = Math.min(Math.max(u, 0), 1) * n;
+        const i = Math.min(Math.floor(f), n - 1);
+        const k = f - i;
+        return {
+          x: track.x[i] + (track.x[i + 1] - track.x[i]) * k,
+          y: track.y[i] + (track.y[i + 1] - track.y[i]) * k,
+          s: track.s[i] + (track.s[i + 1] - track.s[i]) * k,
+        };
+      };
+      const trackAngle = (track, u) => {
+        const a = sampleTrack(track, u - 0.01);
+        const b = sampleTrack(track, u + 0.01);
+        return Math.atan2(b.y - a.y, b.x - a.x);
+      };
+
+      const ballEl = document.getElementById("ball");
+      const maskDesc = document.getElementById("mask-desc-path");
+      const maskAsc = document.getElementById("mask-asc-path");
+      maskDesc.setAttribute("d", toPathData(DESCENT_MASK_CURVES));
+      maskDesc.setAttribute("stroke-dasharray", `${DESC_MASK_LEN} ${DESC_MASK_LEN}`);
+      maskAsc.setAttribute("d", toPathData(ASCENT_MASK_CURVES));
+      maskAsc.setAttribute("stroke-dasharray", `${ASC_MASK_LEN} ${ASC_MASK_LEN}`);
+
+      const clock = { c: 0 };
+      const renderLogo = () => {
+        const c = clock.c;
+        let x = BALL_CENTER.x, y = BALL_CENTER.y, traveled = TOTAL_LENGTH;
+        let scaleX = 1, scaleY = 1, stretch = 0, heading = 0, opacity = 1;
+        if (c < 1) {
+          const p = sampleTrack(DESCENT, c);
+          x = p.x;
+          y = p.y;
+          traveled = p.s;
+          opacity = interp(c, [0, FADE_IN_UNTIL], [0, 1]);
+          stretch = interp(c, [1 - PRE_STRETCH_WINDOW, 1], [0, STRETCH]);
+          heading = trackAngle(DESCENT, c);
+        } else if (c < 2) {
+          const squash = interp(c - 1, BOUNCE_STEPS, BOUNCE_SHAPE);
+          x = BOUNCE.x;
+          y = BOUNCE.y;
+          traveled = DESCENT.length;
+          scaleX = squash > 0 ? 1 + squash : 1 + squash * 0.6;
+          scaleY = 1 - squash;
+        } else if (c < 3) {
+          const p = sampleTrack(ASCENT, c - 2);
+          x = p.x;
+          y = p.y;
+          traveled = DESCENT.length + p.s;
+          stretch = interp(c, [2, 2 + POST_STRETCH_WINDOW], [STRETCH, 0]);
+          heading = trackAngle(ASCENT, c - 2);
+        }
+        const h = (heading * 180) / Math.PI;
+        ballEl.setAttribute(
+          "transform",
+          `translate(${x} ${y + BALL_RADIUS * (1 - scaleY)}) rotate(${h}) scale(${1 + stretch} ${1 - stretch * 0.6}) rotate(${-h}) scale(${scaleX} ${scaleY}) rotate(${traveled * DEG_PER_UNIT}) translate(${-BALL_CENTER.x} ${-BALL_CENTER.y})`,
+        );
+        ballEl.setAttribute("opacity", String(opacity));
+
+        const descRevealed =
+          c < 1 ? TAIL_LENGTH * Math.min(1, c / FADE_IN_UNTIL) + sampleTrack(DESCENT, c).s : DESC_MASK_LEN;
+        let ascRevealed = ASC_MASK_LEN;
+        if (c < 1) ascRevealed = 0;
+        else if (c < 2) ascRevealed = ASCENT_LEAD;
+        else if (c < 3) ascRevealed = ASCENT_LEAD + sampleTrack(ASCENT, c - 2).s;
+        maskDesc.setAttribute("stroke-dashoffset", String(DESC_MASK_LEN - Math.min(descRevealed, DESC_MASK_LEN)));
+        maskAsc.setAttribute("stroke-dashoffset", String(ASC_MASK_LEN - Math.min(ascRevealed, ASC_MASK_LEN)));
+      };
+      renderLogo();
+
+      const LOGO_START = 17.55;
+      const BOUNCE_AT = 18.3;
+      const BOUNCE_DUR = 0.15;
+      const ARRIVE_AT = 19.098; // beat-locked: 19.10s
+      tl.fromTo(clock, { c: 0 }, { c: 1, duration: BOUNCE_AT - LOGO_START, ease: "none", immediateRender: false, onUpdate: renderLogo }, LOGO_START);
+      tl.fromTo(clock, { c: 1 }, { c: 2, duration: BOUNCE_DUR, ease: "none", immediateRender: false, onUpdate: renderLogo }, BOUNCE_AT);
+      tl.fromTo(
+        clock,
+        { c: 2 },
+        { c: 3, duration: ARRIVE_AT - BOUNCE_AT - BOUNCE_DUR, ease: "none", immediateRender: false, onUpdate: renderLogo },
+        BOUNCE_AT + BOUNCE_DUR,
+      );
+
+      tl.fromTo("#s5-glow", { opacity: 0 }, { opacity: 0.6, duration: 0.8, ease: "power1.out" }, 17.5);
+      // beat-locked: 18.56s — "X4 MATCH" appears before the ball lands
+      tl.fromTo("#logo-text", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.5, ease: "power2.out" }, 18.564);
+      tl.to("#s5-glow", { opacity: 1, scale: 1.08, duration: 0.25, ease: "power2.out" }, ARRIVE_AT);
+      tl.to("#s5-glow", { opacity: 0.7, scale: 1, duration: 1.2, ease: "sine.inOut" }, ARRIVE_AT + 0.25);
+      // beat-locked: 19.66s, beat-grid: 20.19s
+      tl.fromTo("#s5-tag1", { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.55, ease: "power3.out" }, 19.656);
+      tl.fromTo("#s5-tag2", { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.55, ease: "power3.out" }, 19.8);
+      tl.fromTo("#s5-free", { opacity: 0 }, { opacity: 1, duration: 0.5, ease: "power1.out" }, 20.19);
+
+      window.__timelines["main"] = tl;
+      tl.seek(0);
+    </script>
+  </body>
+</html>

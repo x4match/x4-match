@@ -1,9 +1,9 @@
 import { View, Text, Alert, Linking } from 'react-native';
 import { formatCurrency } from '@/lib/currency';
 import { formatShortDate } from '@/lib/format';
-import { isMovementCollected, type RevenueMovement } from '@/lib/club-revenue';
+import { isMovementCollected, type RevenueMovement } from '@/lib/club/club-revenue';
 import { ui } from '@/theme/tokens';
-import { AppCard, PrimaryButton } from '@/components/padely';
+import { AppCard, PrimaryButton } from '@/components/x4match';
 
 type RevenueMovementRowProps = {
   item: RevenueMovement;

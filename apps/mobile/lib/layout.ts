@@ -1,5 +1,5 @@
 /** Altura aproximada del contenido interno de la FloatingTabBar (sin safe area). */
-export const TAB_BAR_CONTENT_HEIGHT = 72;
+export const TAB_BAR_CONTENT_HEIGHT = 64;
 
 /**
  * Espacio desde el borde inferior de la pantalla hasta arriba de la tab bar.

@@ -1,7 +1,8 @@
-import { View, Text } from 'react-native';
-import { PressableScale } from './PressableScale';
+import { View, Text, Pressable } from 'react-native';
 import { hapticSelection } from '@/lib/haptics';
-import { ui } from '@/theme/tokens';
+import { fontFamily, ui } from '@/theme/tokens';
+
+const MUTED = '#8E8E9F';
 
 type SegmentedOption<T extends string> = {
   value: T;
@@ -15,24 +16,26 @@ type SegmentedControlProps<T extends string> = {
 };
 
 export function SegmentedControl<T extends string>({ options, value, onChange }: SegmentedControlProps<T>) {
+  const lime = ui.colors.primary;
+
   return (
     <View
       style={{
         flexDirection: 'row',
         width: '100%',
-        backgroundColor: ui.colors.surface1,
-        borderRadius: ui.radius.pill,
-        padding: 4,
+        gap: 3,
+        padding: 3,
+        borderRadius: 16,
+        backgroundColor: 'rgba(255,255,255,0.05)',
         borderWidth: 1,
-        borderColor: ui.colors.border,
-        gap: 4,
+        borderColor: 'rgba(255,255,255,0.08)',
       }}
     >
       {options.map((option) => {
         const active = option.value === value;
         return (
           <View key={option.value} style={{ flex: 1 }}>
-            <PressableScale
+            <Pressable
               accessibilityRole="tab"
               accessibilityLabel={option.label}
               accessibilityState={{ selected: active }}
@@ -41,29 +44,35 @@ export function SegmentedControl<T extends string>({ options, value, onChange }:
                 onChange(option.value);
               }}
               style={{
-                paddingHorizontal: 12,
-                paddingVertical: 10,
-                minHeight: 44,
+                height: 38,
+                borderRadius: 13,
                 alignItems: 'center',
                 justifyContent: 'center',
-                borderRadius: ui.radius.pill,
-                backgroundColor: active ? ui.colors.primarySoft : 'transparent',
-                borderWidth: active ? 1 : 0,
-                borderColor: active ? ui.colors.primary : 'transparent',
+                backgroundColor: active ? lime : 'transparent',
+                ...(active
+                  ? {
+                      shadowColor: lime,
+                      shadowOpacity: 0.2,
+                      shadowRadius: 8,
+                      shadowOffset: { width: 0, height: 4 },
+                      elevation: 4,
+                    }
+                  : null),
               }}
             >
               <Text
                 numberOfLines={1}
                 style={{
-                  fontFamily: ui.typography.label.fontFamily,
-                  fontSize: 13,
+                  fontSize: 12,
+                  lineHeight: 18,
+                  fontFamily: fontFamily.regular,
                   textAlign: 'center',
-                  color: active ? ui.colors.primary : ui.colors.textSecondary,
+                  color: active ? '#000000' : MUTED,
                 }}
               >
                 {option.label}
               </Text>
-            </PressableScale>
+            </Pressable>
           </View>
         );
       })}

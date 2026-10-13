@@ -74,7 +74,7 @@ export async function requestPlayerCoordinates(
     if (showAlerts) {
       Alert.alert(
         'Permiso denegado',
-        'Sin ubicación solo vamos a poder sugerirte partidos por zona. Podés activarla cuando quieras.',
+        'Sin ubicación solo vamos a poder sugerirte partidos cercanos. Podés activarla cuando quieras.',
       );
     }
     return null;
@@ -121,7 +121,8 @@ export function formatDistanceKm(km?: number | string | null): string | null {
   if (km == null || km === '') return null;
   const value = typeof km === 'number' ? km : Number(km);
   if (!Number.isFinite(value) || value < 0) return null;
-  if (value < 1) return `${Math.max(100, Math.round(value * 1000))} m`;
+  // No mostrar metros exactos: menos de 1 km → "-1 km"
+  if (value < 1) return '-1 km';
   if (value < 10) return `${value.toFixed(1)} km`;
   return `${Math.round(value)} km`;
 }
