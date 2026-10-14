@@ -15,6 +15,16 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 export class ChatController {
   constructor(private chatService: ChatService) {}
 
+  @Get('me/unread-chats')
+  async getUnreadChats(@CurrentUser() user: any) {
+    return this.chatService.getUnreadByMatch(user.sub);
+  }
+
+  @Post(':id/messages/read')
+  async markRead(@Param('id') matchId: string, @CurrentUser() user: any) {
+    return this.chatService.markMatchChatRead(matchId, user.sub);
+  }
+
   @Get(':id/messages')
   async getMessages(
     @Param('id') matchId: string,

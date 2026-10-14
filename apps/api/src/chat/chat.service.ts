@@ -71,6 +71,43 @@ export class ChatService {
     return message;
   }
 
+  /** Mensajes sin leer de otros jugadores en los chats de tus partidos activos. */
+  async getUnreadByMatch(userId: string) {
+    const result = await this.db.query<{ match_id: string; unread_count: number }>(
+      `SELECT ch.match_id, COUNT(m.id)::int AS unread_count
+       FROM match_players mp
+       INNER JOIN players p ON p.id = mp.player_id
+       INNER JOIN matches mt ON mt.id = mp.match_id
+       INNER JOIN chats ch ON ch.match_id = mp.match_id
+       INNER JOIN messages m ON m.chat_id = ch.id
+       LEFT JOIN match_chat_reads r ON r.match_id = mp.match_id AND r.user_id = $1
+       WHERE p.user_id = $1
+         AND mp.status IN ('JOINED', 'CONFIRMED')
+         AND mt.status IN ('OPEN', 'FULL', 'CONFIRMED', 'IN_PROGRESS', 'FINISHED', 'DISPUTED')
+         AND m.sender_user_id <> $1
+         AND (r.last_read_at IS NULL OR m.created_at > r.last_read_at)
+       GROUP BY ch.match_id`,
+      [userId],
+    );
+    const matches = result.rows.map((row) => ({
+      matchId: String(row.match_id),
+      unreadCount: Number(row.unread_count),
+    }));
+    const count = matches.reduce((sum, m) => sum + m.unreadCount, 0);
+    return { count, matches };
+  }
+
+  async markMatchChatRead(matchId: string, userId: string) {
+    await this.assertParticipant(matchId, userId);
+    await this.db.query(
+      `INSERT INTO match_chat_reads (match_id, user_id, last_read_at)
+       VALUES ($1, $2, NOW())
+       ON CONFLICT (match_id, user_id) DO UPDATE SET last_read_at = NOW()`,
+      [matchId, userId],
+    );
+    return { ok: true, matchId };
+  }
+
   private async listOtherParticipants(matchId: string, excludeUserId: string): Promise<string[]> {
     const result = await this.db.query<{ user_id: string }>(
       `SELECT DISTINCT p.user_id

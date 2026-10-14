@@ -19,6 +19,11 @@ export class MessagingController {
     return this.messagingService.listPendingRequests(user.sub);
   }
 
+  @Get('unread-count')
+  unreadCount(@CurrentUser() user: { sub: string }) {
+    return this.messagingService.getUnreadCount(user.sub);
+  }
+
   @Get('access/:userId')
   async getAccess(@CurrentUser() user: { sub: string }, @Param('userId') userId: string) {
     const otherUserId = await this.messagingService.resolveUserIdFromPlayer(userId);
@@ -42,6 +47,11 @@ export class MessagingController {
   @Post(':id/reject')
   reject(@CurrentUser() user: { sub: string }, @Param('id') id: string) {
     return this.messagingService.rejectConversation(user.sub, id);
+  }
+
+  @Post(':id/read')
+  markAsRead(@CurrentUser() user: { sub: string }, @Param('id') id: string) {
+    return this.messagingService.markAsRead(user.sub, id);
   }
 
   @Get(':id/messages')

@@ -272,12 +272,20 @@ export class MessagingService {
            WHERE m.conversation_id = c.id
              AND (h.hidden_at IS NULL OR m.created_at > h.hidden_at)
            ORDER BY m.created_at DESC LIMIT 1
-         ) AS last_message_at
+         ) AS last_message_at,
+         (
+           SELECT COUNT(*)::int FROM dm_messages m
+           WHERE m.conversation_id = c.id
+             AND m.sender_id <> $1
+             AND (h.hidden_at IS NULL OR m.created_at > h.hidden_at)
+             AND (r.last_read_at IS NULL OR m.created_at > r.last_read_at)
+         ) AS unread_count
        FROM dm_conversations c
        INNER JOIN users u ON u.id = CASE WHEN c.user_a_id = $1 THEN c.user_b_id ELSE c.user_a_id END
        LEFT JOIN players p ON p.user_id = u.id
        ${OTHER_CLUB_LATERAL}
        LEFT JOIN dm_conversation_hides h ON h.conversation_id = c.id AND h.user_id = $1
+       LEFT JOIN dm_conversation_reads r ON r.conversation_id = c.id AND r.user_id = $1
        WHERE (c.user_a_id = $1 OR c.user_b_id = $1)
          AND (
            h.hidden_at IS NULL
@@ -324,6 +332,51 @@ export class MessagingService {
       [userId],
     );
     return result.rows;
+  }
+
+  /** Mensajes sin leer en chats activos + solicitudes de mensaje recibidas. */
+  async getUnreadCount(userId: string) {
+    const result = await this.db.query(
+      `SELECT
+         (
+           SELECT COUNT(*)::int
+           FROM dm_messages m
+           INNER JOIN dm_conversations c ON c.id = m.conversation_id
+           LEFT JOIN dm_conversation_hides h ON h.conversation_id = c.id AND h.user_id = $1
+           LEFT JOIN dm_conversation_reads r ON r.conversation_id = c.id AND r.user_id = $1
+           WHERE (c.user_a_id = $1 OR c.user_b_id = $1)
+             AND c.status = 'active'
+             AND m.sender_id <> $1
+             AND (h.hidden_at IS NULL OR m.created_at > h.hidden_at)
+             AND (r.last_read_at IS NULL OR m.created_at > r.last_read_at)
+         ) AS messages,
+         (
+           SELECT COUNT(*)::int
+           FROM dm_conversations c
+           WHERE c.status = 'pending'
+             AND c.requested_by_id <> $1
+             AND (c.user_a_id = $1 OR c.user_b_id = $1)
+             AND NOT EXISTS (
+               SELECT 1 FROM dm_conversation_hides h
+               WHERE h.conversation_id = c.id AND h.user_id = $1
+             )
+         ) AS requests`,
+      [userId],
+    );
+    const messages = Number(result.rows[0]?.messages ?? 0);
+    const requests = Number(result.rows[0]?.requests ?? 0);
+    return { count: messages + requests, messages, requests };
+  }
+
+  async markAsRead(userId: string, conversationId: string) {
+    await this.getConversationForUser(conversationId, userId);
+    await this.db.query(
+      `INSERT INTO dm_conversation_reads (conversation_id, user_id, last_read_at)
+       VALUES ($1, $2, NOW())
+       ON CONFLICT (conversation_id, user_id) DO UPDATE SET last_read_at = NOW()`,
+      [conversationId, userId],
+    );
+    return { ok: true, id: conversationId };
   }
 
   async getMessages(userId: string, conversationId: string) {
