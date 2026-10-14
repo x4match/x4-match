@@ -84,6 +84,22 @@ export class NotificationsService {
     return { ok: true };
   }
 
+  async remove(userId: string, notificationId: string) {
+    const result = await this.db.query(
+      `DELETE FROM notifications WHERE id = $1 AND user_id = $2 RETURNING id`,
+      [notificationId, userId],
+    );
+    if (!result.rows[0]) {
+      throw new NotFoundException('Notificación no encontrada');
+    }
+    return { ok: true, id: notificationId };
+  }
+
+  async removeAll(userId: string) {
+    await this.db.query(`DELETE FROM notifications WHERE user_id = $1`, [userId]);
+    return { ok: true };
+  }
+
   async unreadCount(userId: string) {
     const result = await this.db.query(
       `SELECT COUNT(*)::int AS count FROM notifications WHERE user_id = $1 AND read = FALSE`,

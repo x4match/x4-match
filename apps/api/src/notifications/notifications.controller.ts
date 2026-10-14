@@ -44,4 +44,15 @@ export class NotificationsController {
   markRead(@Param('id') id: string, @CurrentUser() user: { sub: string }) {
     return this.notificationsService.markRead(user.sub, id);
   }
+
+  @Delete()
+  removeAll(@CurrentUser() user: { sub: string }) {
+    return this.notificationsService.removeAll(user.sub);
+  }
+
+  // Después de `push-token` para que no lo capture como id.
+  @Delete(':id')
+  remove(@Param('id') id: string, @CurrentUser() user: { sub: string }) {
+    return this.notificationsService.remove(user.sub, id);
+  }
 }
