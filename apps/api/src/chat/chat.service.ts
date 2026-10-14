@@ -105,6 +105,7 @@ export class ChatService {
        ON CONFLICT (match_id, user_id) DO UPDATE SET last_read_at = NOW()`,
       [matchId, userId],
     );
+    await this.notifications.removeByData(userId, 'MATCH_CHAT_MESSAGE', 'matchId', matchId);
     return { ok: true, matchId };
   }
 

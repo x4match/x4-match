@@ -376,6 +376,7 @@ export class MessagingService {
        ON CONFLICT (conversation_id, user_id) DO UPDATE SET last_read_at = NOW()`,
       [conversationId, userId],
     );
+    await this.notifications.removeByData(userId, 'DM_MESSAGE', 'conversationId', conversationId);
     return { ok: true, id: conversationId };
   }
 

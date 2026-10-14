@@ -95,6 +95,15 @@ export class NotificationsService {
     return { ok: true, id: notificationId };
   }
 
+  /** Borra las notificaciones de un tipo cuyo `data[key]` coincide (ej. avisos de un chat ya leído). */
+  async removeByData(userId: string, type: string, key: string, value: string) {
+    await this.db.query(
+      `DELETE FROM notifications
+       WHERE user_id = $1 AND type = $2 AND data ->> $3 = $4`,
+      [userId, type, key, value],
+    );
+  }
+
   async removeAll(userId: string) {
     await this.db.query(`DELETE FROM notifications WHERE user_id = $1`, [userId]);
     return { ok: true };
