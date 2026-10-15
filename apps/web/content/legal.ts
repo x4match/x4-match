@@ -1,6 +1,6 @@
 import type { LegalDocument } from '@/lib/legal-types';
 
-const updated = '4 de septiembre de 2026';
+const updated = '15 de octubre de 2026';
 
 export const termsPlayers: LegalDocument = {
   slug: 'terminos',
@@ -34,8 +34,10 @@ export const termsPlayers: LegalDocument = {
     {
       title: '4. Pagos y reembolsos',
       paragraphs: [
-        'Los pagos de señas, inscripciones o productos del club se procesan a través de Mercado Pago u otros medios configurados por cada club.',
-        'x4 match no es intermediario de fondos entre jugadores y clubes. Reclamos por cobros, cancelaciones o reembolsos deben dirigirse al club correspondiente según su política.',
+        'Los pagos de turnos, inscripciones o productos del club se procesan a través de Mercado Pago u otros medios configurados por cada club. El precio lo fija el club.',
+        'Cada jugador puede pagar su parte del turno o uno solo puede pagarlo completo. La reserva de la cancha queda confirmada cuando el turno está pago en su totalidad.',
+        'Los pagos online se acreditan directamente en la cuenta de Mercado Pago del club. x4 match puede percibir del club una comisión sobre esos cobros; esa comisión no se suma al precio que pagás.',
+        'x4 match no custodia los fondos de los jugadores. Reclamos por cobros, cancelaciones o reembolsos deben dirigirse al club correspondiente según su política.',
         'El uso de la app para jugadores es gratuito. Podemos ofrecer funciones premium en el futuro con aviso previo.',
       ],
     },
@@ -87,9 +89,10 @@ export const termsPlayers: LegalDocument = {
 
 export const termsClubs: LegalDocument = {
   slug: 'terminos-clubes',
-  title: 'Términos y Condiciones — Clubes (SaaS)',
+  title: 'Términos y Condiciones — Clubes',
   updated,
-  summary: 'Contrato de licencia de software entre x4 match y clubes o gestores deportivos.',
+  summary:
+    'Contrato de uso de la plataforma entre x4 match y clubes o gestores deportivos. Modelo por comisión sobre cobros online, sin abono mensual.',
   sections: [
     {
       title: '1. Objeto',
@@ -99,26 +102,29 @@ export const termsClubs: LegalDocument = {
       ],
     },
     {
-      title: '2. Período de prueba',
+      title: '2. Precio: comisión por cobro',
       paragraphs: [
-        'Los clubes nuevos pueden acceder a un período de prueba ("Pilot") de 90 días sin costo, sujeto a firma del Acuerdo de Período de Prueba.',
-        'Salvo cancelación con al menos 7 días de anticipación al vencimiento del trial, el Club pasará automáticamente al plan Club vigente al finalizar el período de prueba.',
-        'Si no se registra método de pago antes del vencimiento, x4 match puede restringir funciones de publicación manteniendo acceso de solo lectura a los datos.',
+        'El uso del Software no tiene abono mensual. Como contraprestación, x4 match percibe una comisión porcentual sobre cada cobro online que el Club procese a través de la Plataforma con Mercado Pago (por ejemplo, el pago de turnos).',
+        'El porcentaje de comisión se acuerda con cada Club y se informa en el panel del Club, en la sección Pagos. Los cobros registrados manualmente (efectivo, transferencia o pago en recepción) no generan comisión.',
+        'x4 match puede modificar el porcentaje con un aviso previo de 30 días. El nuevo porcentaje se aplica solo a los cobros posteriores a su entrada en vigencia. Si el Club no está de acuerdo, puede dar por terminado el contrato antes de esa fecha.',
+        'x4 match no percibe comisión sobre los montos que se reembolsen al jugador.',
+        'x4 match puede ofrecer condiciones promocionales, como una comisión reducida por un período determinado, que se informarán por escrito.',
       ],
     },
     {
-      title: '3. Precio y facturación',
+      title: '3. Facturación de la comisión',
       paragraphs: [
-        'Los precios publicados en la web o propuesta comercial son en pesos argentinos más IVA cuando el emisor sea Responsable Inscripto. En etapa puente (monotributo) el precio puede publicarse como importe final.',
-        'La facturación es mensual o anual según el plan elegido. El medio de pago será transferencia, débito o Mercado Pago de x4 match (cuenta de la sociedad / responsable fiscal), según acuerdo. El cobro de la suscripción del Software no se realiza mediante compras dentro de la aplicación iOS de la App Store.',
-        'x4 match puede actualizar precios con aviso de 30 días para el período siguiente.',
+        'Los importes se expresan en pesos argentinos. Cuando x4 match sea Responsable Inscripto, la comisión incluye o adiciona IVA según corresponda; en etapa de monotributo, la comisión es el importe final.',
+        'x4 match emitirá al Club los comprobantes fiscales correspondientes a las comisiones percibidas en cada período.',
+        'Si en el futuro se ofrecen planes con abono, se informarán con aviso previo y requerirán la aceptación expresa del Club. No se cobran planes mediante compras dentro de la aplicación iOS de la App Store.',
       ],
     },
     {
       title: '4. Mercado Pago y cobros a jugadores',
       paragraphs: [
-        'El Club conecta su propia cuenta de Mercado Pago para cobrar señas, inscripciones y ventas de tienda.',
-        'x4 match no custodia fondos de jugadores ni realiza pagos a terceros en nombre del Club.',
+        'El Club conecta su propia cuenta de Mercado Pago para cobrar turnos, inscripciones y ventas de tienda. Los fondos se acreditan directamente en la cuenta del Club.',
+        'Al conectar su cuenta, el Club autoriza a que, en cada cobro online, Mercado Pago descuente la comisión de x4 match y la acredite en la cuenta de Mercado Pago de x4 match. El Club recibe el monto cobrado menos esa comisión y menos los cargos propios de Mercado Pago, que son a cargo del Club.',
+        'Fuera de esa comisión, x4 match no custodia fondos de jugadores ni realiza pagos a terceros en nombre del Club.',
         'El Club es único responsable de facturar al jugador, cumplir normativa fiscal y atender reclamos de cobro.',
       ],
     },
@@ -147,15 +153,15 @@ export const termsClubs: LegalDocument = {
     {
       title: '8. Limitación de responsabilidad',
       paragraphs: [
-        'La responsabilidad total de x4 match frente al Club por cualquier concepto no excederá el monto abonado por el Club en los últimos 12 meses.',
+        'La responsabilidad total de x4 match frente al Club por cualquier concepto no excederá el monto de las comisiones percibidas por x4 match de ese Club en los últimos 12 meses.',
         'No respondemos por lucro cesante, pérdida de datos por causas ajenas a nuestra negligencia grave, ni por actos del Club frente a jugadores.',
       ],
     },
     {
       title: '9. Terminación',
       paragraphs: [
-        'Cualquiera de las partes puede rescindir con preaviso según el plan contratado. x4 match puede suspender de inmediato ante incumplimiento grave o uso fraudulento.',
-        'Tras la terminación, cesan los derechos de uso del Software. Las obligaciones de pago devengadas subsisten.',
+        'Cualquiera de las partes puede rescindir con un preaviso de 30 días. x4 match puede suspender de inmediato ante incumplimiento grave o uso fraudulento.',
+        'Tras la terminación, cesan los derechos de uso del Software y se desconecta la integración con Mercado Pago. Las comisiones devengadas por cobros anteriores subsisten.',
       ],
     },
     {
@@ -208,7 +214,7 @@ export const privacyPolicy: LegalDocument = {
       paragraphs: [
         'Compartimos datos con clubes donde reservás o jugás, para que puedan gestionar turnos y cobros.',
         'Utilizamos proveedores de infraestructura (hosting, email, analítica) que actúan como encargados del tratamiento bajo contrato.',
-        'Los pagos entre jugador y club los procesa Mercado Pago del club; x4 match no accede a datos completos de tarjetas.',
+        'Los pagos entre jugador y club los procesa Mercado Pago en la cuenta del club; x4 match solo recibe la información necesaria para confirmar la reserva y calcular su comisión, y no accede a datos completos de tarjetas.',
       ],
     },
     {

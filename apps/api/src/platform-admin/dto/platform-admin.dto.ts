@@ -3,6 +3,7 @@ import {
   IsEmail,
   IsIn,
   IsInt,
+  IsNumber,
   IsOptional,
   IsString,
   Max,
@@ -71,6 +72,13 @@ export class SuspendClubDto {
 export class OpsNotesDto {
   @IsString()
   notes!: string;
+}
+
+export class UpdatePlatformFeeDto {
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(30)
+  platformFeePercent!: number;
 }
 
 export class ReviewClubRegistrationDto {

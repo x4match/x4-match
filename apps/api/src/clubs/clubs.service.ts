@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { isClubRole } from '../common/roles';
 import { getMonthKey, resolvePlayerRating, resolveVisibleLevelCategory } from '../common/utils';
-import { COURT_SLOT_END_AT_SQL } from '../common/utils/court-schedule.util';
+import { COURT_SLOT_END_AT_SQL, courtSlotAtSql } from '../common/utils/court-schedule.util';
 import { deleteCloudinaryAsset, uploadImageBuffer } from '../common/cloudinary/cloudinary.util';
 import { DatabaseService } from '../database/database.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -533,8 +533,16 @@ export class ClubsService {
 
   async listCourtSlots(clubId: string, userId?: string) {
     await this.findOne(clubId);
-    if (userId) {
-      await this.assertClubRole(userId, clubId);
+    const canManage = userId ? await this.isClubAdminOf(clubId, userId) : false;
+    if (!canManage) {
+      const publicResult = await this.db.query(
+        `SELECT id, club_id, court_id, court_label, slot_date, start_hour, end_hour, status, bonus_points, price_per_hour
+         FROM court_availability_slots
+         WHERE club_id = $1 AND status = 'OPEN' AND ${courtSlotAtSql('start_hour')} > NOW()
+         ORDER BY slot_date ASC, start_hour ASC`,
+        [clubId],
+      );
+      return publicResult.rows;
     }
     await this.db.query(
       `UPDATE court_availability_slots
@@ -1483,7 +1491,7 @@ export class ClubsService {
       ...recentDeposits.rows.map((row) => ({
         id: row.id,
         kind: 'deposit' as const,
-        label: row.match_title ? `Seña · ${row.match_title}` : 'Seña de cancha',
+        label: row.match_title ? `Turno · ${row.match_title}` : 'Pago de cancha',
         userName: row.user_name,
         amount: Number(row.amount),
         status: row.status,
@@ -2089,20 +2097,20 @@ export class ClubsService {
     );
     const deposit = row.rows[0];
     if (!deposit || deposit.club_id !== clubId) {
-      throw new NotFoundException('Seña no encontrada en este club');
+      throw new NotFoundException('Pago no encontrado en este club');
     }
     if (deposit.status === 'APPROVED') {
       return { ok: true, alreadyPaid: true };
     }
     if (deposit.status !== 'PENDING') {
       throw new BadRequestException(
-        `La seña no se puede marcar como pagada (estado actual: ${deposit.status})`,
+        `El pago no se puede marcar como cobrado (estado actual: ${deposit.status})`,
       );
     }
 
     const approved = await this.paymentsService.approveDeposit(depositId, 'manual-reception');
     if (!approved) {
-      throw new BadRequestException('No se pudo aprobar la seña');
+      throw new BadRequestException('No se pudo aprobar el pago');
     }
 
     await this.db.query(

@@ -164,7 +164,7 @@ export default function MonitorPage() {
               <header className="tile-header">
                 <div>
                   <h2 id="revenue-title" className="tile-title">
-                    Señas cobradas
+                    Turnos cobrados
                   </h2>
                   <p className="tile-subtitle">Depósitos aprobados por semana</p>
                 </div>
@@ -178,7 +178,7 @@ export default function MonitorPage() {
                 <TrendChart
                   data={revenueData}
                   variant="bar"
-                  seriesLabel="Señas aprobadas"
+                  seriesLabel="Turnos cobrados"
                   formatValue={formatCurrency}
                   formatAxis={formatCurrencyCompact}
                   height={200}

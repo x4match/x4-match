@@ -59,7 +59,7 @@ export class UpdateClubDto {
   @Min(0)
   courtPricePerHour?: number;
 
-  /** Porcentaje de seña sobre el precio (0–100). */
+  /** Sin uso: el turno se cobra completo. Se acepta por compatibilidad con versiones viejas de la app. */
   @IsOptional()
   @Type(() => Number)
   @IsNumber()

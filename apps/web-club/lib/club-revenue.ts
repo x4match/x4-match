@@ -40,7 +40,7 @@ function csvEscape(value: string | number): string {
 }
 
 function movementKindLabel(kind: string): string {
-  return kind === 'shop' ? 'Tienda' : 'Seña';
+  return kind === 'shop' ? 'Tienda' : 'Turno';
 }
 
 function movementStatusLabel(status: string): string {
@@ -61,7 +61,7 @@ export function buildRevenueCsv(params: {
     `Período (días),${periodDays}`,
     `Total cobrado,${summary.totalCollected}`,
     `Total pendiente,${summary.totalPending}`,
-    `Señas cobradas,${summary.collectedDeposits}`,
+    `Turnos cobrados,${summary.collectedDeposits}`,
     `Tienda cobrada,${summary.collectedShop}`,
     '',
     'Fecha,Tipo,Concepto,Jugador,Monto,Estado,Provider,MatchId,Cancha',

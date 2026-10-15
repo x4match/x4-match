@@ -7,7 +7,6 @@ import { api } from '@/lib/api';
 import { formatCurrency } from '@/lib/currency';
 import {
   clubCoverUrl,
-  clubDepositPercent,
   clubHourlyPrice,
   clubLogoUrl,
   type ClubDetail,
@@ -79,7 +78,6 @@ export default function PerfilPage() {
   const [email, setEmail] = useState('');
   const [description, setDescription] = useState('');
   const [courtPricePerHour, setCourtPricePerHour] = useState('');
-  const [depositPercent, setDepositPercent] = useState('');
   const [newClubName, setNewClubName] = useState('');
   const [newClubLocation, setNewClubLocation] = useState<ClubLocationValue>(emptyClubLocation);
 
@@ -99,9 +97,7 @@ export default function PerfilPage() {
     setEmail(c.email || '');
     setDescription(c.description || '');
     const hourly = clubHourlyPrice(c);
-    const deposit = clubDepositPercent(c);
     setCourtPricePerHour(hourly ? String(hourly) : '');
-    setDepositPercent(deposit ? String(deposit) : '');
   }, [clubQuery.data]);
 
   const saveClub = useMutation({
@@ -134,15 +130,8 @@ export default function PerfilPage() {
   const savePricing = useMutation({
     mutationFn: async () => {
       const price = Number(String(courtPricePerHour).replace(',', '.'));
-      const deposit = Number(String(depositPercent).replace(',', '.') || '0');
       if (!Number.isFinite(price) || price < 0) throw new Error('Tarifa inválida');
-      if (!Number.isFinite(deposit) || deposit < 0 || deposit > 100) {
-        throw new Error('Seña % debe estar entre 0 y 100');
-      }
-      await api.patch(`/clubs/${activeClubId}`, {
-        courtPricePerHour: price,
-        depositPercent: deposit,
-      });
+      await api.patch(`/clubs/${activeClubId}`, { courtPricePerHour: price });
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['club-detail', activeClubId] });
@@ -361,19 +350,11 @@ export default function PerfilPage() {
             >
               Guardar datos
             </Button>
-            <div className="space-y-1">
+            <div className="space-y-1 sm:col-span-2">
               <Label>Tarifa base / hora</Label>
               <Input
                 value={courtPricePerHour}
                 onChange={(e) => setCourtPricePerHour(e.target.value)}
-                className="rounded-xl"
-              />
-            </div>
-            <div className="space-y-1">
-              <Label>Seña (%)</Label>
-              <Input
-                value={depositPercent}
-                onChange={(e) => setDepositPercent(e.target.value)}
                 className="rounded-xl"
               />
             </div>

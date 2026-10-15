@@ -105,7 +105,7 @@ export default function FacturacionPage() {
         {[
           { label: 'Cobrado', value: data.summary.totalCollected },
           { label: 'Pendiente', value: data.summary.totalPending },
-          { label: 'Señas cobradas', value: data.summary.collectedDeposits },
+          { label: 'Turnos cobrados', value: data.summary.collectedDeposits },
           { label: 'Tienda cobrada', value: data.summary.collectedShop },
         ].map((kpi) => (
           <Card key={kpi.label}>
@@ -126,7 +126,7 @@ export default function FacturacionPage() {
                 <div>
                   <div className="flex items-center gap-2">
                     <p className="font-semibold">{item.label}</p>
-                    <Badge variant="secondary">{item.kind === 'shop' ? 'Tienda' : 'Seña'}</Badge>
+                    <Badge variant="secondary">{item.kind === 'shop' ? 'Tienda' : 'Turno'}</Badge>
                   </div>
                   <p className="text-sm text-muted-foreground">
                     {item.userName} · {formatFullDate(item.occurredAt)}

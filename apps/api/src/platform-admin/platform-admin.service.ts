@@ -163,7 +163,7 @@ export class PlatformAdminService {
     values.push(limit, offset);
 
     const result = await this.db.query(
-      `SELECT c.id, c.name, c.city, c.subscription_plan, c.created_at,
+      `SELECT c.id, c.name, c.city, c.subscription_plan, c.platform_fee_percent, c.created_at,
               cb.status AS billing_status, cb.trial_mode, cb.trial_ends_at,
               cpc.status AS mp_status
        FROM clubs c
@@ -211,6 +211,17 @@ export class PlatformAdminService {
     );
 
     return { club, trial, admins: admins.rows };
+  }
+
+  async setClubPlatformFee(clubId: string, platformFeePercent: number) {
+    const result = await this.db.query(
+      `UPDATE clubs
+       SET platform_fee_percent = $2, updated_at = NOW()
+       WHERE id = $1
+       RETURNING id, platform_fee_percent`,
+      [clubId, platformFeePercent],
+    );
+    return result.rows[0] ?? null;
   }
 
   async listClubRegistrations(params: {

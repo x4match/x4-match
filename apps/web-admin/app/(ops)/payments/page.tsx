@@ -29,7 +29,7 @@ export default function PaymentsPage() {
 
   return (
     <div>
-      <h1 style={{ marginTop: 0 }}>Pagos (señas)</h1>
+      <h1 style={{ marginTop: 0 }}>Pagos de turnos</h1>
 
       <TableFilters
         fields={[

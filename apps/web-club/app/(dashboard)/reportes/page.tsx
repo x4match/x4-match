@@ -148,7 +148,7 @@ export default function ReportesPage() {
                   {formatCurrency(report.profitability.collectedTotal)}
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Señas {formatCurrency(report.profitability.collectedDeposits)} · tienda{' '}
+                  Turnos {formatCurrency(report.profitability.collectedDeposits)} · tienda{' '}
                   {formatCurrency(report.profitability.shopRevenue)}
                 </p>
               </CardContent>

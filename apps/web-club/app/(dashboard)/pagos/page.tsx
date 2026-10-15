@@ -9,6 +9,7 @@ import { api } from '@/lib/api';
 import {
   clubPaymentStatusLabel,
   clubPaymentStatusTone,
+  formatPlatformFeePercent,
   type ClubPaymentConfigStatus,
 } from '@/lib/club-payments';
 import { useClub } from '@/contexts/ClubContext';
@@ -158,6 +159,21 @@ export default function PagosPage() {
           <span className={cn('rounded-full px-3 py-1 text-xs font-bold', statusBadgeClass(tone))}>
             {clubPaymentStatusLabel(status)}
           </span>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="flex flex-col gap-1 p-5">
+          <div className="flex items-center justify-between">
+            <p className="font-bold">Comisión x4 match</p>
+            <p className="text-lg font-bold text-primary">
+              {formatPlatformFeePercent(paymentStatus.platformFeePercent)}
+            </p>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Se descuenta de cada cobro online con Mercado Pago (pagos de turnos). Los cobros en
+            recepción no tienen comisión.
+          </p>
         </CardContent>
       </Card>
 

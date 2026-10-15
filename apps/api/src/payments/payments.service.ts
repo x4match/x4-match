@@ -352,7 +352,12 @@ export class PaymentsService {
       totalAmount,
       currency,
     );
-    await this.paymentsRepo.updateCheckoutUrl(deposit.id, checkout.initPoint, checkout.preferenceId);
+    await this.paymentsRepo.updateCheckoutUrl(
+      deposit.id,
+      checkout.initPoint,
+      checkout.preferenceId,
+      checkout.platformFeeAmount,
+    );
 
     return {
       required: true,
@@ -395,8 +400,17 @@ export class PaymentsService {
         ? `/payments/webhooks/mercadopago/clubs/${match.club_id}`
         : '/payments/webhooks/mercadopago';
 
+    // marketplace_fee solo aplica cuando cobra la cuenta MP del club (OAuth); con el token
+    // de la plataforma el dinero ya entra completo a x4 Match.
+    let platformFeeAmount = 0;
+    if (match.club_id && resolved.source === 'club') {
+      const feePercent = await this.paymentsRepo.getClubPlatformFeePercent(match.club_id);
+      platformFeeAmount = Math.round(amount * feePercent) / 100;
+    }
+
     const result = await preference.create({
       body: {
+        ...(platformFeeAmount > 0 ? { marketplace_fee: platformFeeAmount } : {}),
         items: [
           {
             id: externalReference,
@@ -422,7 +436,7 @@ export class PaymentsService {
       throw new BadRequestException('Mercado Pago no devolvió URL de pago');
     }
 
-    return { initPoint, preferenceId: String(result.id) };
+    return { initPoint, preferenceId: String(result.id), platformFeeAmount };
   }
 
   async simulateMockPayment(depositId: string, userId: string) {

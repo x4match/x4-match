@@ -13,7 +13,13 @@ export type ClubPaymentConfigStatus = {
   oauthConfigured: boolean;
   mockConnectAvailable: boolean;
   usesPlatformFallback: boolean;
+  platformFeePercent?: number;
 };
+
+export function formatPlatformFeePercent(value?: number | null): string {
+  const n = Number(value ?? 0);
+  return `${(Number.isFinite(n) ? n : 0).toLocaleString('es-AR', { maximumFractionDigits: 2 })}%`;
+}
 
 export function clubPaymentStatusLabel(status: ClubPaymentStatus): string {
   switch (status) {

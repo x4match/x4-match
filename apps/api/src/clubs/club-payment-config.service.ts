@@ -3,6 +3,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  OnModuleInit,
 } from '@nestjs/common';
 import { createHmac, timingSafeEqual } from 'crypto';
 import { decryptSecret, encryptSecret } from '../common/utils/token-crypto';
@@ -19,6 +20,7 @@ export type ClubPaymentStatusResponse = {
   oauthConfigured: boolean;
   mockConnectAvailable: boolean;
   usesPlatformFallback: boolean;
+  platformFeePercent: number;
 };
 
 type PaymentConfigRow = {
@@ -29,13 +31,52 @@ type PaymentConfigRow = {
   token_expires_at: Date | string | null;
   connected_at: Date | string | null;
   status: ClubPaymentStatus;
+  mp_app_id: string | null;
 };
 
+const MOCK_APP_ID = 'mock';
+
 @Injectable()
-export class ClubPaymentConfigService {
+export class ClubPaymentConfigService implements OnModuleInit {
   private readonly logger = new Logger(ClubPaymentConfigService.name);
 
   constructor(private readonly db: DatabaseService) {}
+
+  async onModuleInit(): Promise<void> {
+    const appId = this.currentAppId();
+    if (!appId) return;
+    try {
+      // Conexiones previas a la columna mp_app_id se hicieron con la app vigente en ese momento.
+      await this.db.query(
+        `UPDATE club_payment_config SET mp_app_id = $1
+         WHERE mp_app_id IS NULL AND mp_access_token_encrypted IS NOT NULL`,
+        [appId],
+      );
+      const expired = await this.db.query(
+        `UPDATE club_payment_config
+         SET status = 'EXPIRED', updated_at = NOW()
+         WHERE status = 'CONNECTED' AND mp_app_id IS NOT NULL AND mp_app_id NOT IN ($1, $2)
+         RETURNING club_id`,
+        [appId, MOCK_APP_ID],
+      );
+      if (expired.rows.length) {
+        this.logger.warn(
+          `${expired.rows.length} club(es) conectados con otra app de Mercado Pago quedaron para reconectar`,
+        );
+      }
+    } catch (err) {
+      this.logger.warn('No se pudo verificar la app de Mercado Pago de los clubes', err);
+    }
+  }
+
+  private currentAppId(): string | null {
+    return process.env.MP_APP_ID?.trim() || null;
+  }
+
+  private isFromOtherApp(row: PaymentConfigRow): boolean {
+    const appId = this.currentAppId();
+    return !!appId && !!row.mp_app_id && row.mp_app_id !== appId && row.mp_app_id !== MOCK_APP_ID;
+  }
 
   isOAuthConfigured(): boolean {
     return !!(
@@ -130,20 +171,30 @@ export class ClubPaymentConfigService {
       oauthConfigured,
       mockConnectAvailable: process.env.PAYMENTS_MOCK === 'true',
       usesPlatformFallback,
+      platformFeePercent: 0,
     };
   }
 
   async getStatus(clubId: string): Promise<ClubPaymentStatusResponse> {
-    const row = await this.getRow(clubId);
+    let row = await this.getRow(clubId);
+    if (row?.status === 'CONNECTED' && this.isFromOtherApp(row)) {
+      await this.markExpired(clubId);
+      row = { ...row, status: 'EXPIRED' };
+    }
     const mapped = this.mapStatus(row);
     mapped.clubId = clubId;
+    const feeRes = await this.db.query<{ platform_fee_percent: string | null }>(
+      `SELECT platform_fee_percent FROM clubs WHERE id = $1`,
+      [clubId],
+    );
+    mapped.platformFeePercent = Number(feeRes.rows[0]?.platform_fee_percent ?? 0) || 0;
     return mapped;
   }
 
   async getRow(clubId: string): Promise<PaymentConfigRow | null> {
     const result = await this.db.query<PaymentConfigRow>(
       `SELECT club_id, mp_user_id, mp_access_token_encrypted, mp_refresh_token_encrypted,
-              token_expires_at, connected_at, status
+              token_expires_at, connected_at, status, mp_app_id
        FROM club_payment_config
        WHERE club_id = $1`,
       [clubId],
@@ -349,6 +400,7 @@ export class ClubPaymentConfigService {
       userId: string;
       expiresIn?: number;
     },
+    appId: string | null = this.currentAppId(),
   ): Promise<void> {
     const expiresAt =
       tokens.expiresIn != null
@@ -358,8 +410,8 @@ export class ClubPaymentConfigService {
     await this.db.query(
       `INSERT INTO club_payment_config (
          club_id, mp_user_id, mp_access_token_encrypted, mp_refresh_token_encrypted,
-         token_expires_at, connected_at, status, updated_at
-       ) VALUES ($1, $2, $3, $4, $5, NOW(), 'CONNECTED', NOW())
+         token_expires_at, connected_at, status, mp_app_id, updated_at
+       ) VALUES ($1, $2, $3, $4, $5, NOW(), 'CONNECTED', $6, NOW())
        ON CONFLICT (club_id) DO UPDATE SET
          mp_user_id = EXCLUDED.mp_user_id,
          mp_access_token_encrypted = EXCLUDED.mp_access_token_encrypted,
@@ -367,6 +419,7 @@ export class ClubPaymentConfigService {
          token_expires_at = EXCLUDED.token_expires_at,
          connected_at = NOW(),
          status = 'CONNECTED',
+         mp_app_id = EXCLUDED.mp_app_id,
          updated_at = NOW()`,
       [
         clubId,
@@ -374,6 +427,7 @@ export class ClubPaymentConfigService {
         encryptSecret(tokens.accessToken),
         tokens.refreshToken ? encryptSecret(tokens.refreshToken) : null,
         expiresAt,
+        appId,
       ],
     );
   }
@@ -415,6 +469,10 @@ export class ClubPaymentConfigService {
     if (!row?.mp_access_token_encrypted) {
       throw new BadRequestException('Conectá Mercado Pago antes de activar cobros online');
     }
+    if (this.isFromOtherApp(row)) {
+      await this.markExpired(clubId);
+      throw new BadRequestException('Volvé a conectar Mercado Pago para activar cobros online');
+    }
 
     await this.db.query(
       `UPDATE club_payment_config SET status = 'CONNECTED', updated_at = NOW() WHERE club_id = $1`,
@@ -428,12 +486,16 @@ export class ClubPaymentConfigService {
       throw new BadRequestException('Conexión simulada solo en modo PAYMENTS_MOCK');
     }
 
-    await this.saveTokens(clubId, {
-      accessToken: `mock-access-${clubId}`,
-      refreshToken: `mock-refresh-${clubId}`,
-      userId: `mock-mp-${clubId.slice(0, 8)}`,
-      expiresIn: 60 * 60 * 24 * 180,
-    });
+    await this.saveTokens(
+      clubId,
+      {
+        accessToken: `mock-access-${clubId}`,
+        refreshToken: `mock-refresh-${clubId}`,
+        userId: `mock-mp-${clubId.slice(0, 8)}`,
+        expiresIn: 60 * 60 * 24 * 180,
+      },
+      MOCK_APP_ID,
+    );
     return this.getStatus(clubId);
   }
 
@@ -451,7 +513,10 @@ export class ClubPaymentConfigService {
     }
 
     const row = await this.getRow(clubId);
-    if (row?.status === 'CONNECTED' && row.mp_access_token_encrypted) {
+    if (row?.status === 'CONNECTED' && this.isFromOtherApp(row)) {
+      this.logger.warn(`Club ${clubId} conectado con otra app de Mercado Pago: requiere reconexión`);
+      await this.markExpired(clubId);
+    } else if (row?.status === 'CONNECTED' && row.mp_access_token_encrypted) {
       try {
         let accessToken = decryptSecret(row.mp_access_token_encrypted);
 

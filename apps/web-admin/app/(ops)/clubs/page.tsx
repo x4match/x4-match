@@ -57,13 +57,14 @@ export default function ClubsPage() {
                 <th>Ciudad</th>
                 <th>Billing</th>
                 <th>MP</th>
+                <th>Comisión</th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
               {items.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="table-empty">
+                  <td colSpan={6} className="table-empty">
                     No hay clubes con esos filtros.
                   </td>
                 </tr>
@@ -78,6 +79,7 @@ export default function ClubsPage() {
                     <td>
                       <StatusText value={club.mp_status} category="mpStatus" fallback="Desconectado" />
                     </td>
+                    <td>{Number(club.platform_fee_percent ?? 0)}%</td>
                     <td>
                       <Link href={`/clubs/${club.id}`} style={{ color: 'var(--primary)', fontWeight: 700 }}>
                         Ver

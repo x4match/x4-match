@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams } from 'next/navigation';
 import { StatusBadge, StatusText } from '@/components/StatusBadge';
@@ -56,6 +57,21 @@ export default function ClubDetailPage() {
     mutationFn: ({ key, done }: { key: string; done: boolean }) =>
       api.patch(`/platform/clubs/${clubId}/trial/checklist`, { key, done }),
     meta: { successMessage: 'Checklist actualizado.' },
+    onSuccess: refresh,
+  });
+
+  const savedFee = data?.club?.platform_fee_percent;
+  const [feeInput, setFeeInput] = useState('');
+  useEffect(() => {
+    if (savedFee != null) setFeeInput(String(Number(savedFee)));
+  }, [savedFee]);
+  const feeValue = Number(feeInput.replace(',', '.'));
+  const feeValid = feeInput.trim() !== '' && Number.isFinite(feeValue) && feeValue >= 0 && feeValue <= 30;
+
+  const updateFee = useMutation({
+    mutationFn: (platformFeePercent: number) =>
+      api.patch(`/platform/clubs/${clubId}/platform-fee`, { platformFeePercent }),
+    meta: { successMessage: 'Comisión actualizada.' },
     onSuccess: refresh,
   });
 
@@ -171,6 +187,45 @@ export default function ClubDetailPage() {
             Mercado Pago: <StatusText value={club.mp_status || 'DISCONNECTED'} category="mpStatus" />
           </p>
         </div>
+      </div>
+
+      <div className="card" style={{ marginBottom: 16 }}>
+        <h3 style={{ marginTop: 0 }}>Comisión x4 Match</h3>
+        <p style={{ marginTop: 0 }}>
+          Porcentaje que retiene la plataforma sobre cada cobro online del club (turnos pagados con
+          Mercado Pago).
+        </p>
+        <form
+          style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (feeValid) updateFee.mutate(Math.round(feeValue * 100) / 100);
+          }}
+        >
+          <input
+            className="input"
+            type="number"
+            inputMode="decimal"
+            min={0}
+            max={30}
+            step={0.1}
+            value={feeInput}
+            onChange={(e) => setFeeInput(e.target.value)}
+            style={{ width: 120 }}
+            aria-label="Comisión en porcentaje"
+          />
+          <span>%</span>
+          <button
+            type="submit"
+            className="btn btn-primary"
+            disabled={!feeValid || updateFee.isPending || feeValue === Number(savedFee ?? 0)}
+          >
+            {updateFee.isPending ? 'Guardando…' : 'Guardar'}
+          </button>
+        </form>
+        <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 12, marginBottom: 0 }}>
+          Solo se aplica si el club conectó su cuenta de Mercado Pago. Entre 0% y 30%.
+        </p>
       </div>
 
       <div className="card">

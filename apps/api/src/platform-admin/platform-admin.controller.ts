@@ -22,6 +22,7 @@ import {
   StartClubTrialDto,
   SuspendClubDto,
   UpdateChecklistItemDto,
+  UpdatePlatformFeeDto,
   UpdateUserRoleDto,
 } from './dto/platform-admin.dto';
 import { PlatformAdminGuard } from './platform-admin.guard';
@@ -137,6 +138,13 @@ export class PlatformAdminController {
   @Patch('clubs/:id/ops-notes')
   setOpsNotes(@Param('id') id: string, @Body() dto: OpsNotesDto) {
     return this.clubTrialService.setOpsNotes(id, dto.notes);
+  }
+
+  @Patch('clubs/:id/platform-fee')
+  async setPlatformFee(@Param('id') id: string, @Body() dto: UpdatePlatformFeeDto) {
+    const updated = await this.platformAdminService.setClubPlatformFee(id, dto.platformFeePercent);
+    if (!updated) throw new NotFoundException('Club no encontrado');
+    return updated;
   }
 
   @Get('club-registrations')

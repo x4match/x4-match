@@ -36,7 +36,7 @@ export function ActionCenter({ totals }: { totals: MonitorTotals }) {
       tone: 'info' as const,
       count: clubsWithoutMp,
       title: clubsWithoutMp === 1 ? 'Club sin Mercado Pago' : 'Clubes sin Mercado Pago',
-      detail: 'No pueden cobrar señas online',
+      detail: 'No pueden cobrar turnos online',
     },
   ].filter((item) => item.count > 0);
 

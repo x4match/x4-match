@@ -285,9 +285,9 @@ export class ClubManagerService {
 
     const pendingHint =
       today.pendingDeposits > 0 && today.pendingShop > 0
-        ? `Señas ${money(today.pendingDeposits)} · tienda ${money(today.pendingShop)}`
+        ? `Turnos ${money(today.pendingDeposits)} · tienda ${money(today.pendingShop)}`
         : today.pendingDeposits > 0
-          ? `Señas ${money(today.pendingDeposits)}`
+          ? `Turnos ${money(today.pendingDeposits)}`
           : today.pendingShop > 0
             ? `Tienda ${money(today.pendingShop)}`
             : 'Sin pendientes';
@@ -389,7 +389,7 @@ export class ClubManagerService {
           today.yesterdayCollectedTotal > 0 || today.collectedTotal > 0
             ? `${heroDeltaPct >= 0 ? '+' : ''}${heroDeltaPct}% respecto ayer`
             : 'Sin datos de ayer',
-        hint: `Señas ${money(today.collectedDeposits)} · tienda ${money(today.collectedShop)}`,
+        hint: `Turnos ${money(today.collectedDeposits)} · tienda ${money(today.collectedShop)}`,
         tone: heroTone,
       },
       comparisons: {
@@ -412,7 +412,7 @@ export class ClubManagerService {
             id: 'collected',
             label: 'Cobrado',
             value: money(today.collectedTotal),
-            hint: `Señas ${money(today.collectedDeposits)} · tienda ${money(today.collectedShop)}`,
+            hint: `Turnos ${money(today.collectedDeposits)} · tienda ${money(today.collectedShop)}`,
             tone: 'accent' as const,
             statusTone: 'success' as const,
           },
@@ -439,14 +439,14 @@ export class ClubManagerService {
         title: 'Qué hacer ahora',
         subtitle: `${briefingCards.length} recomendación${briefingCards.length === 1 ? '' : 'es'} según tu operación`,
         emptyText:
-          'Sin alertas urgentes por ahora. Cuando haya huecos, churn o señas pendientes van a aparecer acá.',
+          'Sin alertas urgentes por ahora. Cuando haya huecos, churn o cobros pendientes van a aparecer acá.',
         cards: briefingCards,
       },
       insights: {
         title: 'Insights',
         subtitle: 'Señales de negocio y próximas acciones',
         emptyText:
-          'Todo en orden. Cuando haya franjas valle, señas o churn van a aparecer acá.',
+          'Todo en orden. Cuando haya franjas valle, cobros pendientes o churn van a aparecer acá.',
         cards: uniqueInsights,
       },
       upcomingSlots: {
@@ -502,10 +502,10 @@ export class ClubManagerService {
         subtitle: `Últimos ${days} días`,
         refundedLabel: 'Reembolsado',
         refundedAmount: money(cancellations.refundedAmount),
-        refundedDetail: `${cancellations.refundedCount} señas`,
+        refundedDetail: `${cancellations.refundedCount} pagos`,
         retainedLabel: 'Retenido',
         retainedAmount: money(cancellations.retainedAmount),
-        retainedDetail: `${cancellations.retainedCount} señas`,
+        retainedDetail: `${cancellations.retainedCount} pagos`,
         summary: `${cancellations.cancelledMatches} partidos cancelados en el período.`,
         action: {
           label: 'Ver movimientos',
@@ -1123,7 +1123,7 @@ export class ClubManagerService {
       alerts.push({
         id: 'pending-deposits',
         priority: 'critical',
-        title: `${input.pendingDeposits.count} reservas sin seña`,
+        title: `${input.pendingDeposits.count} reservas sin pagar`,
         body: `Hay ~${Math.round(input.pendingDeposits.amount).toLocaleString('es-AR')} pendiente de cobro.`,
         actionLabel: 'Cobrar',
         action: { type: 'billing' },
@@ -1474,7 +1474,7 @@ export class ClubManagerService {
       cards.push({
         id: 'pending-deposits',
         severity: 'critical',
-        title: `Tenés ${input.pendingDeposits.count} reservas sin seña`,
+        title: `Tenés ${input.pendingDeposits.count} reservas sin pagar`,
         body: `Hay aproximadamente ${Math.round(input.pendingDeposits.amount).toLocaleString('es-AR')} pendiente de cobro.`,
         actionLabel: 'Cobrar',
         action: { type: 'billing' },

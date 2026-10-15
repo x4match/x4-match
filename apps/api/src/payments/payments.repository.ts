@@ -32,6 +32,15 @@ export class PaymentsRepository {
     return res.rows[0] ?? null;
   }
 
+  async getClubPlatformFeePercent(clubId: string): Promise<number> {
+    const res = await this.db.query<{ platform_fee_percent: string | null }>(
+      `SELECT platform_fee_percent FROM clubs WHERE id = $1`,
+      [clubId],
+    );
+    const value = Number(res.rows[0]?.platform_fee_percent ?? 0);
+    return Number.isFinite(value) && value > 0 ? value : 0;
+  }
+
   async getDepositByMatchPlayer(matchId: string, playerId: string) {
     const res = await this.db.query(
       `SELECT * FROM match_deposits WHERE match_id = $1 AND player_id = $2`,
@@ -207,14 +216,20 @@ export class PaymentsRepository {
     return (res.rows[0] as DepositRow) ?? null;
   }
 
-  async updateCheckoutUrl(depositId: string, checkoutUrl: string, preferenceId?: string) {
+  async updateCheckoutUrl(
+    depositId: string,
+    checkoutUrl: string,
+    preferenceId?: string,
+    platformFeeAmount?: number,
+  ) {
     await this.db.query(
       `UPDATE match_deposits
        SET checkout_url = $2,
            provider_preference_id = COALESCE($3, provider_preference_id),
+           platform_fee_amount = COALESCE($4, platform_fee_amount),
            updated_at = NOW()
        WHERE id = $1`,
-      [depositId, checkoutUrl, preferenceId ?? null],
+      [depositId, checkoutUrl, preferenceId ?? null, platformFeeAmount ?? null],
     );
   }
 }

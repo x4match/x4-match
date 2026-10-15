@@ -30,8 +30,6 @@ export type MineClub = {
   currency?: string;
   courtPricePerHour?: number;
   court_price_per_hour?: number;
-  depositPercent?: number;
-  deposit_percent?: number;
   autoFillGapsEnabled?: boolean;
   auto_fill_gaps_enabled?: boolean;
 };
@@ -43,10 +41,6 @@ export type ClubDetail = MineClub & {
 
 export function clubHourlyPrice(club?: MineClub | null): number {
   return Number(club?.courtPricePerHour ?? club?.court_price_per_hour ?? 0);
-}
-
-export function clubDepositPercent(club?: MineClub | null): number {
-  return Number(club?.depositPercent ?? club?.deposit_percent ?? 0);
 }
 
 export function clubLogoUrl(club?: MineClub | null): string | null {
