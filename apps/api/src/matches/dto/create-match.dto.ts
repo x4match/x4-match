@@ -2,6 +2,7 @@ import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
+  IsBoolean,
   IsDateString,
   IsIn,
   IsInt,
@@ -68,6 +69,11 @@ export class CreateMatchDto {
   @IsOptional()
   @IsDateString()
   endsAt?: string;
+
+  /** Si es true, quien se suma queda como solicitud hasta que el creador lo acepte. */
+  @IsOptional()
+  @IsBoolean()
+  joinApprovalRequired?: boolean;
 
   @IsOptional()
   @IsArray()

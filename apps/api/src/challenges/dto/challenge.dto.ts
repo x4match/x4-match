@@ -1,14 +1,18 @@
 import { IsDateString, IsOptional, IsUUID } from 'class-validator';
 
 export class CreateChallengeDto {
-  /** Jugador al que se desafía. Solo tiene que existir en la app. */
+  /** Rival principal (quien acepta o rechaza el desafío). */
   @IsUUID()
   challengedUserId: string;
 
-  /** Opcional: sin compañero el desafío es 1v1. */
+  /** Compañero del desafiante: los desafíos son siempre 2 vs 2. */
+  @IsUUID()
+  partnerUserId: string;
+
+  /** Compañero del rival. Si falta, lo elige el rival al aceptar. */
   @IsOptional()
   @IsUUID()
-  partnerUserId?: string;
+  challengedPartnerUserId?: string;
 
   /** @deprecated Se toma del club principal del desafiante. */
   @IsOptional()
@@ -26,7 +30,7 @@ export class CreateChallengeDto {
 }
 
 export class AcceptChallengeDto {
-  /** Obligatorio solo si el desafiante eligió compañero (2v2). */
+  /** Obligatorio solo si el desafiante no eligió al compañero del rival. */
   @IsOptional()
   @IsUUID()
   partnerUserId?: string;

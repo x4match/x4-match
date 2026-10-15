@@ -66,8 +66,8 @@ export class MatchesRepository {
       `INSERT INTO matches (
         club_id, created_by_user_id, title, description, date, ends_at,
         level_min, level_max, gender, mode, needed_players, court_slot_id,
-        court_booking, venue_note, status
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'OPEN')
+        court_booking, venue_note, join_approval_required, status
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,'OPEN')
       RETURNING *`,
       [
         dto.clubId ?? null,
@@ -84,6 +84,7 @@ export class MatchesRepository {
         dto.courtSlotId ?? null,
         dto.courtBooking ?? 'none',
         dto.venueNote ?? null,
+        dto.joinApprovalRequired ?? false,
       ],
     );
   }
@@ -497,6 +498,8 @@ export class MatchesRepository {
   async listOpenForSearch(params: {
     categoryMin: number;
     categoryMax: number;
+    viewerCategoryMin?: number | null;
+    viewerCategoryMax?: number | null;
     lat?: number | null;
     lng?: number | null;
     radiusKm?: number | null;
@@ -569,6 +572,10 @@ export class MatchesRepository {
            AND m.date > NOW()
            AND COALESCE(m.level_min, 0) <= $2
            AND COALESCE(m.level_max, 1000) >= $1
+           AND (
+             $10::int IS NULL
+             OR (COALESCE(m.level_min, 0) <= $11::int AND COALESCE(m.level_max, 1000) >= $10::int)
+           )
        )
        SELECT mp.*,
               ${distanceExpr} AS distance_km
@@ -624,6 +631,8 @@ export class MatchesRepository {
         radiusKm,
         limit,
         viewerUserId,
+        params.viewerCategoryMin ?? null,
+        params.viewerCategoryMax ?? null,
       ],
     );
     return result.rows;

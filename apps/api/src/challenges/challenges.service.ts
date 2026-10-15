@@ -171,21 +171,29 @@ export class ChallengesService {
   }
 
   async create(userId: string, dto: CreateChallengeDto) {
-    const partnerUserId = dto.partnerUserId ?? null;
+    const partnerUserId = dto.partnerUserId;
+    const challengedPartnerUserId = dto.challengedPartnerUserId ?? null;
+    if (!partnerUserId) {
+      throw new BadRequestException('El desafío es 2 vs 2: elegí tu compañero');
+    }
     if (dto.challengedUserId === userId) {
       throw new BadRequestException('No podés desafiarte a vos mismo');
     }
     if (partnerUserId === userId) {
       throw new BadRequestException('Elegí un compañero distinto a vos');
     }
-    if (partnerUserId && partnerUserId === dto.challengedUserId) {
-      throw new BadRequestException('El rival y tu compañero no pueden ser la misma persona');
+    const players = [userId, partnerUserId, dto.challengedUserId, challengedPartnerUserId].filter(
+      Boolean,
+    );
+    if (new Set(players).size !== players.length) {
+      throw new BadRequestException('Los cuatro jugadores del desafío tienen que ser distintos');
     }
 
     await this.assertPlayerExists(userId, 'Completá tu perfil de jugador para desafiar');
     await this.assertPlayerExists(dto.challengedUserId, 'El jugador que querés desafiar no existe');
-    if (partnerUserId) {
-      await this.assertPlayerExists(partnerUserId, 'El compañero elegido no existe');
+    await this.assertPlayerExists(partnerUserId, 'El compañero elegido no existe');
+    if (challengedPartnerUserId) {
+      await this.assertPlayerExists(challengedPartnerUserId, 'El segundo rival elegido no existe');
     }
 
     const pairActive = await this.db.query(
@@ -212,10 +220,10 @@ export class ChallengesService {
       `INSERT INTO club_challenges (
          challenger_club_id, challenged_club_id,
          challenger_anchor_user_id, challenger_partner_user_id,
-         challenged_anchor_user_id,
+         challenged_anchor_user_id, challenged_partner_user_id,
          month_key, challenger_rank_snapshot, challenged_rank_snapshot,
          status, proposed_date, expires_at
-       ) VALUES ($1,$2,$3,$4,$5,$6,0,0,'PENDING_OPPONENT',$7,$8)
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,0,0,'PENDING_OPPONENT',$8,$9)
        RETURNING *`,
       [
         challengerClubId,
@@ -223,6 +231,7 @@ export class ChallengesService {
         userId,
         partnerUserId,
         dto.challengedUserId,
+        challengedPartnerUserId,
         getMonthKey(),
         proposedDate,
         expiresAt,
@@ -235,20 +244,27 @@ export class ChallengesService {
       dto.challengedUserId,
       'CLUB_CHALLENGE',
       '¡Te desafiaron!',
-      partnerUserId
-        ? `${challengerName} te desafió a un 2v2. Aceptá y elegí compañero.`
-        : `${challengerName} te desafió a un partido 1v1.`,
+      challengedPartnerUserId
+        ? `${challengerName} los desafió a un 2 vs 2. Aceptá o rechazá el desafío.`
+        : `${challengerName} te desafió a un 2 vs 2. Aceptá y elegí compañero.`,
       { challengeId: challenge.id },
     );
-    if (partnerUserId) {
+    if (challengedPartnerUserId) {
       await this.notify(
-        partnerUserId,
+        challengedPartnerUserId,
         'CLUB_CHALLENGE',
-        'Te eligieron de compañero',
-        `${challengerName} te sumó a un desafío 2v2.`,
+        '¡Te desafiaron!',
+        `${challengerName} te desafió a un 2 vs 2 junto a tu compañero.`,
         { challengeId: challenge.id },
       );
     }
+    await this.notify(
+      partnerUserId,
+      'CLUB_CHALLENGE',
+      'Te eligieron de compañero',
+      `${challengerName} te sumó a un desafío 2 vs 2.`,
+      { challengeId: challenge.id },
+    );
 
     return this.getChallenge(challenge.id, userId);
   }
@@ -270,8 +286,9 @@ export class ChallengesService {
     }
 
     const isDoubles = Boolean(challenge.challenger_partner_user_id);
-    const partnerUserId = isDoubles ? dto.partnerUserId ?? null : null;
-    if (isDoubles) {
+    const presetPartnerUserId: string | null = challenge.challenged_partner_user_id ?? null;
+    const partnerUserId = isDoubles ? presetPartnerUserId ?? dto.partnerUserId ?? null : null;
+    if (isDoubles && !presetPartnerUserId) {
       if (!partnerUserId) {
         throw new BadRequestException('Es un desafío 2v2: elegí tu compañero');
       }

@@ -202,9 +202,12 @@ export class MatchesService {
 
     const radiusKm = this.normalizeSearchRadius(query.radiusKm);
 
+    const viewerRange = getCategoryLevelRange(viewerCategory);
     const rows = await this.matchesRepository.listOpenForSearch({
       categoryMin: band.min,
       categoryMax: band.max,
+      viewerCategoryMin: viewerRange.min,
+      viewerCategoryMax: viewerRange.max,
       lat,
       lng,
       radiusKm: lat != null && lng != null ? radiusKm : null,
@@ -250,21 +253,23 @@ export class MatchesService {
 
     const joinRequests = await this.matchesRepository.listJoinRequests(id);
     let viewerJoinStatus: string | null = null;
-    let joinRequiresApproval = false;
+    let viewerCategoryFits = true;
 
     if (viewerUserId) {
       const playerId = await this.matchesRepository.getPlayerIdByUserId(viewerUserId);
       if (playerId) {
         viewerJoinStatus = await this.matchesRepository.getPlayerMatchStatus(id, playerId);
       }
-      joinRequiresApproval = !(await this.playerLevelFitsMatch(viewerUserId, match));
+      viewerCategoryFits = await this.playerLevelFitsMatch(viewerUserId, match);
     }
 
     const payload = {
       ...match,
       join_requests: joinRequests,
       viewer_join_status: viewerJoinStatus,
-      join_requires_approval: joinRequiresApproval,
+      join_requires_approval:
+        Boolean(match.join_approval_required) && match.created_by_user_id !== viewerUserId,
+      viewer_category_fits: viewerCategoryFits,
     };
 
     if (viewerUserId) {
@@ -361,14 +366,8 @@ export class MatchesService {
       throw new NotFoundException('Partido no encontrado');
     }
 
-    if (match.created_by_user_id === approverUserId) {
-      return match;
-    }
-
-    const detail = await this.matchesRepository.getDetail(matchId);
-    const isParticipant = detail?.players.some((player: { id: string }) => player.id === approverUserId);
-    if (!isParticipant) {
-      throw new BadRequestException('Solo el organizador o jugadores del partido pueden gestionar solicitudes');
+    if (match.created_by_user_id !== approverUserId) {
+      throw new ForbiddenException('Solo el creador del partido puede aceptar o rechazar solicitudes');
     }
 
     return match;
@@ -545,6 +544,20 @@ export class MatchesService {
     }
 
     const joinerName = await this.matchesRepository.getUserName(userId);
+
+    if (match.join_approval_required && match.created_by_user_id !== userId) {
+      await this.requestJoin(matchId, playerId);
+      await this.matchesRepository.notifyUsers(
+        [match.created_by_user_id],
+        'MATCH_JOIN_REQUEST',
+        'Nueva solicitud para tu partido',
+        `${joinerName} quiere sumarse a "${match.title}".`,
+        { matchId, fromUserId: userId },
+      );
+      const pending = await this.findOne(matchId, userId);
+      this.realtimeGateway.emitMatchUpdated(pending);
+      return pending;
+    }
 
     await this.joinPlayerWithNextSlot(matchId, playerId);
     await this.matchesRepository.createMatchChatIfMissing(matchId);
