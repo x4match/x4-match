@@ -408,7 +408,7 @@ export default function PlayerProfileScreen() {
       >
         <FadeInUp index={0}>
           <AppCard style={{ marginBottom: ui.spacing.md, backgroundColor: CARD_BG }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 14 }}>
               <TouchableOpacity
                 onPress={() => player.photo_url && setShowPhotoViewer(true)}
                 disabled={!player.photo_url}
@@ -439,8 +439,8 @@ export default function PlayerProfileScreen() {
                     fontWeight: '700',
                     fontFamily: fontFamily.regular,
                     color: ui.colors.textPrimary,
+                    lineHeight: 28,
                   }}
-                  numberOfLines={1}
                 >
                   {player.name}
                 </Text>
@@ -451,7 +451,7 @@ export default function PlayerProfileScreen() {
                     marginTop: 4,
                     fontFamily: fontFamily.regular,
                   }}
-                  numberOfLines={1}
+                  numberOfLines={2}
                 >
                   {locationLine}
                 </Text>

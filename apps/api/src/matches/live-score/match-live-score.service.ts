@@ -2,8 +2,10 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  Inject,
   Injectable,
   NotFoundException,
+  forwardRef,
 } from '@nestjs/common';
 import { MatchesRepository } from '../matches.repository';
 import { MatchesService } from '../matches.service';
@@ -33,13 +35,19 @@ export class MatchLiveScoreService {
   constructor(
     private readonly liveRepository: MatchLiveScoreRepository,
     private readonly matchesRepository: MatchesRepository,
+    @Inject(forwardRef(() => MatchesService))
     private readonly matchesService: MatchesService,
     private readonly realtimeGateway: RealtimeGateway,
   ) {}
 
   async getLive(matchId: string, viewerUserId: string) {
     const match = await this.getMatchOrThrow(matchId);
-    const row = await this.liveRepository.get(matchId);
+    let row = await this.liveRepository.get(matchId);
+    // Sana filas viejas: resultado cargado pero el live quedó en LIVE.
+    if (match.result && row?.status === 'LIVE') {
+      await this.liveRepository.markFinishedIfLive(matchId);
+      row = await this.liveRepository.get(matchId);
+    }
     return this.withViewer(this.buildPayload(match, row), match, row, viewerUserId);
   }
 
@@ -81,6 +89,11 @@ export class MatchLiveScoreService {
   async addPoint(matchId: string, userId: string, team: LiveTeam, expectedVersion?: number) {
     const match = await this.getMatchOrThrow(matchId);
     this.assertParticipant(match, userId);
+    if (match.result) {
+      throw new BadRequestException(
+        'Este partido ya tiene un resultado cargado. El marcador en vivo quedó cerrado.',
+      );
+    }
 
     const finishedState = await this.liveRepository.transaction(async (client) => {
       const row = await this.liveRepository.lockForUpdate(client, matchId);
@@ -104,6 +117,11 @@ export class MatchLiveScoreService {
   async undo(matchId: string, userId: string, expectedVersion?: number) {
     const match = await this.getMatchOrThrow(matchId);
     this.assertParticipant(match, userId);
+    if (match.result) {
+      throw new BadRequestException(
+        'Este partido ya tiene un resultado cargado. El marcador en vivo quedó cerrado.',
+      );
+    }
 
     await this.liveRepository.transaction(async (client) => {
       const row = await this.liveRepository.lockForUpdate(client, matchId);
@@ -130,6 +148,20 @@ export class MatchLiveScoreService {
     }
     await this.liveRepository.remove(matchId);
     return this.publish(matchId, userId);
+  }
+
+  /**
+   * Si había marcador LIVE y se cargó el resultado (a mano o al terminar el live),
+   * lo marca FINISHED y avisa por socket para que deje de verse "EN VIVO".
+   */
+  async closeForResultSubmission(matchId: string) {
+    const closed = await this.liveRepository.markFinishedIfLive(matchId);
+    if (!closed) return null;
+    const match = await this.getMatchOrThrow(matchId);
+    const row = await this.liveRepository.get(matchId);
+    const payload = this.buildPayload(match, row);
+    this.realtimeGateway.emitMatchLiveScore(matchId, payload);
+    return payload;
   }
 
   private async publish(matchId: string, viewerUserId: string) {
@@ -243,14 +275,18 @@ export class MatchLiveScoreService {
     viewerUserId: string,
   ) {
     const participant = this.isParticipant(match, viewerUserId);
+    // Si ya hay resultado cargado, nunca seguir en LIVE (casos viejos / carrera).
+    const effectiveStatus =
+      match.result && payload.status === 'LIVE' ? ('FINISHED' as const) : payload.status;
     return {
       ...payload,
+      status: effectiveStatus,
       viewer: {
         isParticipant: participant,
-        canScore: participant && row?.status === 'LIVE',
+        canScore: participant && effectiveStatus === 'LIVE' && !match.result,
         canStart:
           participant &&
-          row?.status !== 'LIVE' &&
+          effectiveStatus !== 'LIVE' &&
           !match.result &&
           STARTABLE_MATCH_STATUSES.includes(match.status),
       },
