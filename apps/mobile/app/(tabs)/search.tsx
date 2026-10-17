@@ -7,8 +7,6 @@ import {
   FlatList,
   Pressable,
   ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
   Keyboard,
   TouchableOpacity,
   Image,
@@ -27,6 +25,7 @@ import {
   Avatar,
   TabScrollView,
   SegmentedControl,
+  KeyboardAvoid,
 } from '@/components/x4match';
 import { OrganizerModule } from '@/components/organizer/OrganizerModule';
 import { PressableScale } from '@/components/ui';
@@ -308,9 +307,8 @@ export default function SearchScreen() {
       />
 
       <Modal visible={searchOpen} animationType="slide" transparent onRequestClose={closeSearch}>
-        <KeyboardAvoidingView
+        <KeyboardAvoid
           style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' }}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
           <View
             style={{
@@ -515,7 +513,7 @@ export default function SearchScreen() {
               />
             )}
           </View>
-        </KeyboardAvoidingView>
+        </KeyboardAvoid>
       </Modal>
 
       <View style={{ paddingHorizontal: ui.spacing.lg, marginBottom: 12 }}>

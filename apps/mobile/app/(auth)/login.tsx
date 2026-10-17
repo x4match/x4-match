@@ -31,7 +31,7 @@ import {
   signInWithGoogle,
 } from '@/lib/auth/google-auth';
 import { ui, fontFamily } from '@/theme/tokens';
-import { Screen, FadeInUp, PressableScale } from '@/components/x4match';
+import { Screen, FadeInUp, PressableScale, KeyboardAvoid } from '@/components/x4match';
 import {
   getAccountVerificationState,
   getEmailNotVerified,
@@ -274,6 +274,7 @@ export default function LoginScreen() {
   return (
     <Screen>
       <View style={{ flex: 1, backgroundColor: '#000000' }}>
+        <KeyboardAvoid style={{ flex: 1 }}>
         <ScrollView
             contentContainerStyle={{
               flexGrow: 1,
@@ -528,6 +529,7 @@ export default function LoginScreen() {
               </PressableScale>
             </FadeInUp>
           </ScrollView>
+        </KeyboardAvoid>
       </View>
     </Screen>
   );

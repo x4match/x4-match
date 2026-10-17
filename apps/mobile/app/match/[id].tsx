@@ -30,6 +30,7 @@ import {
   StatusPill,
   PrimaryButton,
   Avatar,
+  KeyboardAvoid,
   PlayerRatingSection,
   MatchResultComposer,
   SkillProgress,
@@ -649,7 +650,7 @@ export default function MatchDetailScreen() {
       />
 
       {showChat ? (
-        <View style={{ flex: 1 }}>
+        <KeyboardAvoid style={{ flex: 1 }}>
           <ScrollView
             ref={scrollRef}
             style={{ flex: 1, padding: ui.spacing.lg }}
@@ -708,7 +709,7 @@ export default function MatchDetailScreen() {
               <Ionicons name="send" size={20} color={ui.colors.onPrimary} />
             </TouchableOpacity>
           </View>
-        </View>
+        </KeyboardAvoid>
       ) : (
         <>
           <ScrollView contentContainerStyle={{ padding: ui.spacing.lg, paddingBottom: hasFooterActions ? 200 : 120 }}>

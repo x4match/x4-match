@@ -15,7 +15,7 @@ import { api } from '@/lib/api';
 import type { DirectConversation, DirectMessage } from '@/lib/types';
 import { formatRelativeTime } from '@/lib/format';
 import { ui } from '@/theme/tokens';
-import { Screen, StackHeader, PrimaryButton, Avatar, ChatBubble } from '@/components/x4match';
+import { Screen, StackHeader, PrimaryButton, Avatar, ChatBubble, KeyboardAvoid } from '@/components/x4match';
 
 export default function ConversationScreen() {
   const { id, name, status, userId: userIdParam, clubId: clubIdParam } = useLocalSearchParams<{
@@ -175,6 +175,7 @@ export default function ConversationScreen() {
           </TouchableOpacity>
         }
       />
+      <KeyboardAvoid style={{ flex: 1 }} keyboardVerticalOffset={88}>
         {isPending ? (
           <View style={{ flex: 1, padding: ui.spacing.lg, justifyContent: 'center' }}>
             <View style={{ alignItems: 'center', marginBottom: 24 }}>
@@ -271,6 +272,7 @@ export default function ConversationScreen() {
             </View>
           </>
         )}
+      </KeyboardAvoid>
     </Screen>
   );
 }
