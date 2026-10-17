@@ -4,15 +4,13 @@ import {
   Text,
   Alert,
   ScrollView,
-  KeyboardAvoidingView,
-  Platform,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { api } from '@/lib/api';
 import { ui } from '@/theme/tokens';
-import { Screen, InputField, PrimaryButton, FadeInUp, PressableScale, StackHeader } from '@/components/padely';
+import { Screen, InputField, PrimaryButton, FadeInUp, PressableScale, StackHeader, KeyboardAvoid } from '@/components/padely';
 
 export default function ResetPasswordScreen() {
   const router = useRouter();
@@ -62,7 +60,7 @@ export default function ResetPasswordScreen() {
     <Screen>
       <LinearGradient colors={[ui.colors.bg, ui.colors.bgElevated, ui.colors.surface0]} style={{ flex: 1 }}>
         <StackHeader title="Nueva contraseña" />
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <KeyboardAvoid style={{ flex: 1 }}>
           <ScrollView
             contentContainerStyle={{
               flexGrow: 1,
@@ -179,7 +177,7 @@ export default function ResetPasswordScreen() {
               </PressableScale>
             </FadeInUp>
           </ScrollView>
-        </KeyboardAvoidingView>
+        </KeyboardAvoid>
       </LinearGradient>
     </Screen>
   );

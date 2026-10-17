@@ -7,11 +7,11 @@ import {
   TextInput,
   FlatList,
   Pressable,
-  KeyboardAvoidingView,
   Platform,
   Keyboard,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { KeyboardAvoid } from '@/components/ui/KeyboardAvoid';
 import { ui } from '@/theme/tokens';
 
 export type SearchableSelectOption = {
@@ -131,7 +131,7 @@ export function SearchableSelect({
           onPress={close}
         >
           <Pressable onPress={(e) => e.stopPropagation()} style={{ maxHeight: '85%' }}>
-            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+            <KeyboardAvoid>
               <View
                 style={{
                   backgroundColor: ui.colors.surface,
@@ -249,7 +249,7 @@ export function SearchableSelect({
                   }}
                 />
               </View>
-            </KeyboardAvoidingView>
+            </KeyboardAvoid>
           </Pressable>
         </Pressable>
       </Modal>

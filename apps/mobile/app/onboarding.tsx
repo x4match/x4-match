@@ -26,6 +26,7 @@ import {
   OptionChips,
   Avatar,
   DateTimeField,
+  KeyboardAvoid,
 } from '@/components/padely';
 import type { CourtPosition, PlayerCategory, PreferredHand } from '@/lib/types';
 
@@ -353,6 +354,7 @@ export default function OnboardingScreen() {
 
   return (
     <Screen>
+      <KeyboardAvoid style={{ flex: 1 }}>
       <ScrollView
         contentContainerStyle={{ flexGrow: 1, padding: ui.spacing.lg, paddingTop: 48, paddingBottom: 40 }}
         keyboardShouldPersistTaps="handled"
@@ -693,6 +695,7 @@ export default function OnboardingScreen() {
           </>
         ) : null}
       </View>
+      </KeyboardAvoid>
     </Screen>
   );
 }

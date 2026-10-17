@@ -4,8 +4,6 @@ import {
   Text,
   Alert,
   ScrollView,
-  KeyboardAvoidingView,
-  Platform,
   ActivityIndicator,
   Image,
   InteractionManager,
@@ -30,7 +28,7 @@ import {
   signInWithGoogle,
 } from '@/lib/google-auth';
 import { ui } from '@/theme/tokens';
-import { Screen, InputField, PrimaryButton, FadeInUp, PressableScale } from '@/components/padely';
+import { Screen, InputField, PrimaryButton, FadeInUp, PressableScale, KeyboardAvoid } from '@/components/padely';
 
 async function navigateAfterAuth(go: () => void) {
   // Espera a que se cierre el overlay de Google / teclado antes de montar tabs.
@@ -150,7 +148,7 @@ export default function LoginScreen() {
   return (
     <Screen>
       <LinearGradient colors={[ui.colors.bg, ui.colors.bgElevated, ui.colors.surface0]} style={{ flex: 1 }}>
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <KeyboardAvoid style={{ flex: 1 }}>
           <ScrollView
             contentContainerStyle={{
               flexGrow: 1,
@@ -310,7 +308,7 @@ export default function LoginScreen() {
               </PressableScale>
             </FadeInUp>
           </ScrollView>
-        </KeyboardAvoidingView>
+        </KeyboardAvoid>
       </LinearGradient>
     </Screen>
   );

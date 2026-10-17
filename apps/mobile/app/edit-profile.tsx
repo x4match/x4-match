@@ -18,7 +18,7 @@ import { api } from '@/lib/api';
 import { requestPlayerCoordinates } from '@/lib/geolocation';
 import { pickAndUploadProfilePhoto, showProfilePhotoOptions } from '@/lib/profile-photo';
 import { ui } from '@/theme/tokens';
-import { Screen, StackHeader, AppCard, InputField, PrimaryButton, Avatar, SectionHeader, ProfilePhotoViewer } from '@/components/padely';
+import { Screen, StackHeader, AppCard, InputField, PrimaryButton, Avatar, SectionHeader, ProfilePhotoViewer, KeyboardAvoid } from '@/components/padely';
 
 const GENDER_OPTIONS = ['Masculino', 'Femenino', 'Otro'] as const;
 
@@ -222,7 +222,12 @@ export default function EditProfileScreen() {
   return (
     <Screen>
       <StackHeader title="Editar perfil" rightAction={saveButton} />
-      <ScrollView contentContainerStyle={{ padding: ui.spacing.lg, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+      <KeyboardAvoid style={{ flex: 1 }}>
+      <ScrollView
+        contentContainerStyle={{ padding: ui.spacing.lg, paddingBottom: 40 }}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
         <View style={{ alignItems: 'center', marginBottom: ui.spacing.lg }}>
           <TouchableOpacity
             onPress={handlePickPhoto}
@@ -421,6 +426,7 @@ export default function EditProfileScreen() {
           <PrimaryButton label="Guardar cambios" onPress={handleSave} loading={saving} fullWidth size="lg" />
         </View>
       </ScrollView>
+      </KeyboardAvoid>
 
       <ProfilePhotoViewer
         visible={showPhotoViewer}

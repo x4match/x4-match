@@ -9,6 +9,7 @@ export { StatusPill } from './StatusPill';
 export { Avatar } from './Avatar';
 export { EmptyState } from './EmptyState';
 export { AppHeader, StackHeader, Screen } from './Screen';
+export { KeyboardAvoid } from './KeyboardAvoid';
 export { SegmentedControl } from './SegmentedControl';
 export { Sheet } from './Sheet';
 export { ToastProvider, useToast } from './Toast';

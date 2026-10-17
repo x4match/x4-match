@@ -8,14 +8,13 @@ import {
   FlatList,
   Pressable,
   ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
   Keyboard,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '@/lib/api';
 import { formatSkillScore, resolveSkillScore } from '@/lib/skill';
 import { ui } from '@/theme/tokens';
+import { KeyboardAvoid } from '@/components/ui/KeyboardAvoid';
 import { Avatar } from './Avatar';
 
 export type InvitedPlayer = {
@@ -307,9 +306,8 @@ export function PlayerInvitePicker({
       )}
 
       <Modal visible={activeSlot != null} animationType="slide" transparent onRequestClose={closeModal}>
-        <KeyboardAvoidingView
+        <KeyboardAvoid
           style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' }}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
           <View
             style={{
@@ -412,7 +410,7 @@ export function PlayerInvitePicker({
               />
             )}
           </View>
-        </KeyboardAvoidingView>
+        </KeyboardAvoid>
       </Modal>
     </View>
   );
