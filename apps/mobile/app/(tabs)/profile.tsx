@@ -678,7 +678,7 @@ export default function ProfileScreen() {
                   backgroundColor: CARD_BG,
                 }}
               >
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 14 }}>
                   <TouchableOpacity onPress={handlePhotoPress} disabled={uploadingPhoto} activeOpacity={0.9}>
                     <View style={{ position: 'relative' }}>
                       {profileImage ? (
@@ -728,8 +728,8 @@ export default function ProfileScreen() {
                         fontWeight: '700',
                         fontFamily: fontFamily.regular,
                         color: ui.colors.textPrimary,
+                        lineHeight: 28,
                       }}
-                      numberOfLines={1}
                     >
                       {displayName}
                     </Text>
@@ -740,7 +740,7 @@ export default function ProfileScreen() {
                         marginTop: 4,
                         fontFamily: fontFamily.regular,
                       }}
-                      numberOfLines={1}
+                      numberOfLines={2}
                     >
                       {user?.email}
                       {user?.role ? ` · ${roleLabel(user.role)}` : ''}
