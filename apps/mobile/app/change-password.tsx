@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import { View, Text, Alert, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { View, Text, Alert, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '@/lib/api';
 import { ui } from '@/theme/tokens';
-import { Screen, StackHeader, AppCard, InputField, PrimaryButton } from '@/components/padely';
+import { Screen, StackHeader, AppCard, InputField, PrimaryButton, KeyboardAvoid } from '@/components/padely';
 
 export default function ChangePasswordScreen() {
   const router = useRouter();
@@ -43,7 +43,7 @@ export default function ChangePasswordScreen() {
   return (
     <Screen>
       <StackHeader title="Cambiar contraseña" />
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      <KeyboardAvoid style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={{ padding: ui.spacing.lg, paddingBottom: 32 }} keyboardShouldPersistTaps="handled">
           <View style={{ alignItems: 'center', marginBottom: ui.spacing.lg }}>
             <View
@@ -100,7 +100,7 @@ export default function ChangePasswordScreen() {
             />
           </AppCard>
         </ScrollView>
-      </KeyboardAvoidingView>
+      </KeyboardAvoid>
     </Screen>
   );
 }

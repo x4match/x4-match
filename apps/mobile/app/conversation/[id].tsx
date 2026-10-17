@@ -5,8 +5,6 @@ import {
   ScrollView,
   TextInput,
   Alert,
-  KeyboardAvoidingView,
-  Platform,
   TouchableOpacity,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -17,7 +15,7 @@ import { api } from '@/lib/api';
 import type { DirectMessage } from '@/lib/types';
 import { formatRelativeTime } from '@/lib/format';
 import { ui } from '@/theme/tokens';
-import { Screen, StackHeader, PrimaryButton, Avatar } from '@/components/padely';
+import { Screen, StackHeader, PrimaryButton, Avatar, KeyboardAvoid } from '@/components/padely';
 
 export default function ConversationScreen() {
   const { id, name, status, userId: userIdParam } = useLocalSearchParams<{
@@ -118,11 +116,7 @@ export default function ConversationScreen() {
           ) : undefined
         }
       />
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={88}
-      >
+      <KeyboardAvoid style={{ flex: 1 }} keyboardVerticalOffset={88}>
         {isPending ? (
           <View style={{ flex: 1, padding: ui.spacing.lg, justifyContent: 'center' }}>
             <View style={{ alignItems: 'center', marginBottom: 24 }}>
@@ -229,7 +223,7 @@ export default function ConversationScreen() {
             </View>
           </>
         )}
-      </KeyboardAvoidingView>
+      </KeyboardAvoid>
     </Screen>
   );
 }

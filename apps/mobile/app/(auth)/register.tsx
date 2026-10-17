@@ -5,8 +5,6 @@ import {
   TouchableOpacity,
   Alert,
   ScrollView,
-  KeyboardAvoidingView,
-  Platform,
   Modal,
   Pressable,
   Image,
@@ -28,7 +26,7 @@ import {
 import { isClub } from '@/lib/roles';
 import { describeAxiosError, devLog, devWarn } from '@/lib/debug';
 import { ui } from '@/theme/tokens';
-import { Screen, AppCard, InputField, PrimaryButton, FadeInUp, PressableScale } from '@/components/padely';
+import { Screen, AppCard, InputField, PrimaryButton, FadeInUp, PressableScale, KeyboardAvoid } from '@/components/padely';
 import type { PlayerCategory, UserRole } from '@/lib/types';
 
 type FejubaMatch = {
@@ -367,7 +365,7 @@ export default function RegisterScreen() {
 
   return (
     <Screen>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoid style={{ flex: 1 }}>
         <TouchableOpacity onPress={() => setStep('role')} style={{ padding: 16, paddingTop: 48 }}>
           <Ionicons name="chevron-back" size={26} color={ui.colors.textPrimary} />
         </TouchableOpacity>
@@ -453,7 +451,7 @@ export default function RegisterScreen() {
             style={{ marginTop: 8 }}
           />
         </ScrollView>
-      </KeyboardAvoidingView>
+      </KeyboardAvoid>
 
       <Modal visible={showMatchPicker} transparent animationType="fade">
         <Pressable

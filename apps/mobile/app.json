@@ -25,7 +25,8 @@
         "backgroundColor": "#000000"
       },
       "package": "x4.match",
-      "permissions": ["ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION"]
+      "permissions": ["ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION"],
+      "softwareKeyboardLayoutMode": "resize"
     },
     "scheme": "x4match",
     "plugins": [

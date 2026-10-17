@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { PressableScale } from './PressableScale';
 import { useAuth } from '@/contexts/AuthContext';
+import { useKeyboardBottomInset } from '@/lib/use-keyboard-bottom-inset';
 import { isClub } from '@/lib/roles';
 import { ui } from '@/theme/tokens';
 
@@ -76,6 +77,7 @@ export function FloatingTabBar({ state, navigation }: TabBarProps) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user } = useAuth();
+  const keyboardInset = useKeyboardBottomInset();
   const roleTabs = getRoleTabs(user?.role);
 
   const routeByName: Record<string, TabRoute> = {};
@@ -88,6 +90,11 @@ export function FloatingTabBar({ state, navigation }: TabBarProps) {
     if (!route) return null;
     return renderTab(route, state, navigation);
   };
+
+  // En Android el teclado tapa la UI; ocultar la tab bar libera espacio y evita solapes.
+  if (keyboardInset > 0) {
+    return null;
+  }
 
   return (
     <View

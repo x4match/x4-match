@@ -5,8 +5,6 @@ import {
   ScrollView,
   TextInput,
   Alert,
-  KeyboardAvoidingView,
-  Platform,
   TouchableOpacity,
   Linking,
   Share,
@@ -32,6 +30,7 @@ import {
   StatusPill,
   PrimaryButton,
   Avatar,
+  KeyboardAvoid,
   PlayerRatingSection,
   MatchResultComposer,
   SkillProgress,
@@ -594,7 +593,7 @@ export default function MatchDetailScreen() {
       />
 
       {showChat ? (
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <KeyboardAvoid style={{ flex: 1 }}>
           <ScrollView ref={scrollRef} style={{ flex: 1, padding: ui.spacing.lg }} onContentSizeChange={() => scrollRef.current?.scrollToEnd()}>
             {messages.length === 0 ? (
               <Text style={{ textAlign: 'center', color: ui.colors.textMuted, marginTop: 40 }}>No hay mensajes aún</Text>
@@ -644,7 +643,7 @@ export default function MatchDetailScreen() {
               <Ionicons name="send" size={20} color="#fff" />
             </TouchableOpacity>
           </View>
-        </KeyboardAvoidingView>
+        </KeyboardAvoid>
       ) : (
         <>
           <ScrollView contentContainerStyle={{ padding: ui.spacing.lg, paddingBottom: hasFooterActions ? 200 : 120 }}>

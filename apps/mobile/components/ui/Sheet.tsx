@@ -2,6 +2,7 @@ import { ReactNode, useEffect } from 'react';
 import { Modal, View, Text, TouchableOpacity, Pressable, Keyboard } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useKeyboardBottomInset } from '@/lib/use-keyboard-bottom-inset';
 import { ui } from '@/theme/tokens';
 import { PrimaryButton } from './PrimaryButton';
 
@@ -16,6 +17,7 @@ type SheetProps = {
 
 export function Sheet({ visible, onClose, title, children, actionLabel, onAction }: SheetProps) {
   const insets = useSafeAreaInsets();
+  const keyboardInset = useKeyboardBottomInset();
 
   useEffect(() => {
     if (visible) Keyboard.dismiss();
@@ -32,7 +34,7 @@ export function Sheet({ visible, onClose, title, children, actionLabel, onAction
             backgroundColor: ui.colors.glass,
             paddingTop: 12,
             paddingHorizontal: ui.spacing.lg,
-            paddingBottom: insets.bottom + ui.spacing.lg,
+            paddingBottom: Math.max(insets.bottom, keyboardInset) + ui.spacing.lg,
             borderTopWidth: 1,
             borderColor: ui.colors.border,
           }}
