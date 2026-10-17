@@ -25,7 +25,14 @@
         "backgroundColor": "#000000"
       },
       "package": "x4.match",
-      "permissions": ["ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION"]
+      "googleServicesFile": "./google-services.json",
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "POST_NOTIFICATIONS",
+        "RECEIVE_BOOT_COMPLETED",
+        "VIBRATE"
+      ]
     },
     "scheme": "x4match",
     "plugins": [
@@ -69,8 +76,9 @@
         "expo-notifications",
         {
           "icon": "./assets/icon.png",
-          "color": "#000000",
-          "defaultChannel": "default"
+          "color": "#F5C518",
+          "defaultChannel": "default",
+          "sounds": []
         }
       ]
     ],
