@@ -12,6 +12,7 @@ type MessageAccessDenied = {
   canMessage: false;
   reason: 'self' | 'need_request' | 'pending_outgoing' | 'pending_incoming' | 'rejected' | 'blocked';
   canSendRequest?: boolean;
+  conversationId?: string;
 };
 
 export type MessageAccess =
@@ -99,12 +100,12 @@ export class MessagingService {
       return { canMessage: true, conversationId: conv.id };
     }
     if (conv.status === 'rejected') {
-      return { canMessage: false, reason: 'rejected' };
+      return { canMessage: false, reason: 'rejected', conversationId: conv.id };
     }
     if (conv.requested_by_id === userId) {
-      return { canMessage: false, reason: 'pending_outgoing' };
+      return { canMessage: false, reason: 'pending_outgoing', conversationId: conv.id };
     }
-    return { canMessage: false, reason: 'pending_incoming' };
+    return { canMessage: false, reason: 'pending_incoming', conversationId: conv.id };
   }
 
   private async findConversation(userId: string, otherUserId: string) {
@@ -213,6 +214,23 @@ export class MessagingService {
       [conversationId],
     );
     return { conversationId, status: 'rejected' };
+  }
+
+  /** El emisor retira una solicitud de mensaje pendiente. */
+  async cancelConversationRequest(userId: string, conversationId: string) {
+    const conv = await this.getConversationForUser(conversationId, userId);
+    if (conv.status !== 'pending') {
+      throw new BadRequestException('Esta conversación ya no está pendiente');
+    }
+    if (conv.requested_by_id !== userId) {
+      throw new ForbiddenException('Solo podés cancelar una solicitud que enviaste vos');
+    }
+    const otherUserId = conv.user_a_id === userId ? conv.user_b_id : conv.user_a_id;
+    await this.db.query(`DELETE FROM dm_conversations WHERE id = $1 AND status = 'pending'`, [
+      conversationId,
+    ]);
+    await this.notifications.removeByData(otherUserId, 'DM_REQUEST', 'conversationId', conversationId);
+    return { ok: true, conversationId };
   }
 
   private async ensureActiveConversation(userId: string, otherUserId: string) {

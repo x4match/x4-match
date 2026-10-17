@@ -159,6 +159,29 @@ export default function PlayerProfileScreen() {
     },
   });
 
+  const cancelFriendMutation = useMutation({
+    mutationFn: (requestId: string) => api.post(`/friends/cancel/${requestId}`),
+    onSuccess: () => {
+      refetchFriend();
+      queryClient.invalidateQueries({ queryKey: ['friends-pending'] });
+      Alert.alert('Listo', 'Solicitud de amistad cancelada');
+    },
+    onError: (e: any) =>
+      Alert.alert('Error', e?.response?.data?.message || 'No se pudo cancelar la solicitud'),
+  });
+
+  const cancelMessageRequestMutation = useMutation({
+    mutationFn: (conversationId: string) => api.post(`/conversations/${conversationId}/cancel`),
+    onSuccess: () => {
+      refetchAccess();
+      queryClient.invalidateQueries({ queryKey: ['conversations'] });
+      queryClient.invalidateQueries({ queryKey: ['conversations-pending'] });
+      Alert.alert('Listo', 'Solicitud de mensaje cancelada');
+    },
+    onError: (e: any) =>
+      Alert.alert('Error', e?.response?.data?.message || 'No se pudo cancelar la solicitud'),
+  });
+
   const followMutation = useMutation({
     mutationFn: () =>
       followRelation?.following
@@ -172,6 +195,21 @@ export default function PlayerProfileScreen() {
     onError: (e: any) =>
       Alert.alert('Error', e?.response?.data?.message || 'No se pudo actualizar el seguimiento'),
   });
+
+  const confirmUnfollow = () => {
+    Alert.alert(
+      'Dejar de seguir',
+      `¿Querés dejar de seguir a ${player?.name?.split(' ')[0] || 'este jugador'}?`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Dejar de seguir',
+          style: 'destructive',
+          onPress: () => followMutation.mutate(),
+        },
+      ],
+    );
+  };
 
   const blockPlayerMutation = useMutation({
     mutationFn: () => api.post(`/reports/block/${targetUserId}`),
@@ -229,10 +267,24 @@ export default function PlayerProfileScreen() {
 
     if (messageAccess.reason === 'pending_outgoing') {
       return (
-        <View style={{ marginTop: 16, padding: 14, backgroundColor: ui.colors.surface, borderRadius: ui.radius.md }}>
-          <Text style={{ fontSize: 13, color: ui.colors.textSecondary, textAlign: 'center' }}>
-            Solicitud de mensaje enviada. Esperá a que {player?.name?.split(' ')[0]} la acepte.
-          </Text>
+        <View style={{ marginTop: 16, gap: 10 }}>
+          <View style={{ padding: 14, backgroundColor: ui.colors.surface, borderRadius: ui.radius.md }}>
+            <Text style={{ fontSize: 13, color: ui.colors.textSecondary, textAlign: 'center' }}>
+              Solicitud de mensaje enviada. Esperá a que {player?.name?.split(' ')[0]} la acepte.
+            </Text>
+          </View>
+          {messageAccess.conversationId ? (
+            <PrimaryButton
+              label="Cancelar solicitud"
+              onPress={() => cancelMessageRequestMutation.mutate(messageAccess.conversationId!)}
+              loading={cancelMessageRequestMutation.isPending}
+              fullWidth
+              size="md"
+              variant="ghost"
+              style={{ backgroundColor: ui.colors.surface }}
+              icon={<Ionicons name="close-circle-outline" size={18} color={ui.colors.danger} />}
+            />
+          ) : null}
         </View>
       );
     }
@@ -288,9 +340,23 @@ export default function PlayerProfileScreen() {
     }
     if (friendRelation.status === 'pending_outgoing') {
       return (
-        <Text style={{ fontSize: 13, color: ui.colors.textMuted, textAlign: 'center', marginTop: 12 }}>
-          Solicitud de amistad pendiente
-        </Text>
+        <View style={{ marginTop: 12, width: '100%', gap: 8 }}>
+          <Text style={{ fontSize: 13, color: ui.colors.textMuted, textAlign: 'center' }}>
+            Solicitud de amistad pendiente
+          </Text>
+          {friendRelation.requestId ? (
+            <PrimaryButton
+              label="Cancelar solicitud"
+              onPress={() => cancelFriendMutation.mutate(friendRelation.requestId!)}
+              loading={cancelFriendMutation.isPending}
+              fullWidth
+              size="md"
+              variant="ghost"
+              style={{ backgroundColor: ui.colors.surface }}
+              icon={<Ionicons name="close-circle-outline" size={18} color={ui.colors.danger} />}
+            />
+          ) : null}
+        </View>
       );
     }
     if (friendRelation.status === 'pending_incoming' && friendRelation.requestId) {
@@ -376,7 +442,9 @@ export default function PlayerProfileScreen() {
         {!isSelf && user && !isClubAccount ? (
           <PrimaryButton
             label={followRelation?.following ? 'Siguiendo' : 'Seguir'}
-            onPress={() => followMutation.mutate()}
+            onPress={() =>
+              followRelation?.following ? confirmUnfollow() : followMutation.mutate()
+            }
             loading={followMutation.isPending}
             fullWidth
             size="md"
