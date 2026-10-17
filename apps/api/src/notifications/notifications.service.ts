@@ -129,6 +129,9 @@ export class NotificationsService {
       title: params.title,
       body: params.body,
       sound: 'default',
+      // Android: sin channelId / priority high las push pueden no mostrarse (Doze / canal).
+      channelId: 'default',
+      priority: 'high' as const,
       data: {
         ...(params.data ?? {}),
         type: params.type,
@@ -152,14 +155,25 @@ export class NotificationsService {
     }
 
     const payload = (await res.json()) as {
-      data?: Array<{ status?: string; details?: { error?: string } }>;
+      data?: Array<{
+        status?: string;
+        message?: string;
+        details?: { error?: string; fault?: string };
+      }>;
     };
     const staleTokens: string[] = [];
     payload.data?.forEach((ticket, index) => {
-      if (ticket.status === 'error' && ticket.details?.error === 'DeviceNotRegistered') {
-        const token = tokens.rows[index]?.token;
-        if (token) staleTokens.push(token);
+      if (ticket.status !== 'error') return;
+      const errorCode = ticket.details?.error;
+      const token = tokens.rows[index]?.token;
+      if (errorCode === 'DeviceNotRegistered' && token) {
+        staleTokens.push(token);
+        return;
       }
+      // InvalidCredentials / MismatchSenderId = FCM mal configurado en EAS (solo Android).
+      this.logger.warn(
+        `Expo push ticket error token=${token?.slice(0, 24) ?? '?'}… code=${errorCode ?? 'unknown'} message=${ticket.message ?? ''}`,
+      );
     });
     if (staleTokens.length > 0) {
       await this.db.query(`DELETE FROM user_push_tokens WHERE token = ANY($1::text[])`, [
