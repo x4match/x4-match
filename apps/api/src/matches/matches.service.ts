@@ -4,6 +4,7 @@ import {
   Inject,
   Injectable,
   NotFoundException,
+  forwardRef,
 } from '@nestjs/common';
 import { ClubPointsService } from '../clubs/club-points.service';
 import { ClubGapFillService } from '../clubs/club-gap-fill.service';
@@ -35,6 +36,7 @@ import type { PaymentsService } from '../payments/payments.service';
 import { parseBestOfThreeSets } from '../common/utils/match-result.util';
 import { computeMatchRatingChanges, splitParticipantsByTeam } from '../rating/engine';
 import { ReportsService } from '../reports/reports.service';
+import { MatchLiveScoreService } from './live-score/match-live-score.service';
 
 const DEFAULT_SEARCH_RADIUS_KM = 30;
 const MAX_SEARCH_RADIUS_KM = 100;
@@ -52,6 +54,8 @@ export class MatchesService {
     private readonly reportsService: ReportsService,
     @Inject(PAYMENTS_SERVICE)
     private readonly paymentsService: PaymentsService,
+    @Inject(forwardRef(() => MatchLiveScoreService))
+    private readonly liveScoreService: MatchLiveScoreService,
   ) {}
 
   private static readonly LEAVABLE_STATUSES = ['OPEN', 'FULL', 'CONFIRMED'] as const;
@@ -995,6 +999,9 @@ export class MatchesService {
       await this.matchesRepository.updateStatus(matchId, 'IN_PROGRESS');
     }
 
+    // Si el marcador en vivo seguía abierto, cerrarlo al cargar el resultado.
+    await this.liveScoreService.closeForResultSubmission(matchId);
+
     const submitterName = await this.matchesRepository.getUserName(userId);
     const participants = await this.matchesRepository.listActiveParticipantUserIds(matchId);
     await this.matchesRepository.notifyUsers(
@@ -1222,6 +1229,7 @@ export class MatchesService {
 
   async closeMatchAsDisputed(matchId: string) {
     await this.matchesRepository.closeAsDisputedWithoutPoints(matchId);
+    await this.liveScoreService.closeForResultSubmission(matchId);
     const detail = await this.findOne(matchId);
     this.realtimeGateway.emitMatchUpdated(detail);
     return detail;

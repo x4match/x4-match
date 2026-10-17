@@ -110,6 +110,21 @@ export class MatchLiveScoreRepository {
     await this.db.query(`DELETE FROM match_live_scores WHERE match_id = $1`, [matchId]);
   }
 
+  /** Cierra un marcador LIVE (p. ej. cuando se carga el resultado a mano). */
+  async markFinishedIfLive(matchId: string): Promise<boolean> {
+    const result = await this.db.query(
+      `UPDATE match_live_scores
+       SET status = 'FINISHED',
+           finished_at = COALESCE(finished_at, NOW()),
+           updated_at = NOW(),
+           version = version + 1
+       WHERE match_id = $1 AND status = 'LIVE'
+       RETURNING match_id`,
+      [matchId],
+    );
+    return Boolean(result.rows[0]);
+  }
+
   transaction<T>(fn: (client: PoolClient) => Promise<T>) {
     return this.db.transaction(fn);
   }
