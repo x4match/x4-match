@@ -10,7 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { api } from '@/lib/api';
 import { ui } from '@/theme/tokens';
-import { Screen, InputField, PrimaryButton, FadeInUp, PressableScale, StackHeader } from '@/components/x4match';
+import { Screen, InputField, PrimaryButton, FadeInUp, PressableScale, StackHeader, KeyboardAvoid } from '@/components/x4match';
 
 export default function ForgotPasswordScreen() {
   const router = useRouter();
@@ -73,7 +73,8 @@ export default function ForgotPasswordScreen() {
     <Screen>
       <LinearGradient colors={[ui.colors.bg, ui.colors.bgElevated, ui.colors.surface0]} style={{ flex: 1 }}>
         <StackHeader title="Recuperar contraseña" />
-        <ScrollView
+        <KeyboardAvoid style={{ flex: 1 }}>
+          <ScrollView
             contentContainerStyle={{
               flexGrow: 1,
               paddingHorizontal: ui.spacing.lg,
@@ -154,6 +155,7 @@ export default function ForgotPasswordScreen() {
               </PressableScale>
             </FadeInUp>
           </ScrollView>
+        </KeyboardAvoid>
       </LinearGradient>
     </Screen>
   );

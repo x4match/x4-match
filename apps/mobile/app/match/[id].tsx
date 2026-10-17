@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -30,6 +30,7 @@ import {
   StatusPill,
   PrimaryButton,
   Avatar,
+  KeyboardAvoid,
   PlayerRatingSection,
   MatchResultComposer,
   SkillProgress,
@@ -557,6 +558,26 @@ export default function MatchDetailScreen() {
     match.result?.score ||
     (match.result?.sets && match.result.sets.length > 0)
   );
+  // Si ya hay resultado cargado, el live no puede seguir en "EN VIVO".
+  const displayLiveScore = useMemo(() => {
+    if (!liveScore) return null;
+    if (hasResultScore && liveScore.status === 'LIVE') {
+      return {
+        ...liveScore,
+        status: 'FINISHED' as const,
+        viewer: liveScore.viewer
+          ? { ...liveScore.viewer, canScore: false, canStart: false }
+          : liveScore.viewer,
+      };
+    }
+    return liveScore;
+  }, [liveScore, hasResultScore]);
+  const showLiveCard = Boolean(
+    displayLiveScore &&
+      (displayLiveScore.status === 'LIVE' ||
+        (displayLiveScore.status === 'FINISHED' &&
+          (!!displayLiveScore.winner || (displayLiveScore.sets?.length ?? 0) > 0))),
+  );
   const showResultSection =
     hasResultScore ||
     ['FULL', 'CONFIRMED', 'IN_PROGRESS', 'FINISHED', 'DISPUTED'].includes(match.status);
@@ -629,7 +650,7 @@ export default function MatchDetailScreen() {
       />
 
       {showChat ? (
-        <View style={{ flex: 1 }}>
+        <KeyboardAvoid style={{ flex: 1 }}>
           <ScrollView
             ref={scrollRef}
             style={{ flex: 1, padding: ui.spacing.lg }}
@@ -688,7 +709,7 @@ export default function MatchDetailScreen() {
               <Ionicons name="send" size={20} color={ui.colors.onPrimary} />
             </TouchableOpacity>
           </View>
-        </View>
+        </KeyboardAvoid>
       ) : (
         <>
           <ScrollView contentContainerStyle={{ padding: ui.spacing.lg, paddingBottom: hasFooterActions ? 200 : 120 }}>
@@ -1076,24 +1097,24 @@ export default function MatchDetailScreen() {
               />
             )}
 
-            {liveScore?.status === 'LIVE' || liveScore?.status === 'FINISHED' ? (
+            {showLiveCard && displayLiveScore ? (
               <TouchableOpacity
                 activeOpacity={0.85}
                 onPress={() => router.push(`/match/${id}/live` as any)}
                 style={{ marginBottom: ui.spacing.md }}
               >
-                <LiveScoreboard live={liveScore} compact />
+                <LiveScoreboard live={displayLiveScore} compact />
                 <Text
                   style={{ color: ui.colors.primary, fontSize: 13, fontWeight: '700', textAlign: 'center', marginTop: 8 }}
                 >
-                  {liveScore.status === 'LIVE'
-                    ? liveScore.viewer?.canScore
+                  {displayLiveScore.status === 'LIVE'
+                    ? displayLiveScore.viewer?.canScore
                       ? 'Abrir marcador para sumar puntos'
                       : 'Ver marcador en vivo'
                     : 'Ver marcador final'}
                 </Text>
               </TouchableOpacity>
-            ) : liveScore?.viewer?.canStart && !isClubAccount ? (
+            ) : displayLiveScore?.viewer?.canStart && !isClubAccount && !hasResultScore ? (
               <PrimaryButton
                 label="Llevar marcador en vivo"
                 variant="outline"

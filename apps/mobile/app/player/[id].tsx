@@ -264,6 +264,18 @@ export default function PlayerProfileScreen() {
     onError: (e: any) => Alert.alert('Error', e?.response?.data?.message || 'No se pudo enviar la solicitud'),
   });
 
+  const cancelMessageRequestMutation = useMutation({
+    mutationFn: (conversationId: string) => api.post(`/conversations/${conversationId}/cancel`),
+    onSuccess: () => {
+      refetchAccess();
+      queryClient.invalidateQueries({ queryKey: ['conversations'] });
+      queryClient.invalidateQueries({ queryKey: ['conversations-pending'] });
+      Alert.alert('Listo', 'Solicitud de mensaje cancelada');
+    },
+    onError: (e: any) =>
+      Alert.alert('Error', e?.response?.data?.message || 'No se pudo cancelar la solicitud'),
+  });
+
   const openChat = () => {
     if (messageAccess?.canMessage && messageAccess.conversationId) {
       router.push({
@@ -307,6 +319,21 @@ export default function PlayerProfileScreen() {
     onError: (e: any) =>
       Alert.alert('Error', e?.response?.data?.message || 'No se pudo actualizar el seguimiento'),
   });
+
+  const confirmUnfollow = () => {
+    Alert.alert(
+      'Dejar de seguir',
+      `¿Querés dejar de seguir a ${player?.name?.split(' ')[0] || 'este jugador'}?`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Dejar de seguir',
+          style: 'destructive',
+          onPress: () => followMutation.mutate(),
+        },
+      ],
+    );
+  };
 
   const blockPlayerMutation = useMutation({
     mutationFn: () => api.post(`/reports/block/${targetUserId}`),
@@ -408,7 +435,7 @@ export default function PlayerProfileScreen() {
       >
         <FadeInUp index={0}>
           <AppCard style={{ marginBottom: ui.spacing.md, backgroundColor: CARD_BG }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 14 }}>
               <TouchableOpacity
                 onPress={() => player.photo_url && setShowPhotoViewer(true)}
                 disabled={!player.photo_url}
@@ -439,8 +466,8 @@ export default function PlayerProfileScreen() {
                     fontWeight: '700',
                     fontFamily: fontFamily.regular,
                     color: ui.colors.textPrimary,
+                    lineHeight: 28,
                   }}
-                  numberOfLines={1}
                 >
                   {player.name}
                 </Text>
@@ -451,7 +478,7 @@ export default function PlayerProfileScreen() {
                     marginTop: 4,
                     fontFamily: fontFamily.regular,
                   }}
-                  numberOfLines={1}
+                  numberOfLines={2}
                 >
                   {locationLine}
                 </Text>
@@ -512,7 +539,9 @@ export default function PlayerProfileScreen() {
               {!isClubAccount ? (
                 <LimeButton
                   label={followRelation?.following ? 'Siguiendo' : 'Seguir'}
-                  onPress={() => followMutation.mutate()}
+                  onPress={() =>
+                    followRelation?.following ? confirmUnfollow() : followMutation.mutate()
+                  }
                   loading={followMutation.isPending}
                   icon={
                     <Ionicons
@@ -546,9 +575,23 @@ export default function PlayerProfileScreen() {
                 />
               ) : null}
               {messageAccess?.reason === 'pending_outgoing' ? (
-                <Text style={{ fontSize: 13, color: MUTED, textAlign: 'center' }}>
-                  Solicitud de mensaje enviada. Esperá a que {player.name.split(' ')[0]} la acepte.
-                </Text>
+                <View style={{ gap: 10 }}>
+                  <Text style={{ fontSize: 13, color: MUTED, textAlign: 'center' }}>
+                    Solicitud de mensaje enviada. Esperá a que {player.name.split(' ')[0]} la acepte.
+                  </Text>
+                  {messageAccess.conversationId ? (
+                    <PrimaryButton
+                      label="Cancelar solicitud"
+                      onPress={() => cancelMessageRequestMutation.mutate(messageAccess.conversationId!)}
+                      loading={cancelMessageRequestMutation.isPending}
+                      fullWidth
+                      size="md"
+                      variant="ghost"
+                      style={{ backgroundColor: ui.colors.surfaceAlt }}
+                      icon={<Ionicons name="close-circle-outline" size={18} color={ui.colors.danger} />}
+                    />
+                  ) : null}
+                </View>
               ) : null}
               {messageAccess?.reason === 'pending_incoming' ? (
                 <PrimaryButton

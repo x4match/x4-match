@@ -35,7 +35,7 @@ import { postAuthRoute } from '@/lib/auth/onboarding';
 import { describeAxiosError, devLog, devWarn } from '@/lib/debug';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ui, fontFamily } from '@/theme/tokens';
-import { Screen, AppCard, PrimaryButton, FadeInUp, PressableScale } from '@/components/x4match';
+import { Screen, AppCard, PrimaryButton, FadeInUp, PressableScale, KeyboardAvoid } from '@/components/x4match';
 import type { PlayerCategory, UserRole } from '@/lib/types';
 import { pendingVerificationHref, verifyEmailHref } from '@/lib/auth/verification';
 
@@ -807,6 +807,7 @@ export default function RegisterScreen() {
   return (
     <Screen>
       <View style={{ flex: 1, backgroundColor: '#000000' }}>
+        <KeyboardAvoid style={{ flex: 1 }}>
         <ScrollView
           contentContainerStyle={{
             flexGrow: 1,
@@ -950,6 +951,7 @@ export default function RegisterScreen() {
             )}
           </PressableScale>
         </ScrollView>
+        </KeyboardAvoid>
       </View>
 
       <Modal visible={showMatchPicker} transparent animationType="fade">
