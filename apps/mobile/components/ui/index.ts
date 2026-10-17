@@ -11,6 +11,7 @@ export { Avatar } from './Avatar';
 export { EmptyState } from './EmptyState';
 export { AppHeader, StackHeader, Screen } from './Screen';
 export { KeyboardAvoid } from './KeyboardAvoid';
+export { ProfilePhotoViewer } from './ProfilePhotoViewer';
 export { SegmentedControl } from './SegmentedControl';
 export { Sheet } from './Sheet';
 export { DraggableSheet } from './DraggableSheet';

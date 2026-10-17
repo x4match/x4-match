@@ -43,6 +43,7 @@ import {
   isViewerInMatch,
   TournamentCard,
   ShopPromoBanner,
+  ProfilePhotoViewer,
 } from '@/components/x4match';
 import { TourTarget, useScreenTour, type TourStep } from '@/components/tour/ScreenTour';
 
@@ -360,6 +361,8 @@ export default function HomeScreen() {
   const [playerCoords, setPlayerCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [locationReady, setLocationReady] = useState(false);
   const [usingGeoLocation, setUsingGeoLocation] = useState(false);
+  const [showPhotoViewer, setShowPhotoViewer] = useState(false);
+  const profilePhoto = user?.photo?.trim() || null;
 
   useEffect(() => {
     if (!isPlayerAccount) {
@@ -1078,22 +1081,36 @@ export default function HomeScreen() {
                   }}
                 >
                   <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <Avatar
-                      name={user?.name || 'Jugador'}
-                      photo={user?.photo}
-                      size="xxl"
-                      borderColor="#FFFFFF"
-                      style={
-                        {
-                          width: 72,
-                          height: 72,
-                          borderRadius: 36,
-                          borderWidth: 1,
-                          marginRight: 12,
-                          backgroundColor: 'rgba(30,30,36,0.8)',
-                        } as any
+                    <PressableScale
+                      onPress={() => {
+                        if (profilePhoto) {
+                          setShowPhotoViewer(true);
+                          return;
+                        }
+                        router.push('/(tabs)/profile' as any);
+                      }}
+                      accessibilityRole="button"
+                      accessibilityLabel={
+                        profilePhoto ? 'Ver foto de perfil' : 'Ir a perfil para agregar foto'
                       }
-                    />
+                      style={{ marginRight: 12 }}
+                    >
+                      <Avatar
+                        name={user?.name || 'Jugador'}
+                        photo={profilePhoto || undefined}
+                        size="xxl"
+                        borderColor="#FFFFFF"
+                        style={
+                          {
+                            width: 72,
+                            height: 72,
+                            borderRadius: 36,
+                            borderWidth: 1,
+                            backgroundColor: 'rgba(30,30,36,0.8)',
+                          } as any
+                        }
+                      />
+                    </PressableScale>
                     <View style={{ flex: 1, marginRight: 8, gap: 6 }}>
                       <Text
                         style={{
@@ -1688,6 +1705,14 @@ export default function HomeScreen() {
           </>
         )}
       </TabScrollView>
+      {profilePhoto ? (
+        <ProfilePhotoViewer
+          visible={showPhotoViewer}
+          photo={profilePhoto}
+          name={user?.name || 'Perfil'}
+          onClose={() => setShowPhotoViewer(false)}
+        />
+      ) : null}
     </Screen>
   );
 }

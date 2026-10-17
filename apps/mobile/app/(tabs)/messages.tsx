@@ -241,6 +241,18 @@ export default function MessagesScreen() {
     );
   };
 
+  const cancelMessageRequestMutation = useMutation({
+    mutationFn: (conversationId: string) => api.post(`/conversations/${conversationId}/cancel`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['conversations'] });
+      queryClient.invalidateQueries({ queryKey: ['conversations-pending'] });
+      queryClient.invalidateQueries({ queryKey: ['message-access'] });
+      Alert.alert('Listo', 'Solicitud de mensaje cancelada');
+    },
+    onError: (e: any) =>
+      Alert.alert('Error', e?.response?.data?.message || 'No se pudo cancelar la solicitud'),
+  });
+
   const onRefresh = () => {
     refetchDm();
     refetchPending();
@@ -545,18 +557,15 @@ export default function MessagesScreen() {
                 <>
                   <SectionLabel style={{ marginTop: 12 }}>Esperando respuesta</SectionLabel>
                   {pendingOutgoing.map((c) => (
-                    <SwipeToDeleteRow
-                      key={c.id}
-                      onDelete={() => confirmDeleteConversation(c.id, c.other_user_name)}
-                    >
-                      <AppCard
-                        padding="sm"
-                        style={{ marginBottom: 8, opacity: 0.85 }}
+                    <AppCard key={c.id} padding="sm" style={{ marginBottom: 8 }}>
+                      <TouchableOpacity
                         onPress={
                           c.other_user_id || c.other_club_id
                             ? () => openSenderProfile(c.other_user_id, c.other_club_id)
                             : undefined
                         }
+                        activeOpacity={0.85}
+                        disabled={!(c.other_user_id || c.other_club_id)}
                       >
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
                           <Avatar name={c.other_user_name} photo={c.other_user_photo} size="sm" />
@@ -572,8 +581,19 @@ export default function MessagesScreen() {
                             color={ui.colors.textMuted}
                           />
                         </View>
-                      </AppCard>
-                    </SwipeToDeleteRow>
+                      </TouchableOpacity>
+                      <View style={{ marginTop: 10 }}>
+                        <PrimaryButton
+                          label="Cancelar solicitud"
+                          size="sm"
+                          variant="ghost"
+                          fullWidth
+                          onPress={() => cancelMessageRequestMutation.mutate(c.id)}
+                          loading={cancelMessageRequestMutation.isPending}
+                          style={{ backgroundColor: ui.colors.surface }}
+                        />
+                      </View>
+                    </AppCard>
                   ))}
                 </>
               )}

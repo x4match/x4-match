@@ -11,6 +11,7 @@ export {
   StackHeader,
   Screen,
   KeyboardAvoid,
+  ProfilePhotoViewer,
   PressableScale,
   FadeInUp,
   FadeIn,
@@ -39,7 +40,6 @@ export { MatchOrganizedSummary } from './MatchOrganizedSummary';
 export { PlayerRatingSection, buildPlayerRatingsPayload } from './PlayerRatingSection';
 export { MatchResultComposer } from './MatchResultComposer';
 export { SkillProgress } from './SkillProgress';
-export { ProfilePhotoViewer } from './ProfilePhotoViewer';
 export { PlayerMatchStatsCard } from './PlayerMatchStatsCard';
 export { BadgesSection } from './BadgesSection';
 export { TournamentTitlesCard } from './TournamentTitlesCard';
