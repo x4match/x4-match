@@ -49,6 +49,11 @@ export class MessagingController {
     return this.messagingService.rejectConversation(user.sub, id);
   }
 
+  @Post(':id/cancel')
+  cancel(@CurrentUser() user: { sub: string }, @Param('id') id: string) {
+    return this.messagingService.cancelConversationRequest(user.sub, id);
+  }
+
   @Post(':id/read')
   markAsRead(@CurrentUser() user: { sub: string }, @Param('id') id: string) {
     return this.messagingService.markAsRead(user.sub, id);

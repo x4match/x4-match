@@ -100,6 +100,29 @@ export default function MessagesScreen() {
       Alert.alert('Error', e?.response?.data?.message || 'No se pudo rechazar la solicitud'),
   });
 
+  const cancelFriendMutation = useMutation({
+    mutationFn: (requestId: string) => api.post(`/friends/cancel/${requestId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['friends-pending'] });
+      queryClient.invalidateQueries({ queryKey: ['friend-relation'] });
+      Alert.alert('Listo', 'Solicitud de amistad cancelada');
+    },
+    onError: (e: any) =>
+      Alert.alert('Error', e?.response?.data?.message || 'No se pudo cancelar la solicitud'),
+  });
+
+  const cancelMessageRequestMutation = useMutation({
+    mutationFn: (conversationId: string) => api.post(`/conversations/${conversationId}/cancel`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['conversations'] });
+      queryClient.invalidateQueries({ queryKey: ['conversations-pending'] });
+      queryClient.invalidateQueries({ queryKey: ['message-access'] });
+      Alert.alert('Listo', 'Solicitud de mensaje cancelada');
+    },
+    onError: (e: any) =>
+      Alert.alert('Error', e?.response?.data?.message || 'No se pudo cancelar la solicitud'),
+  });
+
   const onRefresh = () => {
     refetchDm();
     refetchPending();
@@ -269,40 +292,63 @@ export default function MessagesScreen() {
               Esperando respuesta
             </Text>
             {friendOutgoing.map((req) => (
-              <AppCard
-                key={`friend-out-${req.id}`}
-                padding="sm"
-                style={{ marginBottom: 8, opacity: 0.85 }}
-                onPress={() => router.push(`/player/${req.user_id}` as any)}
-              >
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                  <Avatar name={req.name} photo={req.photo_url} size="sm" />
-                  <Text style={{ flex: 1, fontSize: 14, color: ui.colors.textSecondary }}>
-                    Amistad enviada a{' '}
-                    <Text style={{ fontWeight: '600', color: ui.colors.textPrimary }}>{req.name}</Text>
-                  </Text>
-                  <Ionicons name="person-add-outline" size={18} color={ui.colors.textMuted} />
+              <AppCard key={`friend-out-${req.id}`} padding="sm" style={{ marginBottom: 8 }}>
+                <TouchableOpacity
+                  onPress={() => router.push(`/player/${req.user_id}` as any)}
+                  activeOpacity={0.85}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                    <Avatar name={req.name} photo={req.photo_url} size="sm" />
+                    <Text style={{ flex: 1, fontSize: 14, color: ui.colors.textSecondary }}>
+                      Amistad enviada a{' '}
+                      <Text style={{ fontWeight: '600', color: ui.colors.textPrimary }}>{req.name}</Text>
+                    </Text>
+                    <Ionicons name="person-add-outline" size={18} color={ui.colors.textMuted} />
+                  </View>
+                </TouchableOpacity>
+                <View style={{ marginTop: 10 }}>
+                  <PrimaryButton
+                    label="Cancelar solicitud"
+                    size="sm"
+                    variant="ghost"
+                    fullWidth
+                    onPress={() => cancelFriendMutation.mutate(req.id)}
+                    loading={cancelFriendMutation.isPending}
+                    style={{ backgroundColor: ui.colors.surface }}
+                  />
                 </View>
               </AppCard>
             ))}
             {pendingOutgoing.map((c) => (
-              <AppCard
-                key={c.id}
-                padding="sm"
-                style={{ marginBottom: 8, opacity: 0.85 }}
-                onPress={
-                  c.other_user_id
-                    ? () => router.push(`/player/${c.other_user_id}` as any)
-                    : undefined
-                }
-              >
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                  <Avatar name={c.other_user_name} photo={c.other_user_photo} size="sm" />
-                  <Text style={{ flex: 1, fontSize: 14, color: ui.colors.textSecondary }}>
-                    Solicitud enviada a{' '}
-                    <Text style={{ fontWeight: '600', color: ui.colors.textPrimary }}>{c.other_user_name}</Text>
-                  </Text>
-                  <Ionicons name="person-outline" size={18} color={ui.colors.textMuted} />
+              <AppCard key={c.id} padding="sm" style={{ marginBottom: 8 }}>
+                <TouchableOpacity
+                  onPress={
+                    c.other_user_id
+                      ? () => router.push(`/player/${c.other_user_id}` as any)
+                      : undefined
+                  }
+                  activeOpacity={0.85}
+                  disabled={!c.other_user_id}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                    <Avatar name={c.other_user_name} photo={c.other_user_photo} size="sm" />
+                    <Text style={{ flex: 1, fontSize: 14, color: ui.colors.textSecondary }}>
+                      Solicitud enviada a{' '}
+                      <Text style={{ fontWeight: '600', color: ui.colors.textPrimary }}>{c.other_user_name}</Text>
+                    </Text>
+                    <Ionicons name="person-outline" size={18} color={ui.colors.textMuted} />
+                  </View>
+                </TouchableOpacity>
+                <View style={{ marginTop: 10 }}>
+                  <PrimaryButton
+                    label="Cancelar solicitud"
+                    size="sm"
+                    variant="ghost"
+                    fullWidth
+                    onPress={() => cancelMessageRequestMutation.mutate(c.id)}
+                    loading={cancelMessageRequestMutation.isPending}
+                    style={{ backgroundColor: ui.colors.surface }}
+                  />
                 </View>
               </AppCard>
             ))}
