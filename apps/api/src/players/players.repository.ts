@@ -287,7 +287,8 @@ export class PlayersRepository {
   }
 
   searchPlayers(query: string, excludeUserId: string, limit = 20) {
-    const pattern = `%${query.trim()}%`;
+    const term = query.trim().replace(/[\\%_]/g, (c) => `\\${c}`);
+    const pattern = `%${term}%`;
     return this.db.query(
       `SELECT p.id,
               p.user_id,
@@ -313,9 +314,15 @@ export class PlayersRepository {
            WHERE (bu.blocker_id = $1 AND bu.blocked_id = p.user_id)
               OR (bu.blocker_id = p.user_id AND bu.blocked_id = $1)
          )
-       ORDER BY u.name ASC
+       ORDER BY
+         CASE
+           WHEN LOWER(COALESCE(p.nickname, '')) = LOWER($4) THEN 0
+           WHEN COALESCE(p.nickname, '') ILIKE $5 THEN 1
+           ELSE 2
+         END,
+         u.name ASC
        LIMIT $3`,
-      [excludeUserId, pattern, limit],
+      [excludeUserId, pattern, limit, query.trim(), `${term}%`],
     );
   }
 }

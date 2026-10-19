@@ -157,7 +157,7 @@ export class PlayersService {
   }
 
   async search(query: string | undefined, excludeUserId: string) {
-    const q = query?.trim() ?? '';
+    const q = (query?.trim() ?? '').replace(/^@+/, '');
     if (q.length < 2) {
       return [];
     }
