@@ -36,7 +36,9 @@ import type { PaymentsService } from '../payments/payments.service';
 import { parseBestOfThreeSets } from '../common/utils/match-result.util';
 import { computeMatchRatingChanges, splitParticipantsByTeam } from '../rating/engine';
 import { ReportsService } from '../reports/reports.service';
-import { MatchLiveScoreService } from './live-score/match-live-score.service';
+// Import circular con MatchLiveScoreService: ver nota en match-live-score.service.ts.
+import * as liveScoreServiceModule from './live-score/match-live-score.service';
+import type { MatchLiveScoreService } from './live-score/match-live-score.service';
 
 const DEFAULT_SEARCH_RADIUS_KM = 30;
 const MAX_SEARCH_RADIUS_KM = 100;
@@ -54,7 +56,7 @@ export class MatchesService {
     private readonly reportsService: ReportsService,
     @Inject(PAYMENTS_SERVICE)
     private readonly paymentsService: PaymentsService,
-    @Inject(forwardRef(() => MatchLiveScoreService))
+    @Inject(forwardRef(() => liveScoreServiceModule.MatchLiveScoreService))
     private readonly liveScoreService: MatchLiveScoreService,
   ) {}
 

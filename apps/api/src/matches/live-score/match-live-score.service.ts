@@ -8,7 +8,10 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { MatchesRepository } from '../matches.repository';
-import { MatchesService } from '../matches.service';
+// Import circular con MatchesService: el tipo va como `import type` para que la
+// metadata de decoradores no lea la clase antes de que el módulo termine de cargar.
+import * as matchesServiceModule from '../matches.service';
+import type { MatchesService } from '../matches.service';
 import { RealtimeGateway } from '../../realtime/realtime.gateway';
 import { userTeamFromRank } from '../../common/utils/match-result.util';
 import {
@@ -35,7 +38,7 @@ export class MatchLiveScoreService {
   constructor(
     private readonly liveRepository: MatchLiveScoreRepository,
     private readonly matchesRepository: MatchesRepository,
-    @Inject(forwardRef(() => MatchesService))
+    @Inject(forwardRef(() => matchesServiceModule.MatchesService))
     private readonly matchesService: MatchesService,
     private readonly realtimeGateway: RealtimeGateway,
   ) {}
