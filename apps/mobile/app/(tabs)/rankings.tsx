@@ -9,13 +9,24 @@ import type { Circuit, Tournament } from '@/lib/types';
 import { formatShortDate } from '@/lib/format';
 import { ui } from '@/theme/tokens';
 import { tabScreenPadding } from '@/lib/layout';
-import { Screen, AppHeader, AppCard, StatusPill, EmptyState, SegmentedControl } from '@/components/padely';
+import {
+  Screen,
+  AppHeader,
+  AppCard,
+  StatusPill,
+  EmptyState,
+  SegmentedControl,
+  TournamentCard,
+  CircuitsUnderConstruction,
+} from '@/components/x4match';
+import { useCircuitsEnabled } from '@/lib/features';
 
 type TabMode = 'tournaments' | 'circuits';
 
 export default function TournamentsTabScreen() {
   const router = useRouter();
-  const [mode, setMode] = useState<TabMode>('circuits');
+  const circuitsEnabled = useCircuitsEnabled();
+  const [mode, setMode] = useState<TabMode>(circuitsEnabled ? 'circuits' : 'tournaments');
 
   const { data: tournaments, isLoading: loadingTournaments, refetch: refetchTournaments } = useQuery({
     queryKey: ['tournaments-tab'],
@@ -32,13 +43,13 @@ export default function TournamentsTabScreen() {
       const res = await api.get('/circuits');
       return res.data;
     },
-    enabled: mode === 'circuits',
+    enabled: mode === 'circuits' && circuitsEnabled,
   });
 
-  const isLoading = mode === 'tournaments' ? loadingTournaments : loadingCircuits;
+  const isLoading = mode === 'tournaments' ? loadingTournaments : circuitsEnabled && loadingCircuits;
   const onRefresh = useCallback(() => {
     if (mode === 'tournaments') refetchTournaments();
-    else refetchCircuits();
+    else if (circuitsEnabled) refetchCircuits();
   }, [mode, refetchTournaments, refetchCircuits]);
 
   const tournamentList: Tournament[] = (tournaments || []).map(mapTournament);
@@ -73,40 +84,15 @@ export default function TournamentsTabScreen() {
             />
           ) : (
             tournamentList.map((t) => (
-              <AppCard key={t.id} onPress={() => router.push(`/tournament/${t.id}` as any)}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                  <View
-                    style={{
-                      width: 48,
-                      height: 48,
-                      borderRadius: 12,
-                      backgroundColor: 'rgba(245,158,11,0.12)',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}
-                  >
-                    <Ionicons name="trophy" size={24} color={ui.colors.accent} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-                      <Text style={{ fontWeight: '700', color: ui.colors.textPrimary, flex: 1 }}>{t.name}</Text>
-                      <StatusPill status={t.status} />
-                    </View>
-                    <Text style={{ fontSize: 12, color: ui.colors.textSecondary, marginTop: 4 }}>
-                      {[
-                        t.category ? `Cat. ${t.category}` : null,
-                        t.startDate ? formatShortDate(t.startDate) : null,
-                        t.maxTeams ? `${t.maxTeams} equipos máx.` : null,
-                      ]
-                        .filter(Boolean)
-                        .join(' · ')}
-                    </Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={18} color={ui.colors.textMuted} />
-                </View>
-              </AppCard>
+              <TournamentCard
+                key={t.id}
+                tournament={t}
+                onPress={() => router.push(`/tournament/${t.id}` as any)}
+              />
             ))
           )
+        ) : !circuitsEnabled ? (
+          <CircuitsUnderConstruction />
         ) : circuitList.length === 0 && !isLoading ? (
           <EmptyState
             icon={<Ionicons name="git-network-outline" size={32} color={ui.colors.textMuted} />}

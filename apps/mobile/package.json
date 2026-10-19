@@ -9,10 +9,13 @@
     "prebuild": "expo prebuild",
     "web": "expo start --web",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "version:bump": "node scripts/bump-version.mjs",
+    "build:prod": "node scripts/bump-version.mjs patch && eas build --profile production",
+    "build:prod:android": "node scripts/bump-version.mjs patch && eas build --profile production --platform android",
+    "build:prod:ios": "node scripts/bump-version.mjs patch && eas build --profile production --platform ios"
   },
   "dependencies": {
-    "@expo-google-fonts/geist": "^0.4.2",
     "@expo/metro-runtime": "~57.0.15",
     "@expo/vector-icons": "^15.0.3",
     "@react-native-async-storage/async-storage": "^2.2.0",
@@ -31,6 +34,7 @@
     "expo-font": "~57.0.3",
     "expo-haptics": "~57.0.2",
     "expo-image-picker": "~57.0.16",
+    "expo-keep-awake": "~57.0.2",
     "expo-linear-gradient": "~57.0.1",
     "expo-linking": "~57.0.9",
     "expo-location": "~57.0.16",
@@ -47,9 +51,11 @@
     "react-dom": "19.2.3",
     "react-native": "0.86.3",
     "react-native-gesture-handler": "~2.32.0",
+    "react-native-gifted-charts": "^1.4.78",
     "react-native-reanimated": "~4.5.1",
     "react-native-safe-area-context": "5.7.0",
     "react-native-screens": "~4.26.2",
+    "react-native-svg": "15.15.4",
     "react-native-worklets": "0.10.1",
     "socket.io-client": "^4.6.0"
   },

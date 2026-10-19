@@ -16,6 +16,8 @@
     "typecheck": "pnpm -r typecheck",
     "dev:web-club": "pnpm --filter web-club dev",
     "build:web-club": "pnpm --filter web-club build",
+    "dev:web-sponsors": "pnpm --filter web-sponsors dev",
+    "build:web-sponsors": "pnpm --filter web-sponsors build",
     "dev:web-admin": "pnpm --filter web-admin dev",
     "build:web-admin": "pnpm --filter web-admin build",
     "dev:web": "pnpm --filter web dev",

@@ -1,12 +1,19 @@
 import { api } from '@/lib/api';
 import type {
+  FixtureMode,
   TournamentDate,
   TournamentDetail,
+  TournamentGroupsResponse,
   TournamentInvite,
   TournamentMatch,
   TournamentModality,
+  TournamentPlayer,
+  TournamentPlayerSide,
+  TournamentRefund,
   TournamentRegistration,
   TournamentStanding,
+  WithdrawRefundResult,
+  ZoneDraft,
 } from './types';
 
 export async function fetchTournamentDetail(
@@ -100,6 +107,22 @@ export async function removeRegistration(id: string, regId: string) {
   return api.delete(`/tournaments/${id}/registrations/${regId}`);
 }
 
+/** El jugador se baja de su inscripción; el backend aplica la política de devolución. */
+export async function withdrawRegistration(id: string, regId: string) {
+  const res = await api.delete(`/tournaments/${id}/registrations/${regId}`);
+  return res.data as { success: boolean; refund: WithdrawRefundResult | null };
+}
+
+export async function fetchTournamentRefunds(id: string): Promise<TournamentRefund[]> {
+  const res = await api.get(`/tournaments/${id}/refunds`);
+  return res.data;
+}
+
+export async function markTournamentRefundDone(id: string, refundId: string) {
+  const res = await api.post(`/tournaments/${id}/refunds/${refundId}/mark-refunded`);
+  return res.data as TournamentRefund;
+}
+
 // Pagos
 export async function createRegistrationCheckout(id: string, regId: string) {
   const res = await api.post(`/tournaments/${id}/registrations/${regId}/checkout`);
@@ -110,6 +133,13 @@ export async function createRegistrationCheckout(id: string, regId: string) {
     checkoutUrl?: string;
     provider?: string;
     mock?: boolean;
+    message?: string;
+    methods?: { transfer?: boolean; mercadopago?: boolean };
+    transfer?: {
+      cbu?: string | null;
+      alias?: string | null;
+      holderName?: string | null;
+    } | null;
   };
 }
 
@@ -132,6 +162,16 @@ export async function fetchMatches(id: string): Promise<TournamentMatch[]> {
 
 export async function fetchStandings(id: string): Promise<TournamentStanding[]> {
   const res = await api.get(`/tournaments/${id}/standings`);
+  return res.data;
+}
+
+export async function fetchGroups(
+  id: string,
+  inviteToken?: string | null,
+): Promise<TournamentGroupsResponse> {
+  const res = await api.get(`/tournaments/${id}/groups`, {
+    params: inviteToken ? { invite: inviteToken } : undefined,
+  });
   return res.data;
 }
 
@@ -165,9 +205,14 @@ export async function updateMatch(
 export async function setMatchScore(
   id: string,
   matchId: string,
-  sets: { teamA: number; teamB: number }[]
+  result: { sets: { teamA: number; teamB: number }[] } | { walkoverWinner: 'A' | 'B' }
 ): Promise<TournamentMatch> {
-  const res = await api.post(`/tournaments/${id}/matches/${matchId}/score`, { sets });
+  const res = await api.post(`/tournaments/${id}/matches/${matchId}/score`, result);
+  return res.data;
+}
+
+export async function clearMatchScore(id: string, matchId: string): Promise<TournamentMatch> {
+  const res = await api.delete(`/tournaments/${id}/matches/${matchId}/score`);
   return res.data;
 }
 
@@ -175,11 +220,121 @@ export async function removeMatch(id: string, matchId: string) {
   return api.delete(`/tournaments/${id}/matches/${matchId}`);
 }
 
+export async function clearFixture(id: string) {
+  return api.delete(`/tournaments/${id}/matches`);
+}
+
+// Jugadores y parejas (torneo interno)
+export async function fetchTournamentPlayers(
+  id: string,
+  inviteToken?: string | null,
+): Promise<TournamentPlayer[]> {
+  const res = await api.get(`/tournaments/${id}/players`, {
+    params: inviteToken ? { invite: inviteToken } : undefined,
+  });
+  return res.data;
+}
+
+export async function addTournamentPlayer(
+  id: string,
+  payload: { name: string; side: TournamentPlayerSide; userId?: string },
+): Promise<TournamentPlayer> {
+  const res = await api.post(`/tournaments/${id}/players`, payload);
+  return res.data;
+}
+
+export async function updateTournamentPlayerSide(
+  id: string,
+  playerId: string,
+  side: TournamentPlayerSide,
+): Promise<TournamentPlayer> {
+  const res = await api.patch(`/tournaments/${id}/players/${playerId}`, { side });
+  return res.data;
+}
+
+export async function removeTournamentPlayer(id: string, playerId: string) {
+  return api.delete(`/tournaments/${id}/players/${playerId}`);
+}
+
+export async function createTournamentPair(
+  id: string,
+  driveId: string,
+  revesId: string,
+): Promise<TournamentPlayer[]> {
+  const res = await api.post(`/tournaments/${id}/pairs`, { driveId, revesId });
+  return res.data;
+}
+
+export async function autoPairTournamentPlayers(id: string): Promise<TournamentPlayer[]> {
+  const res = await api.post(`/tournaments/${id}/pairs/auto`);
+  return res.data;
+}
+
+export async function removeTournamentPair(id: string, regId: string): Promise<TournamentPlayer[]> {
+  const res = await api.delete(`/tournaments/${id}/pairs/${regId}`);
+  return res.data;
+}
+
 export async function generateFixture(
   id: string,
-  payload: { mode?: 'ROUND_ROBIN' | 'SINGLE_ELIMINATION' | 'OPEN_COURT'; reset?: boolean }
+  payload: { mode?: FixtureMode; reset?: boolean; force?: boolean }
 ): Promise<TournamentMatch[]> {
   const res = await api.post(`/tournaments/${id}/generate-fixture`, payload);
+  return res.data;
+}
+
+// Gestión estilo organizador: inscripción, zonas, cierre y carga masiva
+
+export async function updateRegistrationWindow(
+  id: string,
+  payload: { closesAt?: string | null; action?: 'CLOSE' | 'REOPEN' },
+): Promise<TournamentDetail> {
+  const res = await api.patch(`/tournaments/${id}/registration-window`, payload);
+  return res.data;
+}
+
+export async function fetchZoneDraft(id: string): Promise<ZoneDraft> {
+  const res = await api.get(`/tournaments/${id}/zones`);
+  return res.data;
+}
+
+export async function saveZoneDraft(
+  id: string,
+  zones: { code: string; teamIds: string[] }[],
+): Promise<ZoneDraft> {
+  const res = await api.put(`/tournaments/${id}/zones`, { zones });
+  return res.data;
+}
+
+export async function resetZoneDraft(id: string): Promise<ZoneDraft> {
+  const res = await api.delete(`/tournaments/${id}/zones`);
+  return res.data;
+}
+
+export async function closeZone(id: string, code: string): Promise<{ code: string; cancelled: number }> {
+  const res = await api.post(`/tournaments/${id}/zones/${code}/close`);
+  return res.data;
+}
+
+export async function reopenZone(id: string, code: string): Promise<{ code: string; reopened: number }> {
+  const res = await api.post(`/tournaments/${id}/zones/${code}/reopen`);
+  return res.data;
+}
+
+export async function closeTournament(id: string, force = false): Promise<TournamentDetail> {
+  const res = await api.post(`/tournaments/${id}/close`, { force });
+  return res.data;
+}
+
+export type BulkResultItem =
+  | { matchId: string; sets: { teamA: number; teamB: number }[] }
+  | { matchId: string; walkoverWinner: 'A' | 'B' };
+
+export async function saveResultsBulk(
+  id: string,
+  results: BulkResultItem[],
+): Promise<{ saved: number; failed: number; results: { matchId: string; ok: boolean; error?: string }[] }> {
+  const res = await api.post(`/tournaments/${id}/results/bulk`, { results });
   return res.data;
 }
 
@@ -189,12 +344,20 @@ export async function createTournament(payload: {
   category?: string;
   gender?: string;
   format?: string;
+  scheduleType?: 'SINGLE_DAY' | 'MULTI_DAY';
   description?: string;
   clubId?: string;
+  venueClubIds?: string[];
   startDate?: string;
   maxTeams?: number;
   courtsAvailable?: number;
   price?: number;
+  acceptTransfer?: boolean;
+  acceptMercadopago?: boolean;
+  transferCbu?: string;
+  transferAlias?: string;
+  transferHolderName?: string;
+  refundOnWithdraw?: boolean;
   prizes?: string;
   rules?: string;
 }): Promise<TournamentDetail> {
@@ -207,6 +370,24 @@ export async function addTournamentPhoto(
   payload: { photoUrl: string; caption?: string },
 ) {
   const res = await api.post(`/tournaments/${tournamentId}/photos`, payload);
+  return res.data as { id: string; photo_url: string; caption?: string | null };
+}
+
+export async function addTournamentPhotoFile(
+  tournamentId: string,
+  file: { uri: string; mimeType: string; fileName: string },
+  caption?: string,
+) {
+  const formData = new FormData();
+  formData.append('photo', {
+    uri: file.uri,
+    name: file.fileName,
+    type: file.mimeType,
+  } as any);
+  if (caption) formData.append('caption', caption);
+  const res = await api.post(`/tournaments/${tournamentId}/photos/upload`, formData, {
+    timeout: 60_000,
+  });
   return res.data as { id: string; photo_url: string; caption?: string | null };
 }
 
@@ -275,6 +456,8 @@ export async function fetchMyTournaments(
 }
 
 export function formatScore(match: TournamentMatch): string {
+  if (match.score?.bye) return 'Pase libre';
+  if (match.score?.walkover) return 'W.O.';
   if (!match.score?.sets?.length) return '—';
   return match.score.sets.map((s) => `${s.teamA}-${s.teamB}`).join(' · ');
 }

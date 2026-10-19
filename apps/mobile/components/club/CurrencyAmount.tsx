@@ -18,7 +18,7 @@ const SIZE = {
 } as const;
 
 /**
- * Monto tipográfico: símbolo y cifra separados (evita el glifo Intl + Geist).
+ * Monto tipográfico: símbolo y cifra separados (evita el glifo Intl + tipografía custom).
  */
 export function CurrencyAmount({
   amount,

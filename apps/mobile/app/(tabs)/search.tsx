@@ -1,19 +1,18 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   View,
   Text,
-  ScrollView,
   Modal,
   TextInput,
   FlatList,
   Pressable,
   ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
   Keyboard,
   TouchableOpacity,
+  Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '@/lib/api';
@@ -23,13 +22,52 @@ import { tabScreenPadding } from '@/lib/layout';
 import {
   Screen,
   AppHeader,
-  AppCard,
-  PrimaryButton,
   Avatar,
-} from '@/components/padely';
+  TabScrollView,
+  SegmentedControl,
+  KeyboardAvoid,
+} from '@/components/x4match';
+import { OrganizerModule } from '@/components/organizer/OrganizerModule';
 import { PressableScale } from '@/components/ui';
+import { TourTarget, useScreenTour, type TourStep } from '@/components/tour/ScreenTour';
+
+const SEARCH_TOUR_STEPS: TourStep[] = [
+  {
+    target: 'search.lookup',
+    fixed: true,
+    title: 'Buscar jugadores y clubes',
+    description: 'Encontrá a cualquier jugador por nombre o apodo, o un club por nombre o ciudad.',
+  },
+  {
+    target: 'search.mode',
+    fixed: true,
+    title: 'Jugador u Organizador',
+    description: 'En "Jugador" armás y buscás partidos. En "Organizador" creás y gestionás tus torneos y circuitos.',
+  },
+  {
+    target: 'search.create',
+    title: 'Crear partido abierto',
+    description:
+      'Elegí fecha, horario, modo (amistoso o competitivo), tipo de partido y cancha. Podés invitar a tu compañero y rivales o dejar los cupos abiertos.',
+  },
+  {
+    target: 'search.browse',
+    title: 'Buscar partidos',
+    description: 'Partidos abiertos de tu categoría ordenados por cercanía. Sumate directo o pedí unirte.',
+  },
+  {
+    target: 'search.auto',
+    title: 'Matchmaking automático',
+    description: 'Indicá cuándo podés jugar y armamos el partido con jugadores disponibles de tu nivel.',
+  },
+];
+
+const LISTON = require('../../assets/figma/match/liston.png');
+
+const CARD_BG = '#111115';
 
 type SearchTab = 'players' | 'clubs';
+type PlayMode = 'player' | 'organizer';
 
 type PlayerSearchHit = {
   id: string;
@@ -44,13 +82,112 @@ type ClubSearchHit = {
   id: string;
   name: string;
   city?: string;
-  zone?: string;
+  location?: string;
   address?: string;
   logo_url?: string;
 };
 
+function PlayActionCard({
+  title,
+  subtitle,
+  icon,
+  featured,
+  showListon,
+  onPress,
+  accessibilityLabel,
+  tourId,
+}: {
+  title: string;
+  subtitle: string;
+  icon: ReactNode;
+  featured?: boolean;
+  showListon?: boolean;
+  onPress: () => void;
+  accessibilityLabel: string;
+  tourId: string;
+}) {
+  return (
+    <TourTarget id={tourId} style={{ marginBottom: 12 }}>
+    <PressableScale
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+    >
+      <View
+        style={{
+          backgroundColor: CARD_BG,
+          borderRadius: ui.radius.lg,
+          borderWidth: 1,
+          borderColor: featured ? ui.colors.primary : ui.colors.border,
+          paddingVertical: 18,
+          paddingHorizontal: 16,
+          overflow: 'hidden',
+          minHeight: 92,
+          justifyContent: 'center',
+        }}
+      >
+        {showListon ? (
+          <Image
+            source={LISTON}
+            style={{
+              position: 'absolute',
+              right: 0,
+              top: 0,
+              width: 200,
+              height: 110,
+            }}
+            resizeMode="cover"
+          />
+        ) : null}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, zIndex: 1 }}>
+          <View
+            style={{
+              width: 48,
+              height: 48,
+              borderRadius: 24,
+              backgroundColor: ui.colors.surface0,
+              borderWidth: featured ? 1 : 0,
+              borderColor: featured ? ui.colors.primary : 'transparent',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            {icon}
+          </View>
+          <View style={{ flex: 1, paddingRight: showListon ? 36 : 0 }}>
+            <Text
+              style={{
+                fontSize: 16,
+                fontWeight: '700',
+                color: ui.colors.textPrimary,
+                letterSpacing: -0.2,
+              }}
+            >
+              {title}
+            </Text>
+            <Text
+              style={{
+                fontSize: 13,
+                lineHeight: 18,
+                color: ui.colors.textSecondary,
+                marginTop: 4,
+              }}
+            >
+              {subtitle}
+            </Text>
+          </View>
+        </View>
+      </View>
+    </PressableScale>
+    </TourTarget>
+  );
+}
+
 export default function SearchScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const [playMode, setPlayMode] = useState<PlayMode>('player');
+  useScreenTour('search', SEARCH_TOUR_STEPS, { enabled: playMode === 'player' });
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchTab, setSearchTab] = useState<SearchTab>('players');
   const [query, setQuery] = useState('');
@@ -104,7 +241,7 @@ export default function SearchScreen() {
     if (q.length < 2) return [];
     return clubs
       .filter((club) => {
-        const haystack = [club.name, club.city, club.zone, club.address]
+        const haystack = [club.name, club.city, club.location, club.address]
           .filter(Boolean)
           .join(' ')
           .toLowerCase();
@@ -150,35 +287,37 @@ export default function SearchScreen() {
       <AppHeader
         title="Jugar"
         rightAction={
-          <TouchableOpacity
-            onPress={openSearch}
-            accessibilityRole="button"
-            accessibilityLabel="Buscar jugadores o clubes"
-            style={{
-              padding: 10,
-              backgroundColor: ui.colors.surface1,
-              borderRadius: ui.radius.sm,
-              borderWidth: 1,
-              borderColor: ui.colors.border,
-            }}
-          >
-            <Ionicons name="search" size={20} color={ui.colors.textPrimary} />
-          </TouchableOpacity>
+          <TourTarget id="search.lookup">
+            <TouchableOpacity
+              onPress={openSearch}
+              accessibilityRole="button"
+              accessibilityLabel="Buscar jugadores o clubes"
+              style={{
+                padding: 10,
+                backgroundColor: ui.colors.surface1,
+                borderRadius: ui.radius.sm,
+                borderWidth: 1,
+                borderColor: ui.colors.border,
+              }}
+            >
+              <Ionicons name="search" size={20} color={ui.colors.textPrimary} />
+            </TouchableOpacity>
+          </TourTarget>
         }
       />
 
       <Modal visible={searchOpen} animationType="slide" transparent onRequestClose={closeSearch}>
-        <KeyboardAvoidingView
+        <KeyboardAvoid
           style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' }}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
           <View
             style={{
               backgroundColor: ui.colors.card,
               borderTopLeftRadius: ui.radius.xl,
               borderTopRightRadius: ui.radius.xl,
-              maxHeight: '85%',
-              paddingBottom: 24,
+              flex: 1,
+              marginTop: insets.top + 16,
+              paddingBottom: Math.max(insets.bottom, 24),
             }}
           >
             <View
@@ -261,7 +400,7 @@ export default function SearchScreen() {
                   placeholder={
                     searchTab === 'players'
                       ? 'Nombre o apodo (mín. 2 letras)'
-                      : 'Nombre, ciudad o zona (mín. 2 letras)'
+                      : 'Nombre o ciudad (mín. 2 letras)'
                   }
                   placeholderTextColor={ui.colors.textMuted}
                   autoCapitalize="none"
@@ -289,7 +428,7 @@ export default function SearchScreen() {
                 data={playerResults}
                 keyExtractor={(item) => item.id}
                 keyboardShouldPersistTaps="handled"
-                style={{ maxHeight: 400 }}
+                style={{ flex: 1 }}
                 ListEmptyComponent={
                   <Text
                     style={{
@@ -331,7 +470,7 @@ export default function SearchScreen() {
                 data={clubResults}
                 keyExtractor={(item) => item.id}
                 keyboardShouldPersistTaps="handled"
-                style={{ maxHeight: 400 }}
+                style={{ flex: 1 }}
                 ListEmptyComponent={
                   <Text
                     style={{
@@ -360,9 +499,9 @@ export default function SearchScreen() {
                     <Avatar name={item.name} photo={item.logo_url} size="md" />
                     <View style={{ flex: 1 }}>
                       <Text style={{ fontWeight: '600', color: ui.colors.textPrimary }}>{item.name}</Text>
-                      {(item.zone || item.city || item.address) ? (
+                      {item.city || item.location || item.address ? (
                         <Text style={{ fontSize: 12, color: ui.colors.textMuted, marginTop: 2 }} numberOfLines={1}>
-                          {[item.zone, item.city, item.address].filter(Boolean).join(' · ')}
+                          {[item.city, item.location, item.address].filter(Boolean).join(' · ')}
                         </Text>
                       ) : (
                         <Text style={{ fontSize: 12, color: ui.colors.textMuted, marginTop: 2 }}>Club</Text>
@@ -374,145 +513,87 @@ export default function SearchScreen() {
               />
             )}
           </View>
-        </KeyboardAvoidingView>
+        </KeyboardAvoid>
       </Modal>
 
-      <ScrollView contentContainerStyle={tabScreenPadding}>
+      <View style={{ paddingHorizontal: ui.spacing.lg, marginBottom: 12 }}>
+        <TourTarget id="search.mode">
+          <SegmentedControl
+            options={[
+              { value: 'player', label: 'Jugador' },
+              { value: 'organizer', label: 'Organizador' },
+            ]}
+            value={playMode}
+            onChange={setPlayMode}
+          />
+        </TourTarget>
+      </View>
+
+      {playMode === 'organizer' ? (
+        <OrganizerModule />
+      ) : (
+      <TabScrollView contentContainerStyle={tabScreenPadding}>
         <Text
           style={{
             fontSize: 15,
             color: ui.colors.textSecondary,
-            marginBottom: 20,
+            marginBottom: 22,
             lineHeight: 22,
           }}
         >
-          Armá un partido, buscá uno cerca o creá un torneo.
+          Armá un partido o buscá uno cerca.
         </Text>
 
-        <PressableScale
-          onPress={() => router.push('/create-open-match' as any)}
-          accessibilityRole="button"
+        <PlayActionCard
+          title="Crear partido abierto"
+          subtitle="Invitá jugadores. Con o sin cancha reservada."
+          featured
+          showListon
+          tourId="search.create"
           accessibilityLabel="Crear partido abierto"
-          style={{ marginBottom: 14 }}
+          onPress={() => router.push('/create-open-match' as any)}
+          icon={<Ionicons name="add" size={28} color={ui.colors.primary} />}
+        />
+
+        <PlayActionCard
+          title="Buscar partidos"
+          subtitle="De tu categoría, ordenados por cercanía."
+          tourId="search.browse"
+          accessibilityLabel="Buscar partidos"
+          onPress={() => router.push('/browse-open-matches' as any)}
+          icon={<Ionicons name="search" size={22} color={ui.colors.primary} />}
+        />
+
+        <TourTarget id="search.auto" style={{ marginTop: 12 }}>
+        <PressableScale
+          onPress={() => router.push('/auto-matchmaking' as any)}
+          accessibilityRole="button"
+          accessibilityLabel="Matchmaking automático"
+          style={{ paddingVertical: 4 }}
         >
-          <AppCard
+          <Text
             style={{
-              borderWidth: 1,
-              borderColor: ui.colors.primary,
-              backgroundColor: ui.colors.primarySoft,
+              fontSize: 15,
+              fontWeight: '600',
+              color: ui.colors.textSecondary,
+              marginBottom: 6,
             }}
           >
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
-              <View
-                style={{
-                  width: 48,
-                  height: 48,
-                  borderRadius: 14,
-                  backgroundColor: ui.colors.primary,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                <Ionicons name="add" size={28} color={ui.colors.onPrimary} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 17, fontWeight: '800', color: ui.colors.textPrimary }}>
-                  Crear partido abierto
-                </Text>
-                <Text style={{ fontSize: 13, color: ui.colors.textSecondary, marginTop: 4 }}>
-                  Invitá jugadores. Con o sin cancha reservada.
-                </Text>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color={ui.colors.textMuted} />
-            </View>
-          </AppCard>
+            Matchmaking automático
+          </Text>
+          <Text
+            style={{
+              fontSize: 13,
+              lineHeight: 18,
+              color: ui.colors.textMuted,
+            }}
+          >
+            Armamos un partido con jugadores disponibles en tu franja.
+          </Text>
         </PressableScale>
-
-        <PressableScale
-          onPress={() => router.push('/browse-open-matches' as any)}
-          accessibilityRole="button"
-          accessibilityLabel="Buscar partidos"
-          style={{ marginBottom: 14 }}
-        >
-          <AppCard>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
-              <View
-                style={{
-                  width: 48,
-                  height: 48,
-                  borderRadius: 14,
-                  backgroundColor: ui.colors.surface2,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                <Ionicons name="search" size={24} color={ui.colors.primary} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 17, fontWeight: '800', color: ui.colors.textPrimary }}>
-                  Buscar partidos
-                </Text>
-                <Text style={{ fontSize: 13, color: ui.colors.textSecondary, marginTop: 4 }}>
-                  De tu categoría, ordenados por cercanía.
-                </Text>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color={ui.colors.textMuted} />
-            </View>
-          </AppCard>
-        </PressableScale>
-
-        <PressableScale
-          onPress={() =>
-            router.push({ pathname: '/(tabs)/organizer', params: { create: 'tournament' } } as any)
-          }
-          accessibilityRole="button"
-          accessibilityLabel="Crear torneo"
-          style={{ marginBottom: 24 }}
-        >
-          <AppCard>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
-              <View
-                style={{
-                  width: 48,
-                  height: 48,
-                  borderRadius: 14,
-                  backgroundColor: ui.colors.accentSoft,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                <Ionicons name="trophy" size={24} color={ui.colors.accentDark} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 17, fontWeight: '800', color: ui.colors.textPrimary }}>
-                  Crear torneo
-                </Text>
-                <Text style={{ fontSize: 13, color: ui.colors.textSecondary, marginTop: 4 }}>
-                  Definí categoría, formato e inscripciones.
-                </Text>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color={ui.colors.textMuted} />
-            </View>
-          </AppCard>
-        </PressableScale>
-
-        <PrimaryButton
-          label="Matchmaking automático"
-          variant="ghost"
-          onPress={() => router.push('/auto-matchmaking' as any)}
-        />
-        <Text
-          style={{
-            fontSize: 12,
-            color: ui.colors.textMuted,
-            textAlign: 'center',
-            marginTop: 8,
-            lineHeight: 18,
-          }}
-        >
-          Armamos un partido con jugadores disponibles en tu franja.
-        </Text>
-      </ScrollView>
+        </TourTarget>
+      </TabScrollView>
+      )}
     </Screen>
   );
 }

@@ -40,6 +40,7 @@ pnpm-debug.log*
 *.mobileprovision
 *.jks
 *.keystore
+*.txt
 
 # IDE
 .vscode/
@@ -60,6 +61,14 @@ web-build/
 .kotlin/
 *.jsbundle
 .metro-health-check*
+
+# Firebase / FCM (commitear google-services.json.example; el real puede ir por EAS secret)
+apps/mobile/google-services.json
+apps/mobile/GoogleService-Info.plist
+*firebase-adminsdk*.json
+
+# Videos generados con /brag
+brag-output*/
 
 # Prisma local
 *.db

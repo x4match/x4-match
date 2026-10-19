@@ -1,20 +1,30 @@
-import { ScrollView, Text, RefreshControl, View, Alert } from 'react-native';
-import { useRouter } from 'expo-router';
+import { ScrollView, Text, RefreshControl, View, Alert, Image, useWindowDimensions, FlatList } from 'react-native';
+import { TabScrollView } from '@/components/ui';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Ionicons } from '@expo/vector-icons';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { FontAwesome6, Ionicons } from '@expo/vector-icons';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
+import Svg, { Path } from 'react-native-svg';
 import { useAuth } from '@/contexts/AuthContext';
 import { isClub, canOrganizeEvents, isPlayer } from '@/lib/roles';
 import { api } from '@/lib/api';
 import { mapMatch, mapPlayer, mapTournament, safeMapCircuit } from '@/lib/mappers';
+import { useCircuitsEnabled } from '@/lib/features';
 import type { Circuit, CircuitRankingEntry, Match, Player, Tournament } from '@/lib/types';
-import { formatShortDate, formatTime, formatPlayPeriodLabel } from '@/lib/format';
-import { formatSkillRange, matchOverlapsCategory, playerSkillFitsMatchRange, resolveSkillScore } from '@/lib/skill';
+import { formatShortDate, formatTime } from '@/lib/format';
+import {
+  matchOverlapsCategory,
+  playerSkillFitsMatchRange,
+  resolveSkillScore,
+} from '@/lib/skill';
 import { playerFitsTournamentCategory } from '@/lib/tournament/types';
 import { formatDistanceKm, requestPlayerCoordinates, syncPlayerCoordinates } from '@/lib/geolocation';
-import { invalidateRedeemablePoints, useRedeemablePoints } from '@/lib/redeemable-points';
-import { ui } from '@/theme/tokens';
+import { invalidateRedeemablePoints, useRedeemablePoints } from '@/lib/shop/redeemable-points';
+import { ui, fontFamily } from '@/theme/tokens';
 import { tabScreenPadding } from '@/lib/layout';
+import { ClubProfilePanel } from '@/components/club/ClubProfilePanel';
 import {
   Screen,
   AppHeader,
@@ -28,7 +38,219 @@ import {
   EmptyState,
   PressableScale,
   InputField,
-} from '@/components/padely';
+  SearchableSelect,
+  OpenMatchCard,
+  isViewerInMatch,
+  TournamentCard,
+  ShopPromoBanner,
+  ProfilePhotoViewer,
+} from '@/components/x4match';
+import { TourTarget, useScreenTour, type TourStep } from '@/components/tour/ScreenTour';
+import { MarketplaceEntryCard } from '@/components/shop/marketplace';
+
+const HOME_TOUR_STEPS: TourStep[] = [
+  {
+    target: 'home.header',
+    title: 'Tu tarjeta de jugador',
+    description:
+      'Tu nombre y tu nivel actual (puntaje y categoría). Se actualiza cada vez que se confirma el resultado de un partido competitivo.',
+  },
+  {
+    target: 'home.notifications',
+    title: 'Notificaciones',
+    description:
+      'Invitaciones a partidos, solicitudes para unirse, resultados para confirmar y novedades. El número indica cuántas tenés sin leer.',
+  },
+  {
+    target: 'home.playNow',
+    title: 'Jugar ahora',
+    description: 'El atajo más rápido: te muestra los partidos abiertos de tu categoría cerca tuyo para que te sumes.',
+  },
+  {
+    target: 'home.shop',
+    title: 'Tienda',
+    description: 'Productos y promociones de los clubes y marcas asociadas.',
+  },
+  {
+    target: 'home.openMatches',
+    title: 'Partidos abiertos',
+    description:
+      'Partidos que buscan jugadores. Deslizá para ver más y tocá uno para ver el detalle y unirte. "Ver todos" abre el buscador completo.',
+  },
+  {
+    target: 'home.nearby',
+    title: 'Jugadores cerca',
+    description:
+      'Jugadores a menos de 30 km. Tocá uno para ver su perfil, seguirlo o escribirle. Necesita tu ubicación activada.',
+  },
+  {
+    target: 'home.tournaments',
+    title: 'Torneos disponibles',
+    description: 'Torneos con inscripción abierta. Entrá a uno para ver categorías, fechas e inscribirte con tu pareja.',
+  },
+  {
+    target: 'home.community',
+    title: 'Comunidad',
+    description:
+      '"Ranking general" muestra a los mejores jugadores por categoría y género. "Últimos partidos" muestra los resultados recientes.',
+  },
+  {
+    target: 'home.ranking',
+    title: 'Ranking de tu club',
+    description:
+      'Tu posición en el ranking interno de tu club principal. Sumás puntos jugando partidos competitivos. "Tabla completa" muestra a todos.',
+  },
+  {
+    target: 'tab.home',
+    fixed: true,
+    title: 'Inicio',
+    description: 'Volvé a esta pantalla desde cualquier lugar de la app.',
+  },
+  {
+    target: 'tab.matches',
+    fixed: true,
+    title: 'Partidos',
+    description: 'Tus próximos partidos, tu historial, torneos y circuitos. Desde ahí cargás y confirmás resultados.',
+  },
+  {
+    target: 'tab.search',
+    fixed: true,
+    title: 'Jugar',
+    description: 'Creá un partido abierto, buscá partidos o usá el matchmaking automático. También buscás jugadores y clubes.',
+  },
+  {
+    target: 'tab.messages',
+    fixed: true,
+    title: 'Mensajes',
+    description: 'Chats directos con otros jugadores y el chat grupal de cada partido.',
+  },
+  {
+    target: 'tab.profile',
+    fixed: true,
+    title: 'Perfil',
+    description: 'Tus datos, nivel, estadísticas, club principal y la configuración de tu cuenta.',
+  },
+];
+
+const HERO_IMAGE = require('../../assets/cancha.png');
+const HEADER_STRIPES = require('../../assets/figma/profile/tiras.png');
+const ICON_TROFEO = require('../../assets/figma/shared/trofeo.png');
+const ICON_NOTE = require('../../assets/figma/shared/note.png');
+const ICON_CLUB = require('../../assets/figma/shared/edificio.png');
+const LIME = '#D7FF00';
+
+function LocationPinIcon({ size = 20 }: { size?: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 20 20" fill="none">
+      <Path
+        d="M10 2.5C7.511 2.5 5.502 4.509 5.502 6.998C5.502 10.266 9 14.993 10 16.992C11 14.993 14.498 10.266 14.498 6.998C14.498 4.509 12.489 2.5 10 2.5Z"
+        stroke="#FFFFFF"
+        strokeWidth={1.5}
+        strokeLinecap="round"
+      />
+    </Svg>
+  );
+}
+
+const RANK_BADGE = ['#4D482F', '#4D482F', '#473C35'] as const;
+const RANK_BADGE_TEXT = ['#FFD700', '#C0C0C0', '#CD7F32'] as const;
+
+function formatHomeMatchWhen(date: string) {
+  return `${formatShortDate(date)}, ${formatTime(date)}`;
+}
+
+const TOURNAMENT_CAROUSEL_GAP = 12;
+
+function TournamentCarousel({
+  tournaments,
+  cardWidth,
+  onPressTournament,
+}: {
+  tournaments: Tournament[];
+  cardWidth: number;
+  onPressTournament: (id: string) => void;
+}) {
+  const interval = cardWidth + TOURNAMENT_CAROUSEL_GAP;
+  return (
+    <FlatList
+      horizontal
+      data={tournaments}
+      keyExtractor={(t) => t.id}
+      showsHorizontalScrollIndicator={false}
+      nestedScrollEnabled
+      decelerationRate="fast"
+      snapToInterval={interval}
+      snapToAlignment="start"
+      disableIntervalMomentum
+      getItemLayout={(_, index) => ({
+        length: interval,
+        offset: interval * index,
+        index,
+      })}
+      style={{ marginBottom: ui.spacing.lg }}
+      contentContainerStyle={{ paddingRight: 16, alignItems: 'flex-start' }}
+      renderItem={({ item: t, index }) => (
+        <View
+          style={{
+            width: cardWidth,
+            marginRight: index === tournaments.length - 1 ? 0 : TOURNAMENT_CAROUSEL_GAP,
+          }}
+        >
+          <TournamentCard
+            tournament={t}
+            width={cardWidth}
+            variant="compact"
+            onPress={() => onPressTournament(t.id)}
+          />
+        </View>
+      )}
+    />
+  );
+}
+
+function GlassEmpty({
+  icon,
+  title,
+  description,
+  action,
+}: {
+  icon: ReactNode;
+  title: string;
+  description: string;
+  action?: ReactNode;
+}) {
+  return (
+    <AppCard style={{ marginBottom: ui.spacing.lg }} padding="lg">
+      <View style={{ alignItems: 'center', paddingVertical: 8 }}>
+        {icon}
+        <Text
+          style={{
+            fontSize: 16,
+            fontFamily: ui.typography.h3.fontFamily,
+            color: ui.colors.textPrimary,
+            textAlign: 'center',
+            marginBottom: 6,
+          }}
+        >
+          {title}
+        </Text>
+        <Text
+          style={{
+            fontSize: 13,
+            color: ui.colors.textSecondary,
+            textAlign: 'center',
+            lineHeight: 18,
+            maxWidth: 280,
+            marginBottom: action ? 16 : 0,
+          }}
+        >
+          {description}
+        </Text>
+        {action}
+      </View>
+    </AppCard>
+  );
+}
 
 type ClubLeaderboardEntry = {
   user_id: string;
@@ -73,16 +295,36 @@ function todayDateKey() {
   return d.toISOString().slice(0, 10);
 }
 
-type ClubOption = { id: string; name: string; city?: string; zone?: string; logo_url?: string };
+type ClubOption = { id: string; name: string; city?: string; location?: string; logo_url?: string };
 
 export default function HomeScreen() {
   const router = useRouter();
+  const circuitsEnabled = useCircuitsEnabled();
   const queryClient = useQueryClient();
-  const { user, token, updateUser } = useAuth();
+  const { width: windowWidth } = useWindowDimensions();
+  const { user, token, updateUser, logout } = useAuth();
   const isClubAccount = isClub(user?.role);
   const isEventOrganizerAccount = canOrganizeEvents(user?.role);
   const isPlayerAccount = isPlayer(user?.role);
   const authed = Boolean(token);
+  const scrollRef = useRef<ScrollView>(null);
+  useScreenTour('home', HOME_TOUR_STEPS, { enabled: isPlayerAccount, scrollRef });
+  /** Ancho de card en carrusel: una card dominante + peek de la siguiente. */
+  const tournamentCarouselCardWidth = Math.round(Math.min(288, windowWidth - 72));
+
+  const handleClubLogout = () => {
+    Alert.alert('Cerrar sesión', '¿Estás seguro?', [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Cerrar sesión',
+        style: 'destructive',
+        onPress: async () => {
+          await logout();
+          router.replace('/(auth)/login');
+        },
+      },
+    ]);
+  };
 
   const { data: playerProfile, refetch: refetchPlayerProfile } = useQuery({
     queryKey: ['home-player-profile'],
@@ -90,7 +332,7 @@ export default function HomeScreen() {
       const res = await api.get('/users/profile');
       return res.data as {
         mainClubId?: string;
-        mainClub?: { id: string; name: string; zone?: string };
+        mainClub?: { id: string; name: string; city?: string; location?: string };
         levelCategory?: string;
         categoryStatus?: 'provisional' | 'confirmed';
         declaredCategory?: string;
@@ -115,11 +357,13 @@ export default function HomeScreen() {
   const playerCategoryStatus = playerProfile?.categoryStatus ?? user?.categoryStatus;
   const playerDeclaredCategory =
     playerProfile?.declaredCategory ?? user?.declaredCategory ?? playerLevelCategory;
-  const [showMoreHome, setShowMoreHome] = useState(false);
+  const insets = useSafeAreaInsets();
   const [clubSearch, setClubSearch] = useState('');
   const [playerCoords, setPlayerCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [locationReady, setLocationReady] = useState(false);
   const [usingGeoLocation, setUsingGeoLocation] = useState(false);
+  const [showPhotoViewer, setShowPhotoViewer] = useState(false);
+  const profilePhoto = user?.photo?.trim() || null;
 
   useEffect(() => {
     if (!isPlayerAccount) {
@@ -196,14 +440,20 @@ export default function HomeScreen() {
     enabled: authed && !isClubAccount,
   });
 
-  const { data: myMatches, refetch: refetchMatches } = useQuery({
-    queryKey: ['my-matches'],
+  const { data: unreadNotifications, refetch: refetchUnreadNotifications } = useQuery({
+    queryKey: ['unread-count'],
     queryFn: async () => {
-      const res = await api.get('/matches/me');
-      return res.data;
+      const res = await api.get('/notifications/unread-count');
+      return Number(res.data?.count ?? 0);
     },
     enabled: authed && isPlayerAccount,
   });
+
+  useFocusEffect(
+    useCallback(() => {
+      if (authed && isPlayerAccount) refetchUnreadNotifications();
+    }, [authed, isPlayerAccount, refetchUnreadNotifications]),
+  );
 
   const { data: playerMe, refetch: refetchPlayerMe } = useQuery({
     queryKey: ['home-player-me'],
@@ -231,7 +481,7 @@ export default function HomeScreen() {
       const res = await api.get('/clubs');
       return res.data as ClubOption[];
     },
-    enabled: authed && isPlayerAccount && !playerMainClubId,
+    enabled: authed && isPlayerAccount,
   });
 
   const { data: playerClubLeaderboard, refetch: refetchPlayerClubLeaderboard } = useQuery({
@@ -243,7 +493,7 @@ export default function HomeScreen() {
     enabled: authed && isPlayerAccount && !!playerMainClubId,
   });
 
-  const { data: playerClubPoints, refetch: refetchPlayerClubPoints } = useRedeemablePoints(
+  const { refetch: refetchPlayerClubPoints } = useRedeemablePoints(
     playerMainClubId,
     isPlayerAccount,
   );
@@ -254,7 +504,7 @@ export default function HomeScreen() {
       const res = await api.get('/circuits');
       return res.data;
     },
-    enabled: authed && isPlayerAccount,
+    enabled: circuitsEnabled && authed && isPlayerAccount,
   });
 
   const { data: clubs } = useQuery({
@@ -325,14 +575,6 @@ export default function HomeScreen() {
     return featuredCircuitDetail.rankings.filter((entry) => entry.categoryLabel === playerLevelCategory);
   }, [featuredCircuitDetail?.rankings, playerLevelCategory]);
   const topCategoryRanking = categoryRanking.slice(0, 3);
-  const myCategoryEntry = useMemo(
-    () => categoryRanking.find((entry) => entry.playerId === playerMe?.id) ?? null,
-    [categoryRanking, playerMe?.id],
-  );
-  const myClubEntry = useMemo(
-    () => playerClubLeaderboard?.find((entry) => entry.user_id === user?.id) ?? null,
-    [playerClubLeaderboard, user?.id],
-  );
 
   const setMainClubMutation = useMutation({
     mutationFn: (clubId: string) => api.patch('/users/profile', { mainClubId: clubId }),
@@ -354,7 +596,7 @@ export default function HomeScreen() {
       router.push(`/club/${playerMainClubId}?tab=ranking` as any);
       return;
     }
-    router.push('/(tabs)/clubs' as any);
+    router.push('/clubs' as any);
   }, [playerMainClubId, router]);
 
   const openCategoryRanking = useCallback(() => {
@@ -371,14 +613,14 @@ export default function HomeScreen() {
     refetchTournaments();
     if (isPlayerAccount) {
       refetchNearby();
-      refetchMatches();
+      refetchUnreadNotifications();
       refetchPlayerMe();
       refetchPlayerProfile();
       refetchPlayerMainClub();
       refetchPlayerClubLeaderboard();
       refetchPlayerClubPoints();
-      refetchCircuits();
-      if (!playerMainClubId) refetchClubOptions();
+      if (circuitsEnabled) refetchCircuits();
+      refetchClubOptions();
       if (featuredCircuit?.id) refetchFeaturedCircuit();
     }
     if (isEventOrganizerAccount && !isClubAccount) {
@@ -401,8 +643,8 @@ export default function HomeScreen() {
     refetchFeed,
     refetchFeaturedCircuit,
     refetchHomeClubs,
-    refetchMatches,
     refetchNearby,
+    refetchUnreadNotifications,
     playerMainClubId,
     refetchClubOptions,
     refetchPlayerClubLeaderboard,
@@ -420,22 +662,24 @@ export default function HomeScreen() {
     playerMe?.rating ?? user?.skillScore,
   );
 
-  const joinableOpenMatches = useMemo(() => {
-    if (!isPlayerAccount) return [];
-    return openMatches.filter((match) => {
-      if (match.status !== 'OPEN') return false;
-      if (match.joinedCount >= match.neededPlayers) return false;
-      if (match.createdByUserId && match.createdByUserId === user?.id) return false;
-      if (match.players?.some((player) => player.id === user?.id)) return false;
-      return true;
-    });
-  }, [isPlayerAccount, openMatches, user?.id]);
+  const homeOpenMatches = useMemo(() => {
+    const available = openMatches.filter(
+      (match) => match.status === 'OPEN' && match.joinedCount < match.neededPlayers,
+    );
+    if (!isPlayerAccount) return available;
 
-  const communityOpenMatches = useMemo(() => {
-    if (!isPlayerAccount) return openMatches;
-    const featuredIds = new Set(joinableOpenMatches.map((match) => match.id));
-    return openMatches.filter((match) => !featuredIds.has(match.id));
-  }, [isPlayerAccount, joinableOpenMatches, openMatches]);
+    // Primero los que podés sumarte; después los tuyos / con solicitud.
+    const joinable: Match[] = [];
+    const mine: Match[] = [];
+    for (const match of available) {
+      if (isViewerInMatch(match, user?.id) || match.viewerJoinStatus === 'REQUESTED') {
+        mine.push(match);
+      } else {
+        joinable.push(match);
+      }
+    }
+    return [...joinable, ...mine];
+  }, [isPlayerAccount, openMatches, user?.id]);
 
   const filteredHomeClubs = useMemo(() => {
     const q = clubSearch.trim().toLowerCase();
@@ -443,21 +687,40 @@ export default function HomeScreen() {
     if (!q) return list.slice(0, 6);
     return list
       .filter((club) => {
-        const haystack = [club.name, club.city, club.zone].filter(Boolean).join(' ').toLowerCase();
+        const haystack = [club.name, club.city, club.location].filter(Boolean).join(' ').toLowerCase();
         return haystack.includes(q);
       })
       .slice(0, 8);
   }, [clubSearch, homeClubs]);
+
+  const clubSelectOptions = useMemo(() => {
+    const byId = new Map<string, ClubOption>();
+    for (const club of clubOptions || []) {
+      byId.set(club.id, club);
+    }
+    if (playerMainClub?.id && !byId.has(playerMainClub.id)) {
+      byId.set(playerMainClub.id, {
+        id: playerMainClub.id,
+        name: playerMainClub.name,
+        city: playerMainClub.city,
+        location: playerMainClub.location,
+      });
+    }
+    return Array.from(byId.values()).map((club) => ({
+      value: club.id,
+      label: club.name,
+      subtitle: [club.city, club.location].filter(Boolean).join(' · ') || undefined,
+    }));
+  }, [clubOptions, playerMainClub]);
 
   const players: Player[] = (nearbyPlayers || []).slice(0, 5).map(mapPlayer);
   const tournamentList: Tournament[] = (tournaments || []).map(mapTournament);
   const playableTournaments = isPlayerAccount
     ? tournamentList.filter((t) => playerFitsTournamentCategory(playerLevelCategory, t.category))
     : tournamentList;
-  const upcomingTournaments = playableTournaments.filter((t) => t.status === 'OPEN_REGISTRATION').slice(0, 3);
-  const upcomingMatches: Match[] = (myMatches || [])
-    .map(mapMatch)
-    .filter((m: Match) => ['OPEN', 'FULL', 'CONFIRMED', 'IN_PROGRESS'].includes(m.status));
+  const upcomingTournaments = playableTournaments
+    .filter((t) => t.status === 'OPEN_REGISTRATION')
+    .slice(0, 8);
 
   const clubHomeLoading =
     isClubAccount && (loadingDashboard || loadingClubSlots || loadingClubMatches);
@@ -469,14 +732,79 @@ export default function HomeScreen() {
   const clubOpenMatches = clubMatches.filter((m) => ['OPEN', 'FULL'].includes(m.status));
   const clubUpcomingMatches = clubMatches.filter((m) => ['CONFIRMED', 'IN_PROGRESS'].includes(m.status));
   const mainClubName = clubs?.[0]?.name;
+  const firstName = (user?.name || 'Jugador').split(' ')[0];
+  const skillLabel = `Skill: ${playerSkillScore} · ${playerLevelCategory || playerDeclaredCategory || '—'}`;
+  const activeMatchesToday = openMatches.filter((m) => formatShortDate(m.date) === 'Hoy').length;
+  const heroActiveCount = activeMatchesToday || openMatches.length;
+
+  const rankingRows =
+    (playerClubLeaderboard || []).length > 0
+      ? (playerClubLeaderboard || []).slice(0, 3).map((entry) => ({
+        id: entry.user_id,
+        name: entry.nickname || entry.name,
+        category: playerLevelCategory ? `Cat ${playerLevelCategory}` : undefined,
+        points: entry.points,
+        photo: entry.photo_url,
+        rank: Number(entry.rank) || 0,
+      }))
+      : topCategoryRanking.map((entry, index) => ({
+        id: entry.playerId || entry.id,
+        name: entry.playerName,
+        category: entry.categoryLabel
+          ? `Cat ${entry.categoryLabel}`
+          : playerLevelCategory
+            ? `Cat ${playerLevelCategory}`
+            : undefined,
+        points: entry.points,
+        photo: undefined as string | undefined,
+        rank: entry.position ?? index + 1,
+      }));
+
+  const activateLocation = async () => {
+    const coords = await requestPlayerCoordinates({
+      withLabel: true,
+      showAlerts: true,
+    });
+    if (!coords) return;
+    setPlayerCoords({ lat: coords.latitude, lng: coords.longitude });
+    setUsingGeoLocation(true);
+    await syncPlayerCoordinates(coords).catch(() => undefined);
+    refetchNearby();
+  };
+
+  const openRankingTable = () => {
+    if (playerMainClubId) {
+      openClubRanking();
+      return;
+    }
+    openCategoryRanking();
+  };
+
+  if (isClubAccount) {
+    return (
+      <Screen>
+        <View style={{ flex: 1, paddingTop: insets.top + 8 }}>
+          <ClubProfilePanel onLogout={handleClubLogout} />
+        </View>
+      </Screen>
+    );
+  }
 
   return (
     <Screen>
-      <AppHeader showUserGreeting showNotifications />
-      <ScrollView
-        contentContainerStyle={{ ...tabScreenPadding }}
+      {!isPlayerAccount ? <AppHeader showUserGreeting showNotifications /> : null}
+      <TabScrollView
+        ref={scrollRef}
+        contentContainerStyle={{
+          ...tabScreenPadding,
+          ...(isPlayerAccount ? { paddingTop: insets.top + 8 } : null),
+        }}
         refreshControl={
-          <RefreshControl refreshing={isClubAccount ? !!clubHomeLoading : feedLoading} onRefresh={onRefresh} tintColor={ui.colors.primary} />
+          <RefreshControl
+            refreshing={isClubAccount ? !!clubHomeLoading : feedLoading}
+            onRefresh={onRefresh}
+            tintColor={ui.colors.primary}
+          />
         }
       >
         {isClubAccount ? (
@@ -599,655 +927,797 @@ export default function HomeScreen() {
               ))
             )}
           </>
-        ) : isPlayer(user?.role) ? (
-          <FadeInUp index={0}>
-            <AppCard variant="gradient" glow padding="lg" style={{ marginBottom: ui.spacing.lg }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                <View style={{ flex: 1, marginRight: 12 }}>
-                  <Text style={[ui.typography.h2, { color: ui.colors.textPrimary, marginBottom: 4 }]}>Jugar ahora</Text>
-                  <Text style={[ui.typography.bodySm, { color: ui.colors.textSecondary }]}>
-                    Encontrá un partido hoy en segundos
-                  </Text>
-                </View>
-                <PrimaryButton
-                  label="Buscar"
-                  onPress={() => router.push('/browse-open-matches' as any)}
-                  variant="accent"
-                  size="md"
-                  icon={<Ionicons name="play" size={18} color="#0A0A0A" />}
-                />
-              </View>
-            </AppCard>
-          </FadeInUp>
-        ) : null}
-
-        {isPlayerAccount && (
+        ) : isPlayerAccount ? (
           <>
+            {/* <SearchableSelect
+              label="Club principal"
+              placeholder="Elegí tu club"
+              searchPlaceholder="Buscar club…"
+              emptyMessage="No se encontraron clubs"
+              value={playerMainClubId ?? null}
+              options={clubSelectOptions}
+              disabled={setMainClubMutation.isPending}
+              onChange={(clubId) => {
+                if (clubId === playerMainClubId) return;
+                setMainClubMutation.mutate(clubId);
+              }}
+              renderTrigger={({ open, selected, placeholder }) => (
+                <PressableScale
+                  accessibilityRole="button"
+                  accessibilityLabel="Seleccionar club principal"
+                  onPress={open}
+                  disabled={setMainClubMutation.isPending}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 10,
+                    alignSelf: 'stretch',
+                    paddingVertical: 12,
+                    paddingHorizontal: 14,
+                    marginBottom: ui.spacing.md,
+                    borderRadius: ui.radius.pill,
+                    backgroundColor: ui.colors.glass,
+                    borderWidth: 1,
+                    borderColor: ui.colors.border,
+                    opacity: setMainClubMutation.isPending ? 0.7 : 1,
+                  }}
+                >
+                  <View
+                    style={{
+                      width: 28,
+                      height: 28,
+                      borderRadius: 14,
+                      backgroundColor: ui.colors.primarySoft,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <Ionicons name="home" size={14} color={ui.colors.primary} />
+                  </View>
+                  <Text style={{ flex: 1, color: ui.colors.textPrimary, fontSize: 14 }} numberOfLines={1}>
+                    Padel Club:{' '}
+                    <Text style={{ fontFamily: ui.typography.h3.fontFamily, fontWeight: '700' }}>
+                      {selected?.label || placeholder}
+                    </Text>
+                  </Text>
+                  <Ionicons name="chevron-down" size={18} color={ui.colors.textSecondary} />
+                </PressableScale>
+              )}
+            /> */}
+
+            <FadeInUp index={0}>
+              <TourTarget id="home.header" style={{ marginBottom: ui.spacing.md }}>
+              <View
+                style={{
+                  borderRadius: 22,
+                  overflow: 'hidden',
+                  backgroundColor: '#000000',
+                  minHeight: 118,
+                }}
+              >
+                <View
+                  pointerEvents="none"
+                  style={{
+                    position: 'absolute',
+                    right: -20,
+                    top: -24,
+                    bottom: -24,
+                    width: 210,
+                  }}
+                >
+                  <Image
+                    source={HEADER_STRIPES}
+                    style={{ width: 210, height: 170 }}
+                    resizeMode="cover"
+                    accessibilityElementsHidden
+                    importantForAccessibility="no-hide-descendants"
+                  />
+                </View>
+
+                <TourTarget
+                  id="home.notifications"
+                  style={{ position: 'absolute', top: 12, right: 12, zIndex: 2 }}
+                >
+                <PressableScale
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    unreadNotifications
+                      ? `Notificaciones, ${unreadNotifications} sin leer`
+                      : 'Notificaciones'
+                  }
+                  onPress={() => router.push('/notifications' as any)}
+                  hitSlop={8}
+                  style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: 20,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    backgroundColor: 'rgba(255,255,255,0.08)',
+                    borderWidth: 1,
+                    borderColor: 'rgba(255,255,255,0.14)',
+                  }}
+                >
+                  <Ionicons name="notifications-outline" size={20} color="#FFFFFF" />
+                  {unreadNotifications ? (
+                    <View
+                      style={{
+                        position: 'absolute',
+                        top: -3,
+                        right: -3,
+                        minWidth: 18,
+                        height: 18,
+                        paddingHorizontal: 4,
+                        borderRadius: 9,
+                        backgroundColor: LIME,
+                        borderWidth: 2,
+                        borderColor: '#000000',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <Text
+                        style={{
+                          fontSize: 10,
+                          lineHeight: 12,
+                          color: '#000000',
+                          fontFamily: fontFamily.bold,
+                          fontWeight: '700',
+                        }}
+                      >
+                        {unreadNotifications > 9 ? '9+' : unreadNotifications}
+                      </Text>
+                    </View>
+                  ) : null}
+                </PressableScale>
+                </TourTarget>
+
+                <View
+                  style={{
+                    paddingLeft: 21,
+                    paddingRight: 60,
+                    paddingVertical: 23,
+                    minHeight: 118,
+                    justifyContent: 'center',
+                  }}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <PressableScale
+                      onPress={() => {
+                        if (profilePhoto) {
+                          setShowPhotoViewer(true);
+                          return;
+                        }
+                        router.push('/(tabs)/profile' as any);
+                      }}
+                      accessibilityRole="button"
+                      accessibilityLabel={
+                        profilePhoto ? 'Ver foto de perfil' : 'Ir a perfil para agregar foto'
+                      }
+                      style={{ marginRight: 12 }}
+                    >
+                      <Avatar
+                        name={user?.name || 'Jugador'}
+                        photo={profilePhoto || undefined}
+                        size="xxl"
+                        borderColor="#FFFFFF"
+                        style={
+                          {
+                            width: 72,
+                            height: 72,
+                            borderRadius: 36,
+                            borderWidth: 1,
+                            backgroundColor: 'rgba(30,30,36,0.8)',
+                          } as any
+                        }
+                      />
+                    </PressableScale>
+                    <View style={{ flex: 1, marginRight: 8, gap: 6 }}>
+                      <Text
+                        style={{
+                          fontSize: 24,
+                          lineHeight: 36,
+                          letterSpacing: -0.48,
+                          fontFamily: ui.typography.h2.fontFamily,
+                          color: '#FFFFFF',
+                        }}
+                        numberOfLines={1}
+                      >
+                        Hola, {firstName}
+                      </Text>
+                      <View
+                        style={{
+                          alignSelf: 'flex-start',
+                          paddingHorizontal: 8,
+                          paddingVertical: 2,
+                          borderRadius: ui.radius.pill,
+                          backgroundColor: '#000000',
+                          borderWidth: 1,
+                          borderColor: LIME,
+                        }}
+                      >
+                        <Text
+                          style={{
+                            fontSize: 11,
+                            lineHeight: 16.5,
+                            color: '#FFFFFF',
+                            fontFamily: fontFamily.bold,
+                            fontWeight: '700',
+                          }}
+                        >
+                          {skillLabel}
+                        </Text>
+                      </View>
+                    </View>
+                    {/*  <PressableScale
+                      accessibilityRole="button"
+                      accessibilityLabel={
+                        usingGeoLocation ? 'Ubicación activa' : 'Activar ubicación'
+                      }
+                      onPress={activateLocation}
+                      style={{
+                        width: 44,
+                        height: 44,
+                        borderRadius: 22,
+                        overflow: 'hidden',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <LinearGradient
+                        colors={[LIME, '#C6EF00']}
+                        start={{ x: 0.15, y: 0 }}
+                        end={{ x: 0.9, y: 1 }}
+                        style={{
+                          position: 'absolute',
+                          top: 0,
+                          right: 0,
+                          bottom: 0,
+                          left: 0,
+                        }}
+                      />
+                      <LocationPinIcon size={20} />
+                    </PressableScale> */}
+                  </View>
+                </View>
+              </View>
+              </TourTarget>
+            </FadeInUp>
+
+            <FadeInUp index={1}>
+              <TourTarget id="home.playNow" style={{ marginBottom: ui.spacing.lg }}>
+              <PressableScale
+                accessibilityRole="button"
+                accessibilityLabel="Jugar ahora"
+                onPress={() => router.push('/browse-open-matches' as any)}
+                style={{
+                  borderRadius: ui.radius.xl,
+                  backgroundColor: ui.colors.surface0,
+                  shadowColor: '#000000',
+                  shadowOffset: { width: 0, height: 8 },
+                  shadowOpacity: 0.5,
+                  shadowRadius: 40,
+                  elevation: 16,
+                }}
+              >
+                <View style={{ height: 200, borderRadius: ui.radius.xl, overflow: 'hidden' }}>
+                  <Image source={HERO_IMAGE} style={{ position: 'absolute', width: '100%', height: '100%' }} />
+                  <LinearGradient
+                    colors={['rgba(0,0,0,0.15)', 'rgba(0,0,0,0.78)']}
+                    style={{ position: 'absolute', width: '100%', height: '100%' }}
+                  />
+                  <View style={{ flex: 1, padding: 18, justifyContent: 'space-between' }}>
+                    <View>
+                      <Text style={{ fontSize: 34, lineHeight: 38, color: '#fff' }}>
+                        Jugár <Text style={{ color: ui.colors.primary }}>ahora</Text>
+                      </Text>
+                      <Text
+                        style={{
+                          marginTop: 8,
+                          color: 'rgba(255,255,255,0.88)',
+                          fontSize: 14,
+                          lineHeight: 20,
+                          maxWidth: 240,
+                        }}
+                      >
+                        Encontrá rivales y reserva pistas de forma automática.
+                      </Text>
+                    </View>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: ui.colors.primary }} />
+                        <Text style={{ color: 'rgba(255,255,255,0.9)', fontSize: 13 }}>
+                          {heroActiveCount} partido{heroActiveCount === 1 ? '' : 's'} activo{heroActiveCount === 1 ? '' : 's'} hoy
+                        </Text>
+                      </View>
+                      <View
+                        style={{
+                          width: 48,
+                          height: 48,
+                          borderRadius: 24,
+                          backgroundColor: ui.colors.primary,
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                      >
+                        <Ionicons name="arrow-forward" size={22} color={ui.colors.onPrimary} />
+                      </View>
+                    </View>
+                  </View>
+                </View>
+              </PressableScale>
+              </TourTarget>
+            </FadeInUp>
+
+            <TourTarget id="home.shop" style={{ marginBottom: ui.spacing.lg, marginTop: 8 }}>
+              <ShopPromoBanner onPress={() => router.push('/shop' as any)} />
+              <MarketplaceEntryCard
+                onPress={() => router.push('/marketplace' as any)}
+                style={{ marginTop: 12 }}
+              />
+            </TourTarget>
+
+            <TourTarget id="home.openMatches" style={{ marginTop: ui.spacing.lg, marginBottom: ui.spacing.md }}>
             <SectionHeader
-              title="Partidos abiertos"
-              subtitle={
-                playerLevelCategory
-                  ? `${joinableOpenMatches.length} para sumarte · tu cat. ${playerLevelCategory}`
-                  : `${joinableOpenMatches.length} abiertos para sumarte`
-              }
+              title="Más partidos abiertos"
+              style={{ marginBottom: 0 }}
               action={
-                <PressableScale onPress={() => router.push('/browse-open-matches' as any)} accessibilityRole="button" accessibilityLabel="Buscar más partidos">
-                  <Text style={{ color: ui.colors.primary, fontSize: 13, fontFamily: ui.typography.label.fontFamily }}>Buscar más</Text>
+                <PressableScale
+                  onPress={() => router.push('/browse-open-matches' as any)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Ver todos los partidos"
+                >
+                  <Text style={{ color: ui.colors.primary, fontSize: 13, fontFamily: ui.typography.label.fontFamily }}>
+                    Ver todos
+                  </Text>
                 </PressableScale>
               }
             />
-            {feedLoading && joinableOpenMatches.length === 0 ? (
+            </TourTarget>
+            {feedLoading && homeOpenMatches.length === 0 ? (
               <SkeletonCard style={{ marginBottom: ui.spacing.lg }} />
-            ) : joinableOpenMatches.length === 0 ? (
-              <EmptyState
-                icon={<Ionicons name="tennisball-outline" size={28} color={ui.colors.textMuted} />}
+            ) : homeOpenMatches.length === 0 ? (
+              <GlassEmpty
+                icon={<Ionicons name="add" size={24} color={ui.colors.primary} />}
                 title="Sin partidos abiertos"
                 description="Creá uno o volvé más tarde para sumarte"
                 action={
                   <PrimaryButton
+                    style={{ marginTop: ui.spacing.lg }}
                     label="Crear partido abierto"
                     onPress={() => router.push('/create-open-match' as any)}
                     size="sm"
-                    icon={<Ionicons name="add-circle-outline" size={16} color="#fff" />}
+                    icon={<Ionicons name="add-circle-outline" size={16} color={ui.colors.onPrimary} />}
                   />
                 }
               />
             ) : (
-              joinableOpenMatches.slice(0, 3).map((match, index) => {
-                const requiresApproval =
-                  playerCategoryStatus === 'provisional' && playerDeclaredCategory
-                    ? !matchOverlapsCategory(match.levelMin, match.levelMax, playerDeclaredCategory)
-                    : !playerSkillFitsMatchRange(
-                        playerSkillScore,
-                        match.levelMin,
-                        match.levelMax,
-                      );
-                return (
-                  <FadeInUp key={match.id} index={index + 1}>
-                    <AppCard
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ gap: 12, paddingRight: 8, marginBottom: ui.spacing.lg }}
+              >
+                {homeOpenMatches.slice(0, 8).map((match) => {
+                  const requiresApproval =
+                    playerCategoryStatus === 'provisional' && playerDeclaredCategory
+                      ? !matchOverlapsCategory(match.levelMin, match.levelMax, playerDeclaredCategory)
+                      : !playerSkillFitsMatchRange(playerSkillScore, match.levelMin, match.levelMax);
+                  return (
+                    <OpenMatchCard
+                      key={match.id}
+                      match={match}
+                      viewerUserId={user?.id}
                       onPress={() => router.push(`/match/${match.id}` as any)}
-                      style={{ marginBottom: 8 }}
-                    >
-                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
-                        <View style={{ flex: 1, marginRight: 8 }}>
-                          <Text
-                            style={{ fontWeight: '700', fontSize: 15, color: ui.colors.textPrimary }}
-                            numberOfLines={1}
-                          >
-                            {match.title}
-                          </Text>
-                          <Text style={{ fontSize: 13, color: ui.colors.textSecondary, marginTop: 2 }} numberOfLines={1}>
-                            {match.club?.name || match.zone || 'Sin club'}
-                          </Text>
-                        </View>
-                        <StatusPill status={match.status} />
-                      </View>
-                      <Text style={{ fontSize: 12, color: ui.colors.textSecondary, marginBottom: 6 }}>
-                        {formatShortDate(match.date)} · {formatPlayPeriodLabel(match.date, match.endsAt)}
-                      </Text>
-                      {(match.levelMin != null || match.levelMax != null) && (
-                        <Text style={{ fontSize: 11, color: ui.colors.primary, fontWeight: '600', marginBottom: 10 }}>
-                          {formatSkillRange(match.levelMin, match.levelMax)}
-                        </Text>
-                      )}
-                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <Text style={{ fontSize: 13, fontWeight: '600', color: ui.colors.textSecondary }}>
-                          {match.neededPlayers - match.joinedCount} lugar
-                          {match.neededPlayers - match.joinedCount === 1 ? '' : 'es'} libre
-                          {match.neededPlayers - match.joinedCount === 1 ? '' : 's'} · {match.joinedCount}/
-                          {match.neededPlayers}
-                        </Text>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                          <Text style={{ fontSize: 13, fontWeight: '600', color: ui.colors.primary }}>
-                            {requiresApproval ? 'Solicitar' : 'Ver y unirme'}
-                          </Text>
-                          <Ionicons name="chevron-forward" size={16} color={ui.colors.primary} />
-                        </View>
-                      </View>
-                    </AppCard>
-                  </FadeInUp>
-                );
-              })
+                      ctaLabel={requiresApproval ? 'Solicitar unirse' : 'Unirse a Partido'}
+                    />
+                  );
+                })}
+              </ScrollView>
             )}
-          </>
-        )}
 
-        {!isClubAccount && isPlayerAccount && (
-          <>
+            <TourTarget id="home.nearby" style={{ marginBottom: ui.spacing.md }}>
             <SectionHeader
-              title="Ranking"
-              subtitle="Por categoría y club"
+              title="Jugadores cerca"
+              style={{ marginBottom: 0 }}
+              subtitle={
+                usingGeoLocation
+                  ? 'A menos de 30 km de vos'
+                  : locationReady
+                    ? 'Activa la ubicación para ver distancia'
+                    : 'Conectá y jugá'
+              }
+            />
+            </TourTarget>
+            {loadingNearby && players.length === 0 ? (
+              <SkeletonCard style={{ marginBottom: ui.spacing.lg }} />
+            ) : players.length === 0 ? (
+              <GlassEmpty
+                icon={<Ionicons name="location" size={22} color={ui.colors.primary} />}
+                title={usingGeoLocation ? 'Nadie cerca todavía' : 'Activá tu ubicación'}
+                description={
+                  usingGeoLocation
+                    ? 'No encontramos jugadores a menos de 30 km por ahora. Probá más tarde.'
+                    : 'Necesitamos tu ubicación para mostrarte jugadores cerca de vos.'
+                }
+                action={
+                  !usingGeoLocation ? (
+                    <PrimaryButton label="Activar ubicación" onPress={activateLocation} size="md" />
+                  ) : undefined
+                }
+              />
+            ) : (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: ui.spacing.lg }}>
+                <View style={{ flexDirection: 'row', gap: 10 }}>
+                  {players.map((player) => {
+                    const distanceLabel = formatDistanceKm(player.distanceKm);
+                    return (
+                      <AppCard
+                        key={player.id}
+                        onPress={() => router.push(`/player/${player.id}` as any)}
+                        style={{ width: 120, marginBottom: 0 }}
+                        padding="sm"
+                      >
+                        <Avatar name={player.name} photo={player.photo_url} size="lg" style={{ alignSelf: 'center', marginBottom: 8 } as any} />
+                        <Text
+                          style={{ fontWeight: '700', fontSize: 13, color: ui.colors.textPrimary, textAlign: 'center' }}
+                          numberOfLines={1}
+                        >
+                          {player.nickname || player.name.split(' ')[0]}
+                        </Text>
+
+                      </AppCard>
+                    );
+                  })}
+                </View>
+              </ScrollView>
+            )}
+
+            <TourTarget id="home.tournaments" style={{ marginBottom: ui.spacing.md }}>
+            <SectionHeader
+              title="Torneos disponibles"
+              style={{ marginBottom: 0 }}
               action={
-                <PressableScale onPress={() => router.push('/(tabs)/rankings' as any)} accessibilityRole="button" accessibilityLabel="Ver circuitos">
-                  <Text style={{ color: ui.colors.primary, fontSize: 13, fontFamily: ui.typography.label.fontFamily }}>Ver circuitos</Text>
+                <PressableScale
+                  onPress={() => router.push('/tournaments' as any)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Ver todos los torneos"
+                >
+                  <Text style={{ color: ui.colors.primary, fontSize: 13, fontFamily: ui.typography.label.fontFamily }}>
+                    Ver todos
+                  </Text>
                 </PressableScale>
               }
             />
-            <View style={{ gap: 12, marginBottom: ui.spacing.lg }}>
-              <AppCard onPress={playerMainClubId ? openClubRanking : undefined}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                  <View style={{ flex: 1, marginRight: 12 }}>
-                    <Text style={{ fontSize: 12, color: ui.colors.textSecondary }}>Ranking de club</Text>
-                    <Text style={{ fontSize: 16, fontWeight: '800', color: ui.colors.textPrimary, marginTop: 4 }}>
-                      {playerMainClub ? playerMainClub.name : 'Elegí tu club principal'}
+            </TourTarget>
+            {upcomingTournaments.length === 0 ? (
+              <GlassEmpty
+                icon={
+                  <Image
+                    source={ICON_TROFEO}
+                    style={{ width: 28, height: 28, marginBottom: 8 }}
+                    resizeMode="contain"
+                  />
+                }
+                title="Sin torneos"
+                description="No hay torneos publicados"
+              />
+            ) : (
+              <TournamentCarousel
+                tournaments={upcomingTournaments}
+                cardWidth={tournamentCarouselCardWidth}
+                onPressTournament={(id) => router.push(`/tournament/${id}` as any)}
+              />
+            )}
+
+
+
+            <SectionHeader title="Comunidad" />
+            <TourTarget id="home.community" style={{ marginBottom: ui.spacing.lg }}>
+            <View style={{ flexDirection: 'row', gap: 10, width: '100%' }}>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <PressableScale
+                  accessibilityRole="button"
+                  accessibilityLabel="Ranking general"
+                  onPress={() => router.push('/ranking-general' as any)}
+                  style={{
+                    width: '100%',
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 10,
+                    paddingVertical: 14,
+                    paddingHorizontal: 6,
+                    borderRadius: ui.radius.lg,
+                    backgroundColor: '#111115',
+                    borderWidth: 1,
+                    borderColor: ui.colors.border,
+                  }}
+                >
+                  <View
+                    style={{
+                      width: 40,
+                      height: 40,
+                      borderRadius: 20,
+                      //backgroundColor: ui.colors.primarySoft,
+                      borderWidth: 1,
+                      borderColor: ui.colors.primaryGlow,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      ...ui.shadow.glow,
+                    }}
+                  >
+                    <Ionicons name="star" size={18} color={ui.colors.primary} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontWeight: '800', color: ui.colors.textPrimary, fontSize: 14 }} numberOfLines={1}>
+                      Ranking general
+                    </Text>
+                    <Text style={{ fontSize: 11, color: ui.colors.textSecondary, marginTop: 2 }} numberOfLines={1}>
+                      Por categoría y género
                     </Text>
                   </View>
-                  <Ionicons name="business-outline" size={22} color={ui.colors.primary} />
-                </View>
-                {playerMainClubId ? (
-                  <>
-                    <View
+                </PressableScale>
+              </View>
+
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <PressableScale
+                  accessibilityRole="button"
+                  accessibilityLabel="Últimos partidos"
+                  onPress={() => router.push('/recent-matches' as any)}
+                  style={{
+                    width: '100%',
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 10,
+                    paddingVertical: 14,
+                    paddingHorizontal: 6,
+                    borderRadius: ui.radius.lg,
+                    backgroundColor: '#111115',
+                    borderWidth: 1,
+                    borderColor: ui.colors.border,
+                  }}
+                >
+                  <View
+                    style={{
+                      width: 40,
+                      height: 40,
+                      borderRadius: 20,
+                      //backgroundColor: ui.colors.primarySoft,
+                      borderWidth: 1,
+                      borderColor: '#D7FF0040',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      ...ui.shadow.glow,
+                    }}
+                  >
+                    <Image
+                      source={ICON_NOTE}
+                      style={{ width: 16, height: 16 }}
+                      resizeMode="contain"
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontWeight: '800', color: ui.colors.textPrimary, fontSize: 14 }} numberOfLines={1}>
+                      Últimos partidos
+                    </Text>
+                    <Text style={{ fontSize: 11, color: ui.colors.textSecondary, marginTop: 2 }} numberOfLines={1}>
+                      Resultados recientes
+                    </Text>
+                  </View>
+                </PressableScale>
+              </View>
+            </View>
+            </TourTarget>
+
+            <TourTarget id="home.ranking" style={{ marginBottom: ui.spacing.md }}>
+            <SectionHeader
+              title="Ranking"
+              style={{ marginBottom: 0 }}
+              action={
+                <PressableScale onPress={openRankingTable} accessibilityRole="button" accessibilityLabel="Tabla completa">
+                  <Text style={{ color: ui.colors.primary, fontSize: 13, fontFamily: ui.typography.label.fontFamily }}>
+                    Tabla completa
+                  </Text>
+                </PressableScale>
+              }
+            />
+            </TourTarget>
+            {!playerMainClubId ? (
+              <GlassEmpty
+                icon={<Image
+                  source={ICON_CLUB}
+                  style={{ width: 22, height: 22, marginBottom: 8 }}
+                  resizeMode="contain"
+                />}
+                title="Elegí tu club principal"
+                description="Necesitás un club para ver el ranking interno y sumar puntos."
+                action={
+                  <PrimaryButton label="Explorar clubs" onPress={() => router.push('/clubs' as any)} size="sm" />
+                }
+              />
+            ) : rankingRows.length === 0 ? (
+              <GlassEmpty
+                icon={<FontAwesome6 name="ranking-star" size={22} style={{ marginBottom: 8 }} color={ui.colors.primary} />}
+                title="Sin ranking todavía"
+                description="Jugá partidos en tu club para empezar a sumar puntos."
+              />
+            ) : (
+              rankingRows.map((entry, index) => (
+                <PressableScale
+                  key={entry.id}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Ver perfil de ${entry.name}`}
+                  onPress={() => router.push(`/player/${entry.id}` as any)}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 12,
+                    paddingVertical: 14,
+                    paddingHorizontal: 14,
+                    marginBottom: 10,
+                    borderRadius: 24,
+                    backgroundColor: '#141418BF',
+                    borderWidth: 1,
+                    borderColor: '#252B27',
+                  }}
+                >
+                  <View
+                    style={{
+                      width: 28,
+                      height: 28,
+                      borderRadius: 8,
+                      backgroundColor: RANK_BADGE[Math.min(index, 2)],
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <Text style={{ fontSize: 14, fontWeight: '800', color: RANK_BADGE_TEXT[Math.min(index, 2)] }}>
+                      {entry.rank || index + 1}
+                    </Text>
+                  </View>
+                  <Avatar name={entry.name} photo={entry.photo} size="md" style={{ borderRadius: 14 } as any} />
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text
                       style={{
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        marginBottom: 12,
-                        padding: 10,
-                        borderRadius: ui.radius.md,
-                        backgroundColor: ui.colors.surfaceAlt,
-                        borderWidth: 1,
-                        borderColor: ui.colors.border,
+                        color: ui.colors.textPrimary,
+                        fontWeight: '700',
+                        fontSize: 15,
+                      }}
+                      numberOfLines={1}
+                    >
+                      {entry.name}
+                    </Text>
+                    {entry.category ? (
+                      <Text
+                        style={{
+                          color: ui.colors.textSecondary,
+                          fontSize: 12,
+                          marginTop: 2,
+                        }}
+                      >
+                        {entry.category}
+                      </Text>
+                    ) : null}
+                  </View>
+                  <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 4 }}>
+                    <Text
+                      style={{
+                        color: ui.colors.primary,
+                        fontFamily: ui.typography.label.fontFamily,
+                        fontSize: 18,
+                        fontWeight: '800',
                       }}
                     >
-                      <View style={{ flex: 1, marginRight: 8 }}>
-                        <Text style={{ fontSize: 11, color: ui.colors.textSecondary }}>Puntos globales canjeables</Text>
-                        <Text style={{ fontSize: 18, fontWeight: '800', color: ui.colors.primary, marginTop: 2 }}>
-                          {playerClubPoints?.points ?? 0} pts
-                        </Text>
-                      </View>
-                      <PrimaryButton
-                        label="Ver premios"
-                        size="sm"
-                        onPress={() => router.push(`/club/${playerMainClubId}?tab=rewards` as any)}
-                      />
-                    </View>
-                    <Text style={{ fontSize: 13, color: ui.colors.textSecondary, marginBottom: 10 }}>
-                      {myClubEntry
-                        ? `Vas #${myClubEntry.rank} este mes con ${myClubEntry.points} pts.`
-                        : `Llevás ${playerClubPoints?.monthlyPoints ?? 0} pts este mes${playerClubPoints?.monthlyMatchesPlayed
-                          ? ` en ${playerClubPoints.monthlyMatchesPlayed} partido${playerClubPoints.monthlyMatchesPlayed === 1 ? '' : 's'}`
-                          : ''
-                        }.`}
+                      {entry.points.toLocaleString('es-AR')}
                     </Text>
-                    {(playerClubLeaderboard || []).slice(0, 3).map((entry) => (
-                      <PressableScale
-                        key={entry.user_id}
-                        accessibilityRole="button"
-                        accessibilityLabel={`Ver perfil de ${entry.nickname || entry.name}`}
-                        onPress={() => router.push(`/player/${entry.user_id}` as any)}
-                        style={{
-                          flexDirection: 'row',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          paddingVertical: 6,
-                          minHeight: 44,
-                        }}
-                      >
-                        <Text style={{ fontWeight: '700', color: ui.colors.primary, width: 28 }}>#{entry.rank}</Text>
-                        <Text style={{ flex: 1, color: ui.colors.textPrimary }} numberOfLines={1}>
-                          {entry.nickname || entry.name}
-                          {entry.user_id === user?.id ? ' (vos)' : ''}
-                        </Text>
-                        <Text style={{ color: ui.colors.textSecondary, fontWeight: '700' }}>{entry.points} pts</Text>
-                      </PressableScale>
-                    ))}
-                    {(playerClubLeaderboard || []).length === 0 ? (
-                      <Text style={{ fontSize: 12, color: ui.colors.textMuted }}>
-                        Todavía no hay ranking en tu club. Jugá partidos ahí para empezar a sumar.
-                      </Text>
-                    ) : (
-                      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 4, marginTop: 8 }}>
-                        <Text style={{ fontSize: 12, fontWeight: '600', color: ui.colors.primary }}>Ver ranking completo</Text>
-                        <Ionicons name="chevron-forward" size={14} color={ui.colors.primary} />
-                      </View>
-                    )}
-                  </>
-                ) : (
-                  <>
-                    <Text style={{ fontSize: 13, color: ui.colors.textMuted, marginBottom: 12 }}>
-                      Elegí tu club principal para seguir tu posición mensual y acceder al ranking interno.
-                    </Text>
-                    {(clubOptions || []).slice(0, 4).map((club) => (
-                      <PressableScale
-                        key={club.id}
-                        accessibilityRole="button"
-                        accessibilityLabel={`Elegir club ${club.name}`}
-                        disabled={setMainClubMutation.isPending}
-                        onPress={() => setMainClubMutation.mutate(club.id)}
-                        style={{
-                          flexDirection: 'row',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          paddingVertical: 10,
-                          paddingHorizontal: 12,
-                          marginBottom: 8,
-                          minHeight: 44,
-                          borderRadius: ui.radius.md,
-                          backgroundColor: ui.colors.surfaceAlt,
-                          borderWidth: 1,
-                          borderColor: ui.colors.border,
-                        }}
-                      >
-                        <View style={{ flex: 1 }}>
-                          <Text style={{ fontWeight: '700', color: ui.colors.textPrimary }} numberOfLines={1}>
-                            {club.name}
-                          </Text>
-                          {(club.zone || club.city) ? (
-                            <Text style={{ fontSize: 11, color: ui.colors.textMuted, marginTop: 2 }} numberOfLines={1}>
-                              {club.zone || club.city}
-                            </Text>
-                          ) : null}
-                        </View>
-                        <Ionicons name="checkmark-circle-outline" size={20} color={ui.colors.primary} />
-                      </PressableScale>
-                    ))}
-                    <PrimaryButton
-                      label="Explorar todos los clubs"
-                      onPress={() => router.push('/(tabs)/clubs' as any)}
-                      variant="ghost"
-                      fullWidth
-                      size="sm"
-                      style={{ marginTop: 4, backgroundColor: ui.colors.surface }}
-                    />
-                  </>
-                )}
-              </AppCard>
-
-              <AppCard onPress={playerLevelCategory ? openCategoryRanking : undefined}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                  <View style={{ flex: 1, marginRight: 12 }}>
-                    <Text style={{ fontSize: 12, color: ui.colors.textSecondary }}>Ranking por categoría</Text>
-                    <Text style={{ fontSize: 16, fontWeight: '800', color: ui.colors.textPrimary, marginTop: 4 }}>
-                      {playerLevelCategory
-                        ? `${playerLevelCategory} · ${featuredCircuit?.name || 'Circuito activo'}`
-                        : 'Tu categoría'}
+                    <Text
+                      style={{
+                        color: ui.colors.textSecondary,
+                        fontSize: 12,
+                        fontWeight: '500',
+                      }}
+                    >
+                      PTS
                     </Text>
                   </View>
-                  <Ionicons name="trophy-outline" size={22} color={ui.colors.accent} />
-                </View>
-                {playerLevelCategory ? (
-                  <>
-                    <Text style={{ fontSize: 13, color: ui.colors.textSecondary, marginBottom: 10 }}>
-                      {myCategoryEntry
-                        ? `Estás #${myCategoryEntry.position ?? categoryRanking.indexOf(myCategoryEntry) + 1} en ${playerLevelCategory} con ${myCategoryEntry.points} pts.`
-                        : featuredCircuit
-                          ? `Así viene hoy tu categoría ${playerLevelCategory} en ${featuredCircuit.name}.`
-                          : `Todavía no hay circuitos para seguir la categoría ${playerLevelCategory}.`}
-                    </Text>
-                    {topCategoryRanking.length > 0 ? (
-                      topCategoryRanking.map((entry, index) => (
-                        <PressableScale
-                          key={entry.id}
-                          accessibilityRole="button"
-                          accessibilityLabel={`Ver perfil de ${entry.playerName}`}
-                          onPress={() => entry.playerId && router.push(`/player/${entry.playerId}` as any)}
-                          style={{
-                            flexDirection: 'row',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            paddingVertical: 6,
-                            minHeight: 44,
-                          }}
-                        >
-                          <Text style={{ fontWeight: '700', color: ui.colors.primary, width: 28 }}>
-                            #{entry.position ?? index + 1}
-                          </Text>
-                          <Text style={{ flex: 1, color: ui.colors.textPrimary }} numberOfLines={1}>
-                            {entry.playerName}
-                          </Text>
-                          <Text style={{ color: ui.colors.textSecondary, fontWeight: '700' }}>{entry.points} pts</Text>
-                        </PressableScale>
-                      ))
-                    ) : (
-                      <Text style={{ fontSize: 12, color: ui.colors.textMuted }}>
-                        Todavía no hay posiciones cargadas para esta categoría.
-                      </Text>
-                    )}
-                    {featuredCircuit?.id ? (
-                      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 4, marginTop: 8 }}>
-                        <Text style={{ fontSize: 12, fontWeight: '600', color: ui.colors.primary }}>Ver tabla completa</Text>
-                        <Ionicons name="chevron-forward" size={14} color={ui.colors.primary} />
-                      </View>
-                    ) : (
-                      <PrimaryButton
-                        label="Ver circuitos disponibles"
-                        onPress={() => router.push('/(tabs)/rankings' as any)}
-                        variant="ghost"
-                        fullWidth
-                        size="sm"
-                        style={{ marginTop: 8, backgroundColor: ui.colors.surface }}
-                      />
-                    )}
-                  </>
-                ) : (
-                  <>
-                    <Text style={{ fontSize: 13, color: ui.colors.textMuted, marginBottom: 12 }}>
-                      Tu categoría se calcula con tu nivel. Jugá partidos competitivos para aparecer en el ranking.
-                    </Text>
-                    <PrimaryButton
-                      label="Buscar partido"
-                      onPress={() => router.push('/browse-open-matches' as any)}
-                      variant="outline"
-                      fullWidth
-                      size="sm"
-                    />
-                  </>
-                )}
-              </AppCard>
-            </View>
+                </PressableScale>
+              ))
+            )}
+
           </>
-        )}
-
-        {!isClubAccount && (
+        ) : (
           <>
-            {isPlayerAccount && !showMoreHome ? (
-              <PrimaryButton
-                label="Explorar comunidad y torneos"
-                onPress={() => setShowMoreHome(true)}
-                variant="outline"
-                fullWidth
-                style={{ marginBottom: ui.spacing.lg }}
+            <SectionHeader
+              title="Buscar clubes"
+              subtitle={clubSearch.trim() ? `${filteredHomeClubs.length} resultados` : `${homeClubs?.length ?? 0} disponibles`}
+              action={
+                <PressableScale
+                  onPress={() => router.push('/clubs' as any)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Ver todos los clubes"
+                >
+                  <Text style={{ color: ui.colors.primary, fontSize: 13, fontFamily: ui.typography.label.fontFamily }}>
+                    Ver todos
+                  </Text>
+                </PressableScale>
+              }
+            />
+            <InputField
+              label="Nombre o ciudad"
+              value={clubSearch}
+              onChangeText={setClubSearch}
+              placeholder="Ej. Palermo, Norte, Pádel Club..."
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            {loadingHomeClubs && filteredHomeClubs.length === 0 ? (
+              <SkeletonCard style={{ marginBottom: ui.spacing.lg }} />
+            ) : filteredHomeClubs.length === 0 ? (
+              <EmptyState
+                icon={<Ionicons name="business-outline" size={28} color={ui.colors.textMuted} />}
+                title={clubSearch.trim() ? 'Sin resultados' : 'Sin clubes'}
+                description={
+                  clubSearch.trim()
+                    ? 'Probá con otro nombre o ciudad.'
+                    : 'Todavía no hay clubes registrados.'
+                }
               />
-            ) : null}
-
-            {(!isPlayerAccount || showMoreHome) && (
-              <>
-                {isPlayerAccount ? (
-                  <>
-                    <SectionHeader
-                      title="Más partidos abiertos"
-                      subtitle={`${communityOpenMatches.length} partidos abiertos`}
-                      action={
-                        <PressableScale onPress={() => router.push('/(tabs)/matches' as any)} accessibilityRole="button" accessibilityLabel="Ver todos los partidos">
-                          <Text style={{ color: ui.colors.primary, fontSize: 13, fontFamily: ui.typography.label.fontFamily }}>Ver todos</Text>
-                        </PressableScale>
-                      }
-                    />
-                    {communityOpenMatches.length === 0 ? (
-                      <EmptyState
-                        icon={<Ionicons name="people-outline" size={28} color={ui.colors.textMuted} />}
-                        title="Sin partidos en comunidad"
-                        description="No hay otros partidos abiertos fuera de tu categoría."
-                      />
-                    ) : (
-                      communityOpenMatches.slice(0, 3).map((match) => (
-                        <AppCard key={match.id} onPress={() => router.push(`/match/${match.id}` as any)}>
-                          <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
-                            <View style={{ flex: 1, marginRight: 8 }}>
-                              <Text style={{ fontWeight: '700', fontSize: 15, color: ui.colors.textPrimary }} numberOfLines={1}>
-                                {match.title}
-                              </Text>
-                              <Text style={{ fontSize: 13, color: ui.colors.textSecondary }}>{match.club?.name}</Text>
-                            </View>
-                            <StatusPill status={match.status} />
-                          </View>
-                          <View style={{ flexDirection: 'row', gap: 16, marginBottom: 10 }}>
-                            <Text style={{ fontSize: 12, color: ui.colors.textSecondary }}>
-                              {formatShortDate(match.date)} · {formatPlayPeriodLabel(match.date, match.endsAt)}
-                            </Text>
-                          </View>
-                          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <View style={{ flexDirection: 'row' }}>
-                              {match.players.slice(0, 4).map((p, i) => (
-                                <Avatar key={p.id} name={p.name} size="sm" style={{ marginLeft: i > 0 ? -8 : 0 }} borderColor={ui.colors.card} />
-                              ))}
-                            </View>
-                            <Text style={{ fontSize: 13, fontWeight: '600', color: ui.colors.textSecondary }}>
-                              {match.joinedCount}/{match.neededPlayers}
-                            </Text>
-                          </View>
-                        </AppCard>
-                      ))
-                    )}
-
-                    <SectionHeader
-                      title="Jugadores cerca"
-                      subtitle={
-                        usingGeoLocation
-                          ? 'A menos de 30 km de vos'
-                          : locationReady
-                            ? 'Por zona · activá ubicación para ver distancia'
-                            : 'Conectá y jugá'
-                      }
-                    />
-                    {loadingNearby && players.length === 0 ? (
-                      <SkeletonCard style={{ marginBottom: ui.spacing.lg }} />
-                    ) : players.length === 0 ? (
-                      <EmptyState
-                        icon={<Ionicons name="navigate-outline" size={28} color={ui.colors.textMuted} />}
-                        title="Nadie cerca todavía"
-                        description={
-                          usingGeoLocation
-                            ? 'No hay jugadores con ubicación registrada cerca tuyo todavía.'
-                            : 'Activá la ubicación o completá tu zona en el perfil para ver jugadores cercanos.'
-                        }
-                        action={
-                          !usingGeoLocation ? (
-                            <PrimaryButton
-                              label="Activar ubicación"
-                              onPress={async () => {
-                                const coords = await requestPlayerCoordinates({
-                                  withLabel: true,
-                                  showAlerts: true,
-                                });
-                                if (!coords) return;
-                                setPlayerCoords({ lat: coords.latitude, lng: coords.longitude });
-                                setUsingGeoLocation(true);
-                                await syncPlayerCoordinates(coords).catch(() => undefined);
-                                refetchNearby();
-                              }}
-                              size="sm"
-                            />
-                          ) : undefined
-                        }
-                      />
-                    ) : (
-                      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: ui.spacing.lg }}>
-                        <View style={{ flexDirection: 'row', gap: 10 }}>
-                          {players.map((player) => {
-                            const distanceLabel = formatDistanceKm(player.distanceKm);
-                            return (
-                              <AppCard
-                                key={player.id}
-                                onPress={() => router.push(`/player/${player.id}` as any)}
-                                style={{ width: 120, marginBottom: 0 }}
-                                padding="sm"
-                              >
-                                <Avatar name={player.name} photo={player.photo_url} size="lg" style={{ alignSelf: 'center', marginBottom: 8 }} />
-                                <Text style={{ fontWeight: '700', fontSize: 13, color: ui.colors.textPrimary, textAlign: 'center' }} numberOfLines={1}>
-                                  {player.nickname || player.name.split(' ')[0]}
-                                </Text>
-                                <Text style={{ fontSize: 11, color: ui.colors.textSecondary, textAlign: 'center', marginTop: 4 }} numberOfLines={1}>
-                                  {distanceLabel || player.zone || player.city || 'Cerca'}
-                                </Text>
-                              </AppCard>
-                            );
-                          })}
-                        </View>
-                      </ScrollView>
-                    )}
-                  </>
-                ) : (
-                  <>
-                    <SectionHeader
-                      title="Buscar clubes"
-                      subtitle={clubSearch.trim() ? `${filteredHomeClubs.length} resultados` : `${homeClubs?.length ?? 0} disponibles`}
-                      action={
-                        <PressableScale onPress={() => router.push('/(tabs)/clubs' as any)} accessibilityRole="button" accessibilityLabel="Ver todos los clubes">
-                          <Text style={{ color: ui.colors.primary, fontSize: 13, fontFamily: ui.typography.label.fontFamily }}>Ver todos</Text>
-                        </PressableScale>
-                      }
-                    />
-                    <InputField
-                      label="Nombre, ciudad o zona"
-                      value={clubSearch}
-                      onChangeText={setClubSearch}
-                      placeholder="Ej. Palermo, Norte, Pádel Club..."
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                    />
-                    {loadingHomeClubs && filteredHomeClubs.length === 0 ? (
-                      <SkeletonCard style={{ marginBottom: ui.spacing.lg }} />
-                    ) : filteredHomeClubs.length === 0 ? (
-                      <EmptyState
-                        icon={<Ionicons name="business-outline" size={28} color={ui.colors.textMuted} />}
-                        title={clubSearch.trim() ? 'Sin resultados' : 'Sin clubes'}
-                        description={
-                          clubSearch.trim()
-                            ? 'Probá con otro nombre, ciudad o zona.'
-                            : 'Todavía no hay clubes registrados.'
-                        }
-                      />
-                    ) : (
-                      filteredHomeClubs.map((club) => (
-                        <AppCard key={club.id} onPress={() => router.push(`/club/${club.id}` as any)}>
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                            <Avatar name={club.name} photo={club.logo_url} size="md" style={{ marginBottom: 0 }} />
-                            <View style={{ flex: 1 }}>
-                              <Text style={{ fontWeight: '700', color: ui.colors.textPrimary }}>{club.name}</Text>
-                              {(club.city || club.zone) ? (
-                                <Text style={{ fontSize: 12, color: ui.colors.textSecondary, marginTop: 4 }}>
-                                  {[club.zone, club.city].filter(Boolean).join(' · ')}
-                                </Text>
-                              ) : null}
-                            </View>
-                            <Ionicons name="chevron-forward" size={18} color={ui.colors.textMuted} />
-                          </View>
-                        </AppCard>
-                      ))
-                    )}
-                  </>
-                )}
-
-                <SectionHeader
-                  title="Torneos disponibles"
-                  action={
-                    <PressableScale onPress={() => router.push('/tournaments' as any)} accessibilityRole="button" accessibilityLabel="Ver todos los torneos">
-                      <Text style={{ color: ui.colors.primary, fontSize: 13, fontFamily: ui.typography.label.fontFamily }}>Ver todos</Text>
-                    </PressableScale>
-                  }
-                />
-                {upcomingTournaments.length === 0 ? (
-                  <EmptyState
-                    icon={<Ionicons name="trophy-outline" size={28} color={ui.colors.textMuted} />}
-                    title="Sin torneos"
-                    description="No hay torneos publicados."
-                  />
-                ) : (
-                  upcomingTournaments.map((t) => (
-                    <AppCard key={t.id} onPress={() => router.push(`/tournament/${t.id}` as any)}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                        <View style={{ width: 48, height: 48, borderRadius: 12, backgroundColor: ui.colors.warningSoft, alignItems: 'center', justifyContent: 'center' }}>
-                          <Ionicons name="trophy" size={24} color={ui.colors.accent} />
-                        </View>
-                        <View style={{ flex: 1 }}>
-                          <Text style={{ fontWeight: '700', color: ui.colors.textPrimary }}>{t.name}</Text>
-                          <Text style={{ fontSize: 12, color: ui.colors.textSecondary, marginTop: 4 }}>
-                            Cat. {t.category || '—'}
-                            {t.startDate ? ` · ${formatShortDate(t.startDate)}` : ''}
-                          </Text>
-                        </View>
-                        <Ionicons name="chevron-forward" size={18} color={ui.colors.textMuted} />
-                      </View>
-                    </AppCard>
-                  ))
-                )}
-
-                {isPlayerAccount && (
-                  <>
-                    <SectionHeader title="Comunidad" />
-                    <AppCard style={{ marginBottom: ui.spacing.lg }}>
-                      <View style={{ flexDirection: 'row', gap: 10 }}>
-                        <PressableScale
-                          accessibilityRole="button"
-                          accessibilityLabel="Ranking general"
-                          onPress={() => router.push('/ranking-general' as any)}
-                          style={{
-                            flex: 1,
-                            padding: 14,
-                            borderRadius: ui.radius.md,
-                            backgroundColor: ui.colors.surfaceAlt,
-                            borderWidth: 1,
-                            borderColor: ui.colors.border,
-                          }}
-                        >
-                          <View
-                            style={{
-                              width: 40,
-                              height: 40,
-                              borderRadius: 12,
-                              backgroundColor: ui.colors.primarySoft,
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              marginBottom: 10,
-                            }}
-                          >
-                            <Ionicons name="podium" size={22} color={ui.colors.primary} />
-                          </View>
-                          <Text style={{ fontWeight: '800', color: ui.colors.textPrimary, fontSize: 14 }}>Ranking general</Text>
-                          <Text style={{ fontSize: 11, color: ui.colors.textSecondary, marginTop: 4 }}>
-                            Por categoría y género
-                          </Text>
-                        </PressableScale>
-
-                        <PressableScale
-                          accessibilityRole="button"
-                          accessibilityLabel="Últimos partidos"
-                          onPress={() => router.push('/recent-matches' as any)}
-                          style={{
-                            flex: 1,
-                            padding: 14,
-                            borderRadius: ui.radius.md,
-                            backgroundColor: ui.colors.surfaceAlt,
-                            borderWidth: 1,
-                            borderColor: ui.colors.border,
-                          }}
-                        >
-                          <View
-                            style={{
-                              width: 40,
-                              height: 40,
-                              borderRadius: 12,
-                              backgroundColor: ui.colors.warningSoft,
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              marginBottom: 10,
-                            }}
-                          >
-                            <Ionicons name="tennisball" size={22} color={ui.colors.accent} />
-                          </View>
-                          <Text style={{ fontWeight: '800', color: ui.colors.textPrimary, fontSize: 14 }}>Últimos partidos</Text>
-                          <Text style={{ fontSize: 11, color: ui.colors.textSecondary, marginTop: 4 }}>
-                            Resultados recientes
-                          </Text>
-                        </PressableScale>
-                      </View>
-                    </AppCard>
-                  </>
-                )}
-
-                {isPlayerAccount && upcomingMatches.length > 0 && (
-                  <>
-                    <SectionHeader title="Próximos partidos" subtitle={`${upcomingMatches.length} agendados`} />
-                    {upcomingMatches.slice(0, 5).map((match) => (
-                      <AppCard key={match.id} onPress={() => router.push(`/match/${match.id}` as any)}>
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
-                          <Text style={{ fontWeight: '700', color: ui.colors.textPrimary }}>{formatShortDate(match.date)}</Text>
-                          <StatusPill status={match.status} />
-                        </View>
-                        <Text style={{ fontSize: 12, color: ui.colors.textSecondary }}>
-                          {formatTime(match.date)}
-                          {match.club?.name ? ` · ${match.club.name}` : ''}
+            ) : (
+              filteredHomeClubs.map((club) => (
+                <AppCard key={club.id} onPress={() => router.push(`/club/${club.id}` as any)}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                    <Avatar name={club.name} photo={club.logo_url} size="md" style={{ marginBottom: 0 } as any} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontWeight: '700', color: ui.colors.textPrimary }}>{club.name}</Text>
+                      {club.city || club.location ? (
+                        <Text style={{ fontSize: 12, color: ui.colors.textSecondary, marginTop: 4 }}>
+                          {[club.city, club.location].filter(Boolean).join(' · ')}
                         </Text>
-                      </AppCard>
-                    ))}
-                  </>
-                )}
-              </>
+                      ) : null}
+                    </View>
+                    <Ionicons name="chevron-forward" size={18} color={ui.colors.textMuted} />
+                  </View>
+                </AppCard>
+              ))
+            )}
+
+            <SectionHeader
+              title="Torneos disponibles"
+              action={
+                <PressableScale
+                  onPress={() => router.push('/tournaments' as any)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Ver todos los torneos"
+                >
+                  <Text style={{ color: ui.colors.primary, fontSize: 13, fontFamily: ui.typography.label.fontFamily }}>
+                    Ver todos
+                  </Text>
+                </PressableScale>
+              }
+            />
+            {upcomingTournaments.length === 0 ? (
+              <EmptyState
+                icon={<Ionicons name="trophy-outline" size={28} color={ui.colors.textMuted} />}
+                title="Sin torneos"
+                description="No hay torneos publicados."
+              />
+            ) : (
+              <TournamentCarousel
+                tournaments={upcomingTournaments}
+                cardWidth={tournamentCarouselCardWidth}
+                onPressTournament={(id) => router.push(`/tournament/${id}` as any)}
+              />
             )}
           </>
         )}
-      </ScrollView>
+      </TabScrollView>
+      {profilePhoto ? (
+        <ProfilePhotoViewer
+          visible={showPhotoViewer}
+          photo={profilePhoto}
+          name={user?.name || 'Perfil'}
+          onClose={() => setShowPhotoViewer(false)}
+        />
+      ) : null}
     </Screen>
   );
 }

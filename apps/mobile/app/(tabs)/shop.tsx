@@ -6,16 +6,16 @@ import { Ionicons } from '@expo/vector-icons';
 import { api } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { isClub } from '@/lib/roles';
-import { formatCurrency } from '@/lib/currency';
+import { formatCurrency, parseMoneyInput } from '@/lib/currency';
 import { formatRelativeTime, formatShortDate } from '@/lib/format';
-import { confirmShopPurchase, listShopSales, type ShopSaleRow } from '@/lib/shop-api';
+import { confirmShopPurchase, listShopSales, type ShopSaleRow } from '@/lib/shop/shop-api';
 import {
   pickAndUploadShopProductPhoto,
   pickShopProductPhoto,
   showShopProductPhotoOptions,
   uploadShopProductPhotoFromUri,
   type ShopProductPhotoSource,
-} from '@/lib/shop-product-photo';
+} from '@/lib/shop/shop-product-photo';
 import { ui } from '@/theme/tokens';
 import { tabScreenPadding } from '@/lib/layout';
 import {
@@ -24,16 +24,43 @@ import {
   AppCard,
   PrimaryButton,
   InputField,
+  MoneyInputField,
   EmptyState,
   SectionHeader,
   SelectionChip,
-} from '@/components/padely';
+  TabScrollView,
+} from '@/components/x4match';
 import {
   ClubPicker,
   resolveActiveClubId,
   useMineClubs,
 } from '@/components/club/ClubPicker';
 import { ManagerQuickActions } from '@/components/club/ManagerQuickActions';
+import { TourTarget, useScreenTour, type TourStep } from '@/components/tour/ScreenTour';
+
+const SHOP_TOUR_STEPS: TourStep[] = [
+  {
+    target: 'shop.clubPicker',
+    title: 'Sede',
+    description: 'Si tenés más de una sede, elegí de cuál es la tienda que estás gestionando.',
+  },
+  {
+    target: 'shop.quickActions',
+    title: 'Accesos rápidos',
+    description: 'Agregá un producto, revisá los cobros pendientes, entrá a la facturación o mirá el inventario.',
+  },
+  {
+    target: 'shop.summary',
+    title: 'Resumen de stock',
+    description: 'Cuántos productos tenés en stock y cuántos se ofrecen como extras al reservar un partido.',
+  },
+  {
+    target: 'shop.tabs',
+    title: 'Secciones de la tienda',
+    description:
+      '"Stats": resumen de ventas. "Stock": tus productos. "Cobros": confirmá ventas en recepción. "Extras": productos que se ofrecen al jugar. "Cupones": descuentos. "Premios" y "Canjes": el catálogo que los jugadores canjean con sus puntos.',
+  },
+];
 
 type ShopTab = 'stats' | 'products' | 'sales' | 'matchExtras' | 'coupons' | 'rewards' | 'redemptions';
 
@@ -67,17 +94,29 @@ interface RewardRow {
   title: string;
   description?: string;
   points_required: number;
+  pointsRequired?: number;
   reward_type: string;
   active: boolean;
+  stock?: number | null;
+  maxPerUser?: number | null;
+  max_per_user?: number | null;
 }
 
 interface RedemptionRow {
   id: string;
   points_spent: number;
+  pointsSpent?: number;
   created_at: string;
+  createdAt?: string;
   user_name: string;
+  userName?: string;
   user_nickname?: string;
+  userNickname?: string;
   reward_title: string;
+  rewardTitle?: string;
+  status?: string;
+  redemption_code?: string;
+  redemptionCode?: string;
 }
 
 interface ShopStats {
@@ -205,6 +244,7 @@ export default function ShopScreen() {
   const initialTab = validTabs.includes(params.tab as ShopTab) ? (params.tab as ShopTab) : 'stats';
   const [tab, setTab] = useState<ShopTab>(initialTab);
   const [selectedClubId, setSelectedClubId] = useState<string | null>(null);
+  useScreenTour('club-shop', SHOP_TOUR_STEPS, { enabled: canManage });
 
   useEffect(() => {
     if (validTabs.includes(params.tab as ShopTab)) {
@@ -225,13 +265,15 @@ export default function ShopScreen() {
 
   const [couponCode, setCouponCode] = useState('');
   const [couponLabel, setCouponLabel] = useState('');
-  const [couponDiscount, setCouponDiscount] = useState('10');
+  const [couponDiscount, setCouponDiscount] = useState('');
   const [couponPoints, setCouponPoints] = useState('');
   const [showCouponForm, setShowCouponForm] = useState(false);
 
   const [rewardTitle, setRewardTitle] = useState('');
   const [rewardDesc, setRewardDesc] = useState('');
   const [rewardPoints, setRewardPoints] = useState('50');
+  const [rewardStock, setRewardStock] = useState('');
+  const [rewardMaxPerUser, setRewardMaxPerUser] = useState('');
   const [showRewardForm, setShowRewardForm] = useState(false);
   const [editingRewardId, setEditingRewardId] = useState<string | null>(null);
 
@@ -366,7 +408,7 @@ export default function ShopScreen() {
       const payload = {
         name: productName.trim(),
         description: productDesc.trim() || undefined,
-        price: parseFloat(productPrice) || 0,
+        price: parseMoneyInput(productPrice),
         category: 'OTHER',
         stockQuantity: productStock.trim() ? parseInt(productStock, 10) : undefined,
         availableAsMatchExtra: productMatchExtra,
@@ -504,23 +546,28 @@ export default function ShopScreen() {
   const createCoupon = useMutation({
     mutationFn: async () => {
       if (!activeClubId || !couponCode.trim() || !couponLabel.trim()) throw new Error('Completá código y nombre');
+      const discountPercent = parseInt(couponDiscount, 10) || undefined;
+      const pointsCost = couponPoints.trim() ? parseInt(couponPoints, 10) : undefined;
+      if (!discountPercent && !pointsCost) {
+        throw new Error('Indicá descuento % o puntos canjeables de regalo');
+      }
       await api.post(`/clubs/${activeClubId}/shop/coupons`, {
         code: couponCode.trim(),
         label: couponLabel.trim(),
-        discountPercent: parseInt(couponDiscount, 10) || undefined,
-        pointsCost: couponPoints.trim() ? parseInt(couponPoints, 10) : undefined,
+        discountPercent,
+        pointsCost,
       });
     },
     onSuccess: () => {
       setCouponCode('');
       setCouponLabel('');
-      setCouponDiscount('10');
+      setCouponDiscount('');
       setCouponPoints('');
       setShowCouponForm(false);
       queryClient.invalidateQueries({ queryKey: ['club-shop-coupons', activeClubId] });
       Alert.alert('Listo', 'Cupón creado');
     },
-    onError: (err: any) => Alert.alert('Error', err.response?.data?.message || 'Error'),
+    onError: (err: any) => Alert.alert('Error', err.response?.data?.message || err.message || 'Error'),
   });
 
   const deactivateCoupon = useMutation({
@@ -537,6 +584,8 @@ export default function ShopScreen() {
     setRewardTitle('');
     setRewardDesc('');
     setRewardPoints('50');
+    setRewardStock('');
+    setRewardMaxPerUser('');
     setEditingRewardId(null);
     setShowRewardForm(false);
   };
@@ -545,7 +594,13 @@ export default function ShopScreen() {
     setEditingRewardId(reward.id);
     setRewardTitle(reward.title);
     setRewardDesc(reward.description || '');
-    setRewardPoints(String(reward.points_required || 50));
+    setRewardPoints(String((reward.pointsRequired ?? reward.points_required) || 50));
+    setRewardStock(reward.stock != null ? String(reward.stock) : '');
+    setRewardMaxPerUser(
+      (reward.maxPerUser ?? reward.max_per_user) != null
+        ? String(reward.maxPerUser ?? reward.max_per_user)
+        : '',
+    );
     setShowRewardForm(true);
   };
 
@@ -556,6 +611,8 @@ export default function ShopScreen() {
         title: rewardTitle.trim(),
         description: rewardDesc.trim() || undefined,
         pointsRequired: parseInt(rewardPoints, 10) || 50,
+        stock: rewardStock.trim() ? parseInt(rewardStock, 10) : null,
+        maxPerUser: rewardMaxPerUser.trim() ? parseInt(rewardMaxPerUser, 10) : null,
       };
       if (editingRewardId) {
         const res = await api.patch(`/clubs/${activeClubId}/rewards/${editingRewardId}`, payload);
@@ -582,6 +639,32 @@ export default function ShopScreen() {
       Alert.alert('Listo', 'Premio desactivado');
     },
     onError: (err: any) => Alert.alert('Error', err.response?.data?.message || 'No se pudo desactivar'),
+  });
+
+  const fulfillRedemption = useMutation({
+    mutationFn: async (redemptionId: string) => {
+      if (!activeClubId) return;
+      await api.post(`/clubs/${activeClubId}/redemptions/${redemptionId}/fulfill`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['club-shop-redemptions', activeClubId] });
+      Alert.alert('Listo', 'Premio entregado');
+    },
+    onError: (err: any) => Alert.alert('Error', err.response?.data?.message || 'No se pudo entregar'),
+  });
+
+  const cancelRedemption = useMutation({
+    mutationFn: async (redemptionId: string) => {
+      if (!activeClubId) return;
+      await api.post(`/clubs/${activeClubId}/redemptions/${redemptionId}/cancel`, {
+        reason: 'Cancelado por el club',
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['club-shop-redemptions', activeClubId] });
+      Alert.alert('Listo', 'Canje cancelado y puntos reintegrados');
+    },
+    onError: (err: any) => Alert.alert('Error', err.response?.data?.message || 'No se pudo cancelar'),
   });
 
   const onRefresh = () => {
@@ -639,7 +722,7 @@ export default function ShopScreen() {
   return (
     <Screen>
       <AppHeader title="Tienda" />
-      <ScrollView
+      <TabScrollView
         contentContainerStyle={{ ...tabScreenPadding }}
         refreshControl={<RefreshControl refreshing={isLoading} onRefresh={onRefresh} tintColor={ui.colors.primary} />}
       >
@@ -651,12 +734,15 @@ export default function ShopScreen() {
           />
         ) : (
           <>
-            <ClubPicker
-              selectedClubId={activeClubId}
-              onSelect={setSelectedClubId}
-              enabled={canManage}
-            />
+            <TourTarget id="shop.clubPicker">
+              <ClubPicker
+                selectedClubId={activeClubId}
+                onSelect={setSelectedClubId}
+                enabled={canManage}
+              />
+            </TourTarget>
 
+            <TourTarget id="shop.quickActions">
             <SectionHeader title="Accesos rápidos" />
             <ManagerQuickActions
               actions={[
@@ -689,8 +775,12 @@ export default function ShopScreen() {
                 },
               ]}
             />
+            </TourTarget>
 
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+            <TourTarget
+              id="shop.summary"
+              style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}
+            >
               <AppCard style={{ width: '48%', marginBottom: 0 }} padding="sm">
                 <Text style={{ fontSize: 11, color: ui.colors.textSecondary }}>En stock</Text>
                 <Text style={{ fontSize: 20, fontWeight: '800', color: ui.colors.primary, marginTop: 4 }}>
@@ -703,14 +793,16 @@ export default function ShopScreen() {
                   {matchExtraProducts.length}
                 </Text>
               </AppCard>
-            </View>
+            </TourTarget>
             {lowStockCount > 0 && (
               <Text style={{ fontSize: 12, color: ui.colors.warning, marginBottom: 12, fontWeight: '600' }}>
                 {lowStockCount} producto{lowStockCount !== 1 ? 's' : ''} con stock bajo
               </Text>
             )}
 
-            <ShopTabBar active={tab} onChange={setTab} />
+            <TourTarget id="shop.tabs">
+              <ShopTabBar active={tab} onChange={setTab} />
+            </TourTarget>
 
             {tab === 'stats' && (
               <>
@@ -896,11 +988,11 @@ export default function ShopScreen() {
                     </TouchableOpacity>
                     <InputField label="Nombre" value={productName} onChangeText={setProductName} placeholder="Tubo de pelotas" />
                     <InputField label="Descripción" value={productDesc} onChangeText={setProductDesc} placeholder="Opcional" />
-                    <InputField
-                      label="Precio (ARS)"
+                    <MoneyInputField
+                      label="Precio"
                       value={productPrice}
                       onChangeText={setProductPrice}
-                      keyboardType="decimal-pad"
+                      placeholder="3500"
                     />
                     <InputField
                       label="Stock"
@@ -1164,7 +1256,7 @@ export default function ShopScreen() {
                   })
                 )}
                 <PrimaryButton
-                  label="Ver señas y facturación"
+                  label="Ver cobros y facturación"
                   variant="outline"
                   fullWidth
                   style={{ marginTop: 8 }}
@@ -1241,11 +1333,11 @@ export default function ShopScreen() {
                       keyboardType="number-pad"
                     />
                     <InputField
-                      label="Costo en puntos (opcional)"
+                      label="Puntos canjeables de regalo (opcional)"
                       value={couponPoints}
                       onChangeText={setCouponPoints}
                       keyboardType="number-pad"
-                      placeholder="Canje por ranking"
+                      placeholder="Ej. 100 — no suman al ranking"
                     />
                     <View style={{ flexDirection: 'row', gap: 8 }}>
                       <View style={{ flex: 1 }}>
@@ -1275,7 +1367,7 @@ export default function ShopScreen() {
                 {!activeCoupons.length ? (
                   <AppCard>
                     <Text style={{ color: ui.colors.textSecondary, fontSize: 13 }}>
-                      Creá cupones de descuento o canjeables por puntos.
+                      Creá cupones de descuento o que otorguen puntos canjeables (no competitivos).
                     </Text>
                   </AppCard>
                 ) : (
@@ -1287,7 +1379,9 @@ export default function ShopScreen() {
                           <Text style={{ fontWeight: '600', color: ui.colors.textPrimary, marginTop: 4 }}>{coupon.label}</Text>
                           <Text style={{ fontSize: 12, color: ui.colors.textSecondary, marginTop: 4 }}>
                             {coupon.discount_percent ? `${coupon.discount_percent}% off` : ''}
-                            {coupon.points_cost ? `${coupon.discount_percent ? ' · ' : ''}${coupon.points_cost} pts` : ''}
+                            {coupon.points_cost
+                              ? `${coupon.discount_percent ? ' · ' : ''}+${coupon.points_cost} pts canjeables`
+                              : ''}
                             {coupon.max_uses ? ` · ${coupon.uses_count}/${coupon.max_uses} usos` : ''}
                           </Text>
                         </View>
@@ -1337,6 +1431,20 @@ export default function ShopScreen() {
                       value={rewardPoints}
                       onChangeText={setRewardPoints}
                       keyboardType="number-pad"
+                    />
+                    <InputField
+                      label="Stock (vacío = ilimitado)"
+                      value={rewardStock}
+                      onChangeText={setRewardStock}
+                      keyboardType="number-pad"
+                      placeholder="Ej: 20"
+                    />
+                    <InputField
+                      label="Máx. por jugador (vacío = sin tope)"
+                      value={rewardMaxPerUser}
+                      onChangeText={setRewardMaxPerUser}
+                      keyboardType="number-pad"
+                      placeholder="Ej: 1"
                     />
                     <View style={{ flexDirection: 'row', gap: 8 }}>
                       <View style={{ flex: 1 }}>
@@ -1394,7 +1502,11 @@ export default function ShopScreen() {
                               marginTop: 8,
                             }}
                           >
-                            {reward.points_required} puntos
+                            {reward.pointsRequired ?? reward.points_required} puntos
+                            {reward.stock != null ? ` · stock ${reward.stock}` : ''}
+                            {(reward.maxPerUser ?? reward.max_per_user) != null
+                              ? ` · máx ${reward.maxPerUser ?? reward.max_per_user}/jugador`
+                              : ''}
                             {!reward.active ? ' · inactivo' : ''}
                           </Text>
                         </View>
@@ -1428,7 +1540,7 @@ export default function ShopScreen() {
 
             {tab === 'redemptions' && (
               <>
-                <SectionHeader title="Canjes por puntos" subtitle="Premios del ranking canjeados" />
+                <SectionHeader title="Canjes por puntos" subtitle="Entregar o cancelar en recepción" />
                 {loadingRedemptions ? (
                   <Text style={{ color: ui.colors.textMuted, fontSize: 13 }}>Cargando canjes...</Text>
                 ) : !redemptions?.length ? (
@@ -1438,25 +1550,84 @@ export default function ShopScreen() {
                     </Text>
                   </AppCard>
                 ) : (
-                  redemptions.map((item) => (
-                    <AppCard key={item.id} padding="sm" style={{ marginBottom: 8 }}>
-                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 8 }}>
-                        <View style={{ flex: 1 }}>
-                          <Text style={{ fontWeight: '700', color: ui.colors.textPrimary }}>{item.reward_title}</Text>
-                          <Text style={{ fontSize: 12, color: ui.colors.textSecondary, marginTop: 4 }}>
-                            {item.user_nickname || item.user_name} · {item.points_spent} pts
+                  redemptions.map((item) => {
+                    const title = item.rewardTitle || item.reward_title;
+                    const name = item.userNickname || item.user_nickname || item.userName || item.user_name;
+                    const spent = item.pointsSpent ?? item.points_spent;
+                    const code = item.redemptionCode || item.redemption_code;
+                    const created = item.createdAt || item.created_at;
+                    const pending = item.status === 'PENDING' || !item.status;
+                    return (
+                      <AppCard key={item.id} padding="sm" style={{ marginBottom: 8 }}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 8 }}>
+                          <View style={{ flex: 1 }}>
+                            <Text style={{ fontWeight: '700', color: ui.colors.textPrimary }}>{title}</Text>
+                            <Text style={{ fontSize: 12, color: ui.colors.textSecondary, marginTop: 4 }}>
+                              {name} · {spent} pts · {item.status || 'PENDING'}
+                            </Text>
+                            {code ? (
+                              <Text
+                                style={{
+                                  marginTop: 8,
+                                  fontSize: 16,
+                                  fontWeight: '800',
+                                  letterSpacing: 1,
+                                  color: ui.colors.primary,
+                                }}
+                              >
+                                {code}
+                              </Text>
+                            ) : null}
+                          </View>
+                          <Text style={{ fontSize: 11, color: ui.colors.textMuted }}>
+                            {formatRelativeTime(created)}
                           </Text>
                         </View>
-                        <Text style={{ fontSize: 11, color: ui.colors.textMuted }}>{formatRelativeTime(item.created_at)}</Text>
-                      </View>
-                    </AppCard>
-                  ))
+                        {pending ? (
+                          <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
+                            <View style={{ flex: 1 }}>
+                              <PrimaryButton
+                                label="Entregar"
+                                size="sm"
+                                fullWidth
+                                loading={fulfillRedemption.isPending}
+                                onPress={() => fulfillRedemption.mutate(item.id)}
+                              />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                              <PrimaryButton
+                                label="Cancelar"
+                                size="sm"
+                                fullWidth
+                                variant="ghost"
+                                loading={cancelRedemption.isPending}
+                                onPress={() =>
+                                  Alert.alert(
+                                    'Cancelar canje',
+                                    'Se reintegrarán los puntos al jugador.',
+                                    [
+                                      { text: 'No', style: 'cancel' },
+                                      {
+                                        text: 'Cancelar canje',
+                                        style: 'destructive',
+                                        onPress: () => cancelRedemption.mutate(item.id),
+                                      },
+                                    ],
+                                  )
+                                }
+                              />
+                            </View>
+                          </View>
+                        ) : null}
+                      </AppCard>
+                    );
+                  })
                 )}
               </>
             )}
           </>
         )}
-      </ScrollView>
+      </TabScrollView>
     </Screen>
   );
 }

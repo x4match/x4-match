@@ -153,6 +153,22 @@ export class FriendsService {
     return result.rows[0];
   }
 
+  /** El emisor retira una solicitud de amistad pendiente. */
+  async cancelRequest(userId: string, requestId: string) {
+    const result = await this.db.query(
+      `DELETE FROM friend_requests
+       WHERE id = $1 AND requester_id = $2 AND status = 'pending'
+       RETURNING id, addressee_id`,
+      [requestId, userId],
+    );
+    if (!result.rows[0]) {
+      throw new NotFoundException('Solicitud no encontrada o ya procesada');
+    }
+    const addresseeId = result.rows[0].addressee_id as string;
+    await this.notifications.removeByData(addresseeId, 'FRIEND_REQUEST', 'requestId', requestId);
+    return { ok: true, id: requestId };
+  }
+
   async removeFriend(userId: string, friendId: string) {
     const otherUserId = await this.resolveUserId(friendId);
     const result = await this.db.query(

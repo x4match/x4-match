@@ -4,6 +4,7 @@ import {
   Inject,
   Injectable,
   NotFoundException,
+  forwardRef,
 } from '@nestjs/common';
 import { ClubPointsService } from '../clubs/club-points.service';
 import { ClubGapFillService } from '../clubs/club-gap-fill.service';
@@ -35,6 +36,7 @@ import type { PaymentsService } from '../payments/payments.service';
 import { parseBestOfThreeSets } from '../common/utils/match-result.util';
 import { computeMatchRatingChanges, splitParticipantsByTeam } from '../rating/engine';
 import { ReportsService } from '../reports/reports.service';
+import { MatchLiveScoreService } from './live-score/match-live-score.service';
 
 const DEFAULT_SEARCH_RADIUS_KM = 30;
 const MAX_SEARCH_RADIUS_KM = 100;
@@ -52,6 +54,8 @@ export class MatchesService {
     private readonly reportsService: ReportsService,
     @Inject(PAYMENTS_SERVICE)
     private readonly paymentsService: PaymentsService,
+    @Inject(forwardRef(() => MatchLiveScoreService))
+    private readonly liveScoreService: MatchLiveScoreService,
   ) {}
 
   private static readonly LEAVABLE_STATUSES = ['OPEN', 'FULL', 'CONFIRMED'] as const;
@@ -110,14 +114,20 @@ export class MatchesService {
   }
 
   async create(userId: string, dto: CreateMatchDto) {
-    dto.gender = await this.resolveGenderForInvites(
-      userId,
-      dto.invites,
-      dto.gender ?? 'open',
-      dto.mode,
-    );
+    if (dto.mode !== 'competitive') {
+      dto.gender = 'open';
+      dto.levelMin = undefined;
+      dto.levelMax = undefined;
+    } else {
+      dto.gender = await this.resolveGenderForInvites(
+        userId,
+        dto.invites,
+        dto.gender ?? 'open',
+        dto.mode,
+      );
+    }
 
-    if (dto.levelMin == null || dto.levelMax == null) {
+    if (dto.mode === 'competitive' && (dto.levelMin == null || dto.levelMax == null)) {
       const placement = await this.matchesRepository.getPlayerPlacementBandByUserId(userId);
       const creatorGender = await this.matchesRepository.getGenderByUserId(userId);
       const isFemaleMixed =
@@ -260,7 +270,9 @@ export class MatchesService {
       if (playerId) {
         viewerJoinStatus = await this.matchesRepository.getPlayerMatchStatus(id, playerId);
       }
-      viewerCategoryFits = await this.playerLevelFitsMatch(viewerUserId, match);
+      if (this.hasPlayerRestrictions(match)) {
+        viewerCategoryFits = await this.playerLevelFitsMatch(viewerUserId, match);
+      }
     }
 
     const payload = {
@@ -326,6 +338,25 @@ export class MatchesService {
     return categoryOverlapsMatchLevel(category, match.level_min, match.level_max);
   }
 
+  /** Género y categoría solo se exigen en partidos competitivos. */
+  private hasPlayerRestrictions(match: { mode?: string | null }): boolean {
+    return match.mode === 'competitive';
+  }
+
+  private async assertPlayerFitsMatchRestrictions(
+    userId: string,
+    match: {
+      mode?: string | null;
+      gender?: string | null;
+      level_min?: number | null;
+      level_max?: number | null;
+    },
+  ): Promise<void> {
+    if (!this.hasPlayerRestrictions(match)) return;
+    await this.assertPlayerGenderFitsMatch(userId, match.gender);
+    await this.assertPlayerCategoryFitsMatch(userId, match);
+  }
+
   private async assertPlayerGenderFitsMatch(
     userId: string,
     matchGender?: string | null,
@@ -348,13 +379,19 @@ export class MatchesService {
   }
 
   /**
-   * Género siempre; categoría en invitaciones (join público puede pedir aprobación).
+   * Solo en competitivos: género siempre; categoría en invitaciones (join público puede pedir aprobación).
    * En mixtos las parejas combinan categorías distintas: el invitado no se filtra por nivel.
    */
   private async assertPlayerCanBeInvitedToMatch(
     userId: string,
-    match: { gender?: string | null; level_min?: number | null; level_max?: number | null },
+    match: {
+      mode?: string | null;
+      gender?: string | null;
+      level_min?: number | null;
+      level_max?: number | null;
+    },
   ): Promise<void> {
+    if (!this.hasPlayerRestrictions(match)) return;
     await this.assertPlayerGenderFitsMatch(userId, match.gender);
     if (match.gender === 'mixed') return;
     await this.assertPlayerCategoryFitsMatch(userId, match);
@@ -532,8 +569,7 @@ export class MatchesService {
       ...participantUserIds,
     ]);
 
-    await this.assertPlayerGenderFitsMatch(userId, match.gender);
-    await this.assertPlayerCategoryFitsMatch(userId, match);
+    await this.assertPlayerFitsMatchRestrictions(userId, match);
 
     const existingStatus = await this.matchesRepository.getPlayerMatchStatus(matchId, playerId);
     if (existingStatus === 'REQUESTED') {
@@ -601,8 +637,7 @@ export class MatchesService {
       throw new BadRequestException('No hay una solicitud pendiente de este jugador');
     }
 
-    await this.assertPlayerGenderFitsMatch(requestUserId, match.gender);
-    await this.assertPlayerCategoryFitsMatch(requestUserId, match);
+    await this.assertPlayerFitsMatchRestrictions(requestUserId, match);
 
     await this.reportsService.assertNotBlockedWithAny(requestUserId, [
       match.created_by_user_id,
@@ -1008,6 +1043,9 @@ export class MatchesService {
       await this.matchesRepository.updateStatus(matchId, 'IN_PROGRESS');
     }
 
+    // Si el marcador en vivo seguía abierto, cerrarlo al cargar el resultado.
+    await this.liveScoreService.closeForResultSubmission(matchId);
+
     const submitterName = await this.matchesRepository.getUserName(userId);
     const participants = await this.matchesRepository.listActiveParticipantUserIds(matchId);
     await this.matchesRepository.notifyUsers(
@@ -1235,6 +1273,7 @@ export class MatchesService {
 
   async closeMatchAsDisputed(matchId: string) {
     await this.matchesRepository.closeAsDisputedWithoutPoints(matchId);
+    await this.liveScoreService.closeForResultSubmission(matchId);
     const detail = await this.findOne(matchId);
     this.realtimeGateway.emitMatchUpdated(detail);
     return detail;

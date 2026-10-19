@@ -1,9 +1,9 @@
 import { View, Text, Alert, Linking } from 'react-native';
 import { formatCurrency } from '@/lib/currency';
 import { formatShortDate } from '@/lib/format';
-import { isMovementCollected, type RevenueMovement } from '@/lib/club-revenue';
+import { isMovementCollected, type RevenueMovement } from '@/lib/club/club-revenue';
 import { ui } from '@/theme/tokens';
-import { AppCard, PrimaryButton } from '@/components/padely';
+import { AppCard, PrimaryButton } from '@/components/x4match';
 
 type RevenueMovementRowProps = {
   item: RevenueMovement;
@@ -71,7 +71,7 @@ export function RevenueMovementRow({ item, onMarkPaid, confirming }: RevenueMove
             />
           ) : null}
           <PrimaryButton
-            label={item.kind === 'shop' ? 'Confirmar cobro' : 'Marcar seña pagada'}
+            label={item.kind === 'shop' ? 'Confirmar cobro' : 'Marcar como cobrado'}
             size="sm"
             fullWidth
             loading={confirming}
@@ -80,7 +80,7 @@ export function RevenueMovementRow({ item, onMarkPaid, confirming }: RevenueMove
                 'Confirmar cobro en recepción',
                 item.kind === 'shop'
                   ? `¿Confirmás que ${item.userName} pagó ${formatCurrency(item.amount)} por ${item.label}?`
-                  : `¿Confirmás que ${item.userName} pagó la seña de ${formatCurrency(item.amount)}?`,
+                  : `¿Confirmás que ${item.userName} pagó ${formatCurrency(item.amount)} del turno?`,
                 [
                   { text: 'Cancelar', style: 'cancel' },
                   { text: 'Cobrado', onPress: () => onMarkPaid?.(item) },

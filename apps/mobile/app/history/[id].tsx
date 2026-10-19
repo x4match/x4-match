@@ -17,6 +17,8 @@ import {
   formatTournamentCategory,
   formatLabel,
   FIXED_CATEGORY_OPTIONS,
+  isTournamentClosed,
+  tournamentMatchLabel,
 } from '@/lib/tournament/types';
 import { formatShortDate } from '@/lib/format';
 import { ui } from '@/theme/tokens';
@@ -29,7 +31,7 @@ import {
   EmptyState,
   StatusPill,
   OptionChips,
-} from '@/components/padely';
+} from '@/components/x4match';
 
 type HubTab = 'overview' | 'teams' | 'fixture' | 'promote';
 
@@ -57,6 +59,7 @@ export default function HistoryTournamentHubScreen() {
     enabled: !!id && canManage,
   });
   const isOwnerOrganizer = !!user?.id && tournament?.organizer_user_id === user.id;
+  const editable = !isTournamentClosed(tournament) || user?.role === 'SUPER_ADMIN';
 
   const { data: registrations } = useQuery({
     queryKey: ['tournament-registrations', id],
@@ -132,6 +135,24 @@ export default function HistoryTournamentHubScreen() {
               {' · '}
               {matchList.length} partidos
             </Text>
+            {!editable ? (
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 8,
+                  marginTop: 12,
+                  padding: 10,
+                  borderRadius: ui.radius.md,
+                  backgroundColor: ui.colors.cardMuted,
+                }}
+              >
+                <Ionicons name="flag-outline" size={16} color={ui.colors.textSecondary} />
+                <Text style={{ flex: 1, fontSize: 12, color: ui.colors.textSecondary }}>
+                  Torneo terminado: ya no se puede gestionar. Solo lectura.
+                </Text>
+              </View>
+            ) : null}
           </AppCard>
         ) : null}
 
@@ -159,13 +180,15 @@ export default function HistoryTournamentHubScreen() {
           <>
             <SectionHeader title="Acciones rápidas" dark />
             <View style={{ gap: 10, marginBottom: 16 }}>
-              <PrimaryButton
-                label="Gestionar torneo completo"
-                fullWidth
-                variant="outline"
-                onPress={() => router.push(`/tournament/${id}/manage` as any)}
-                icon={<Ionicons name="settings-outline" size={18} color={ui.colors.primary} />}
-              />
+              {editable ? (
+                <PrimaryButton
+                  label="Gestionar torneo completo"
+                  fullWidth
+                  variant="outline"
+                  onPress={() => router.push(`/tournament/${id}/manage` as any)}
+                  icon={<Ionicons name="settings-outline" size={18} color={ui.colors.primary} />}
+                />
+              ) : null}
               <PrimaryButton
                 label="Ver ficha pública"
                 fullWidth
@@ -277,13 +300,15 @@ export default function HistoryTournamentHubScreen() {
                       {r.payment_status === 'APPROVED' ? 'Pago acreditado' : 'Pago pendiente'}
                     </Text>
                   ) : null}
-                  <PrimaryButton
-                    label="Gestionar inscripción"
-                    size="sm"
-                    variant="outline"
-                    style={{ marginTop: 10 }}
-                    onPress={() => router.push(`/tournament/${id}/manage?tab=teams` as any)}
-                  />
+                  {editable ? (
+                    <PrimaryButton
+                      label="Gestionar inscripción"
+                      size="sm"
+                      variant="outline"
+                      style={{ marginTop: 10 }}
+                      onPress={() => router.push(`/tournament/${id}/manage?tab=teams` as any)}
+                    />
+                  ) : null}
                 </AppCard>
               ))
             )}
@@ -293,13 +318,19 @@ export default function HistoryTournamentHubScreen() {
               <EmptyState
                 icon={<Ionicons name="people-outline" size={28} color={ui.colors.textMuted} />}
                 title="Sin equipos aprobados"
-                description="Aprobá inscripciones desde la gestión del torneo."
+                description={
+                  editable
+                    ? 'Aprobá inscripciones desde la gestión del torneo.'
+                    : 'El torneo terminó sin parejas aprobadas.'
+                }
                 action={
-                  <PrimaryButton
-                    label="Ir a inscriptos"
-                    size="sm"
-                    onPress={() => router.push(`/tournament/${id}/manage?tab=teams` as any)}
-                  />
+                  editable ? (
+                    <PrimaryButton
+                      label="Ir a inscriptos"
+                      size="sm"
+                      onPress={() => router.push(`/tournament/${id}/manage?tab=teams` as any)}
+                    />
+                  ) : undefined
                 }
               />
             ) : (
@@ -338,6 +369,8 @@ export default function HistoryTournamentHubScreen() {
 
         {tab === 'fixture' && (
           <>
+            {editable ? (
+            <>
             <SectionHeader title="Armar fixture" subtitle="Se regenera y reemplaza partidos existentes" dark />
             <AppCard style={{ marginBottom: 16 }}>
               <Text style={{ fontSize: 13, color: ui.colors.textSecondary, marginBottom: 12, lineHeight: 18 }}>
@@ -380,19 +413,25 @@ export default function HistoryTournamentHubScreen() {
                 />
               </View>
             </AppCard>
+            </>
+            ) : null}
 
             <SectionHeader title="Partidos" subtitle={`${matchList.length}`} dark />
             {matchList.length === 0 ? (
               <EmptyState
                 icon={<Ionicons name="calendar-outline" size={28} color={ui.colors.textMuted} />}
                 title="Sin fixture"
-                description="Generá el fixture con uno de los botones de arriba."
+                description={
+                  editable
+                    ? 'Generá el fixture con uno de los botones de arriba.'
+                    : 'El torneo terminó sin partidos cargados.'
+                }
               />
             ) : (
               matchList.map((m) => (
                 <AppCard key={m.id} style={{ marginBottom: 8 }}>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
-                    <Text style={{ fontSize: 12, color: ui.colors.textMuted }}>{m.round_label || `Ronda ${m.round}`}</Text>
+                    <Text style={{ fontSize: 12, color: ui.colors.textMuted }}>{tournamentMatchLabel(m, tournament?.modality)}</Text>
                     <StatusPill status={m.status} />
                   </View>
                   <Text style={{ fontWeight: '700', color: ui.colors.textPrimary }}>
@@ -401,7 +440,7 @@ export default function HistoryTournamentHubScreen() {
                   <Text style={{ fontSize: 13, color: ui.colors.textSecondary, marginTop: 4 }}>
                     {formatScore(m)}
                   </Text>
-                  {m.status !== 'FINISHED' ? (
+                  {editable && m.status !== 'FINISHED' ? (
                     <PrimaryButton
                       label="Cargar resultado en Gestión"
                       size="sm"

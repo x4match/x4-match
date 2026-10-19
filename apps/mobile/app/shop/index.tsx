@@ -1,192 +1,377 @@
-import { useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
-  View,
-  Text,
-  ScrollView,
-  Alert,
+  Linking,
+  Pressable,
   RefreshControl,
-  ActivityIndicator,
-  Image,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+  useWindowDimensions,
 } from 'react-native';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
-import { api } from '@/lib/api';
-import { formatCurrency } from '@/lib/format';
-import { ui } from '@/theme/tokens';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
+import { hapticSelection } from '@/lib/haptics';
 import {
-  Screen,
-  StackHeader,
-  AppCard,
-  SectionHeader,
-  PrimaryButton,
-  EmptyState,
-} from '@/components/padely';
+  DEFAULT_SHOP_FILTERS,
+  applyShopFilters,
+  countSheetFilters,
+  fetchShopCatalog,
+  listCategories,
+  pickHighlights,
+  type ShopFilters,
+  type ShopPartner,
+  type ShopProduct,
+} from '@/lib/shop/marketplace';
+import { fontFamily } from '@/theme/tokens';
+import { Screen, StackHeader, EmptyState, Skeleton, FadeInUp } from '@/components/x4match';
+import {
+  CategoryChips,
+  MarketplaceEntryCard,
+  PartnerChips,
+  SHOP_GLASS,
+  SHOP_LIME,
+  SHOP_MUTED,
+  ShopFilterSheet,
+  ShopHeroCarousel,
+  ShopPartnerHero,
+  ShopPartnerSection,
+  ShopProductCard,
+} from '@/components/shop/marketplace';
 
-type PlatformProduct = {
-  id: string;
-  name: string;
-  description?: string | null;
-  price: number | string;
-  currency?: string;
-  photo_url?: string | null;
-  stock_quantity?: number | null;
-  category?: string;
-  sponsor_name?: string | null;
-  sponsor_logo_url?: string | null;
-};
+const INSET = 16;
+const GRID_GAP = 12;
 
-type PlatformOrder = {
-  id: string;
-  status: string;
-  total: number | string;
-  created_at: string;
-  items?: Array<{ product_name?: string; quantity: number; subtotal: number | string }>;
-};
+function SectionTitle({ title, subtitle }: { title: string; subtitle?: string }) {
+  return (
+    <View style={{ gap: 2 }}>
+      <Text style={{ color: '#FFFFFF', fontSize: 18, fontWeight: '800', fontFamily: fontFamily.bold }}>
+        {title}
+      </Text>
+      {subtitle ? (
+        <Text style={{ color: SHOP_MUTED, fontSize: 12, fontFamily: fontFamily.regular }}>{subtitle}</Text>
+      ) : null}
+    </View>
+  );
+}
+
+function ShopSkeleton({ width }: { width: number }) {
+  const cardWidth = 156;
+  return (
+    <View style={{ gap: 20 }}>
+      <Skeleton width={width} height={196} radius={22} />
+      <View style={{ flexDirection: 'row', gap: 8 }}>
+        {[80, 110, 96].map((w, i) => (
+          <Skeleton key={i} width={w} height={36} radius={999} />
+        ))}
+      </View>
+      {[0, 1].map((row) => (
+        <View key={row} style={{ gap: 12 }}>
+          <Skeleton width={180} height={20} />
+          <View style={{ flexDirection: 'row', gap: 12 }}>
+            {[0, 1].map((i) => (
+              <Skeleton key={i} width={cardWidth} height={cardWidth + 90} radius={18} />
+            ))}
+          </View>
+        </View>
+      ))}
+    </View>
+  );
+}
 
 export default function PlatformShopScreen() {
-  const queryClient = useQueryClient();
-  const [orderingId, setOrderingId] = useState<string | null>(null);
+  const router = useRouter();
+  const { width: windowWidth } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const contentWidth = windowWidth - INSET * 2;
+  const gridCardWidth = Math.floor((contentWidth - GRID_GAP) / 2);
 
-  const productsQuery = useQuery({
-    queryKey: ['platform-shop-products'],
-    queryFn: async () => {
-      const res = await api.get('/shop/products');
-      return res.data as PlatformProduct[];
-    },
+  const [filters, setFilters] = useState<ShopFilters>(DEFAULT_SHOP_FILTERS);
+  const [sheetOpen, setSheetOpen] = useState(false);
+
+  const catalogQuery = useQuery({
+    queryKey: ['platform-shop-catalog'],
+    queryFn: fetchShopCatalog,
   });
 
-  const ordersQuery = useQuery({
-    queryKey: ['platform-shop-orders'],
-    queryFn: async () => {
-      const res = await api.get('/shop/orders/me');
-      return res.data as PlatformOrder[];
-    },
-  });
+  const products = useMemo(() => catalogQuery.data?.products ?? [], [catalogQuery.data]);
+  const partners = useMemo(() => catalogQuery.data?.partners ?? [], [catalogQuery.data]);
+  const partnersById = useMemo(() => new Map(partners.map((p) => [p.id, p])), [partners]);
 
-  const orderMutation = useMutation({
-    mutationFn: async (productId: string) => {
-      const orderRes = await api.post('/shop/orders', { productId, quantity: 1 });
-      const order = orderRes.data as PlatformOrder;
-      await api.post(`/shop/orders/${order.id}/pay/simulate`);
-      return order;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['platform-shop-products'] });
-      queryClient.invalidateQueries({ queryKey: ['platform-shop-orders'] });
-      Alert.alert('Compra registrada', 'Te vamos a contactar para coordinar entrega.');
-    },
-    onError: (err: any) => {
-      Alert.alert('Error', err.response?.data?.message || 'No se pudo completar la compra');
-    },
-    onSettled: () => setOrderingId(null),
-  });
+  const partnerCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const p of products) counts.set(p.partnerId, (counts.get(p.partnerId) ?? 0) + 1);
+    return counts;
+  }, [products]);
 
-  const refreshing = productsQuery.isRefetching || ordersQuery.isRefetching;
+  const categories = useMemo(
+    () =>
+      listCategories(
+        filters.partnerId ? products.filter((p) => p.partnerId === filters.partnerId) : products,
+      ),
+    [products, filters.partnerId],
+  );
+
+  const filtered = useMemo(() => applyShopFilters(products, filters), [products, filters]);
+
+  const sections = useMemo(() => {
+    const byPartner = new Map<string, ShopProduct[]>();
+    for (const p of filtered) {
+      const list = byPartner.get(p.partnerId) ?? [];
+      list.push(p);
+      byPartner.set(p.partnerId, list);
+    }
+    return partners
+      .filter((partner) => byPartner.has(partner.id))
+      .map((partner) => ({ partner, products: byPartner.get(partner.id)! }));
+  }, [filtered, partners]);
+
+  const highlights = useMemo(() => pickHighlights(products), [products]);
+
+  const sheetFilterCount = countSheetFilters(filters);
+  const hasNarrowing =
+    filters.query.trim().length > 0 || filters.category != null || sheetFilterCount > 0;
+  const selectedPartner: ShopPartner | undefined = filters.partnerId
+    ? partnersById.get(filters.partnerId)
+    : undefined;
+
+  const openProduct = useCallback((product: ShopProduct) => {
+    if (product.productUrl) void Linking.openURL(product.productUrl);
+  }, []);
+
+  const selectPartner = useCallback((partnerId: string | null) => {
+    setFilters((prev) => ({ ...prev, partnerId, category: null }));
+  }, []);
+
+  const clearAll = useCallback(() => {
+    void hapticSelection();
+    setFilters((prev) => ({ ...DEFAULT_SHOP_FILTERS, partnerId: prev.partnerId }));
+  }, []);
+
+  const resultLabel = `${filtered.length} producto${filtered.length === 1 ? '' : 's'}`;
 
   return (
     <Screen>
       <StackHeader title="Shop x4" />
+
       <ScrollView
-        contentContainerStyle={{ padding: ui.spacing.lg, paddingBottom: 40 }}
+        contentContainerStyle={{ paddingHorizontal: INSET, paddingBottom: insets.bottom + 32, gap: 18 }}
+        keyboardShouldPersistTaps="handled"
         refreshControl={
           <RefreshControl
-            refreshing={refreshing}
-            onRefresh={() => {
-              productsQuery.refetch();
-              ordersQuery.refetch();
-            }}
+            refreshing={catalogQuery.isRefetching}
+            onRefresh={() => catalogQuery.refetch()}
+            tintColor={SHOP_LIME}
           />
         }
       >
-        <Text style={{ color: ui.colors.textSecondary, marginBottom: ui.spacing.md, fontSize: 14 }}>
-          Productos de patrocinadores. La tienda del club sigue en cada sede.
-        </Text>
+        <View style={{ flexDirection: 'row', gap: 10 }}>
+          <View
+            style={[
+              SHOP_GLASS,
+              { flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, minHeight: 48 },
+            ]}
+          >
+            <Ionicons name="search" size={18} color={SHOP_MUTED} />
+            <TextInput
+              value={filters.query}
+              onChangeText={(query) => setFilters((prev) => ({ ...prev, query }))}
+              placeholder={selectedPartner ? `Buscar en ${selectedPartner.name}...` : 'Buscar productos...'}
+              placeholderTextColor={SHOP_MUTED}
+              autoCorrect={false}
+              returnKeyType="search"
+              style={{
+                flex: 1,
+                paddingVertical: 12,
+                paddingHorizontal: 10,
+                fontSize: 14,
+                fontFamily: fontFamily.regular,
+                color: '#FFFFFF',
+              }}
+            />
+            {filters.query.length > 0 ? (
+              <Pressable
+                onPress={() => setFilters((prev) => ({ ...prev, query: '' }))}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="Limpiar búsqueda"
+              >
+                <Ionicons name="close-circle" size={18} color={SHOP_MUTED} />
+              </Pressable>
+            ) : null}
+          </View>
 
-        <SectionHeader title="Catálogo" dark />
-        {productsQuery.isLoading ? (
-          <ActivityIndicator color={ui.colors.primary} />
-        ) : !productsQuery.data?.length ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Filtros${sheetFilterCount ? `, ${sheetFilterCount} activos` : ''}`}
+            onPress={() => {
+              void hapticSelection();
+              setSheetOpen(true);
+            }}
+            style={[
+              SHOP_GLASS,
+              {
+                width: 48,
+                height: 48,
+                alignItems: 'center',
+                justifyContent: 'center',
+              },
+              sheetFilterCount > 0 ? { borderColor: 'rgba(215,255,0,0.55)' } : null,
+            ]}
+          >
+            <Ionicons name="options-outline" size={20} color={sheetFilterCount > 0 ? SHOP_LIME : '#FFFFFF'} />
+            {sheetFilterCount > 0 ? (
+              <View
+                style={{
+                  position: 'absolute',
+                  top: -4,
+                  right: -4,
+                  minWidth: 18,
+                  height: 18,
+                  borderRadius: 9,
+                  backgroundColor: SHOP_LIME,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  paddingHorizontal: 4,
+                }}
+              >
+                <Text style={{ color: '#000', fontSize: 10, fontWeight: '800', fontFamily: fontFamily.bold }}>
+                  {sheetFilterCount}
+                </Text>
+              </View>
+            ) : null}
+          </Pressable>
+        </View>
+
+        {!selectedPartner && !hasNarrowing ? (
+          <MarketplaceEntryCard onPress={() => router.push('/marketplace' as any)} />
+        ) : null}
+
+        {catalogQuery.isLoading ? (
+          <ShopSkeleton width={contentWidth} />
+        ) : catalogQuery.isError ? (
           <EmptyState
-            icon={<Ionicons name="bag-outline" size={32} color={ui.colors.textMuted} />}
+            icon={<Ionicons name="cloud-offline-outline" size={32} color={SHOP_MUTED} />}
+            title="No pudimos cargar el shop"
+            description="Deslizá hacia abajo para reintentar."
+          />
+        ) : products.length === 0 ? (
+          <EmptyState
+            icon={<Ionicons name="bag-outline" size={32} color={SHOP_MUTED} />}
             title="Sin productos"
-            description="Pronto vas a ver ofertas de sponsors acá."
+            description="Pronto vas a ver ofertas de nuestros partners acá."
           />
         ) : (
-          productsQuery.data.map((product) => (
-            <AppCard key={product.id} style={{ marginBottom: 12 }}>
-              <View style={{ flexDirection: 'row', gap: 12 }}>
-                {product.photo_url ? (
-                  <Image
-                    source={{ uri: product.photo_url }}
-                    style={{ width: 72, height: 72, borderRadius: 12 }}
-                  />
-                ) : (
-                  <View
-                    style={{
-                      width: 72,
-                      height: 72,
-                      borderRadius: 12,
-                      backgroundColor: ui.colors.surfaceAlt,
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}
-                  >
-                    <Ionicons name="shirt-outline" size={28} color={ui.colors.textMuted} />
-                  </View>
-                )}
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontWeight: '700', color: ui.colors.textPrimary }}>{product.name}</Text>
-                  {product.sponsor_name ? (
-                    <Text style={{ fontSize: 12, color: ui.colors.textMuted, marginTop: 2 }}>
-                      {product.sponsor_name}
-                    </Text>
-                  ) : null}
-                  {product.description ? (
-                    <Text style={{ fontSize: 13, color: ui.colors.textSecondary, marginTop: 6 }}>
-                      {product.description}
-                    </Text>
-                  ) : null}
-                  <Text style={{ fontWeight: '700', color: ui.colors.primary, marginTop: 8 }}>
-                    {formatCurrency(Number(product.price))}
-                  </Text>
-                </View>
-              </View>
-              <PrimaryButton
-                label="Comprar"
-                size="sm"
-                fullWidth
-                style={{ marginTop: 12 }}
-                loading={orderingId === product.id && orderMutation.isPending}
-                onPress={() => {
-                  setOrderingId(product.id);
-                  Alert.alert('Confirmar compra', `¿Comprar ${product.name}?`, [
-                    { text: 'Cancelar', style: 'cancel', onPress: () => setOrderingId(null) },
-                    { text: 'Comprar', onPress: () => orderMutation.mutate(product.id) },
-                  ]);
-                }}
-              />
-            </AppCard>
-          ))
-        )}
+          <>
+            {!selectedPartner && !hasNarrowing && highlights.length > 0 ? (
+              <FadeInUp index={0} style={{ gap: 12 }}>
+                <SectionTitle title="Destacados" subtitle="Lo mejor de nuestros partners" />
+                <ShopHeroCarousel
+                  products={highlights}
+                  partners={partnersById}
+                  width={contentWidth}
+                  onPressProduct={openProduct}
+                />
+              </FadeInUp>
+            ) : null}
 
-        <SectionHeader title="Mis pedidos" dark />
-        {!ordersQuery.data?.length ? (
-          <AppCard>
-            <Text style={{ color: ui.colors.textMuted, fontSize: 13 }}>Todavía no hiciste pedidos.</Text>
-          </AppCard>
-        ) : (
-          ordersQuery.data.map((order) => (
-            <AppCard key={order.id} style={{ marginBottom: 8 }}>
-              <Text style={{ fontWeight: '700', color: ui.colors.textPrimary }}>
-                {formatCurrency(Number(order.total))} · {order.status}
-              </Text>
-              <Text style={{ fontSize: 12, color: ui.colors.textSecondary, marginTop: 4 }}>
-                {(order.items || []).map((i) => i.product_name).filter(Boolean).join(', ') || 'Pedido'}
-              </Text>
-            </AppCard>
-          ))
+            {partners.length > 1 ? (
+              <FadeInUp index={1} style={{ gap: 10 }}>
+                <SectionTitle title="Partners" />
+                <PartnerChips
+                  partners={partners}
+                  counts={partnerCounts}
+                  selectedId={filters.partnerId}
+                  onSelect={selectPartner}
+                  inset={INSET}
+                />
+              </FadeInUp>
+            ) : null}
+
+            {selectedPartner ? (
+              <ShopPartnerHero
+                partner={selectedPartner}
+                productCount={partnerCounts.get(selectedPartner.id) ?? 0}
+                onClose={() => selectPartner(null)}
+              />
+            ) : null}
+
+            <CategoryChips
+              categories={categories}
+              selected={filters.category}
+              onSelect={(category) => setFilters((prev) => ({ ...prev, category }))}
+              inset={INSET}
+            />
+
+            {hasNarrowing ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Text style={{ color: SHOP_MUTED, fontSize: 13, fontFamily: fontFamily.regular }}>
+                  {resultLabel}
+                </Text>
+                <Pressable onPress={clearAll} hitSlop={8} accessibilityRole="button">
+                  <Text style={{ color: SHOP_LIME, fontSize: 13, fontFamily: fontFamily.regular }}>
+                    Limpiar filtros
+                  </Text>
+                </Pressable>
+              </View>
+            ) : null}
+
+            {filtered.length === 0 ? (
+              <EmptyState
+                icon={<Ionicons name="search-outline" size={32} color={SHOP_MUTED} />}
+                title="Sin resultados"
+                description="Probá con otra búsqueda o ajustá los filtros."
+              />
+            ) : selectedPartner ? (
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: GRID_GAP }}>
+                {filtered.map((product, i) => (
+                  <FadeInUp key={product.id} index={Math.min(i, 8)}>
+                    <ShopProductCard
+                      product={product}
+                      width={gridCardWidth}
+                      onPress={() => openProduct(product)}
+                    />
+                  </FadeInUp>
+                ))}
+              </View>
+            ) : (
+              sections.map(({ partner, products: partnerProducts }, i) => (
+                <FadeInUp key={partner.id} index={i + 2}>
+                  <ShopPartnerSection
+                    partner={partner}
+                    products={partnerProducts}
+                    horizontalInset={INSET}
+                    onPressProduct={openProduct}
+                    onSeeAll={() => selectPartner(partner.id)}
+                  />
+                </FadeInUp>
+              ))
+            )}
+
+            <Text
+              style={{
+                color: SHOP_MUTED,
+                fontSize: 11.5,
+                textAlign: 'center',
+                marginTop: 4,
+                fontFamily: fontFamily.regular,
+              }}
+            >
+              Al tocar un producto vas a la tienda web del partner para completar la compra.
+            </Text>
+          </>
         )}
       </ScrollView>
+
+      <ShopFilterSheet
+        visible={sheetOpen}
+        onClose={() => setSheetOpen(false)}
+        filters={filters}
+        products={products}
+        onApply={setFilters}
+      />
     </Screen>
   );
 }

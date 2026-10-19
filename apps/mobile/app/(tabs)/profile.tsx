@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState, type ComponentProps } from 'react';
+import type { ImageSourcePropType } from 'react-native';
 import {
   View,
   Text,
@@ -8,21 +9,28 @@ import {
   RefreshControl,
   ActivityIndicator,
   TextInput,
+  Pressable,
+  Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { ageFromBirthDate } from '@/lib/age';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '@/contexts/AuthContext';
 import { themePreferenceLabel, useTheme } from '@/contexts/ThemeContext';
 import { isClub, canOrganizeEvents, isPlayer, roleLabel } from '@/lib/roles';
 import { api } from '@/lib/api';
 import { mapPlayerMatchHistory } from '@/lib/mappers';
-import { resolveSkillScore } from '@/lib/skill';
-import { pickAndUploadProfilePhoto, showProfilePhotoOptions } from '@/lib/profile-photo';
+import { formatSkillScore, resolveSkillScore } from '@/lib/skill';
+import { pickAndUploadProfilePhoto, showProfilePhotoOptions } from '@/lib/profile/profile-photo';
 import { requestPlayerCoordinates, syncPlayerCoordinates } from '@/lib/geolocation';
-import { invalidateRedeemablePoints, useRedeemablePoints } from '@/lib/redeemable-points';
-import { ui } from '@/theme/tokens';
+import { invalidateRedeemablePoints, useRedeemablePoints } from '@/lib/shop/redeemable-points';
+import { hapticSelection } from '@/lib/haptics';
+import { resetScreenTours } from '@/lib/tour';
+import { TourTarget, useScreenTour, type TourStep } from '@/components/tour/ScreenTour';
+import { ui, fontFamily } from '@/theme/tokens';
 import { getTabScreenPaddingBottom, tabScreenPadding } from '@/lib/layout';
 import {
   Screen,
@@ -32,18 +40,68 @@ import {
   Avatar,
   PlayerMatchStatsCard,
   PlayerMatchHistoryList,
-  SkillProgress,
   ProfilePhotoViewer,
   AnimatedNumber,
   FadeInUp,
-  BadgesSection,
   Sheet,
   PressableScale,
-} from '@/components/padely';
-import { ClubProfilePanel } from '@/components/club/ClubProfilePanel';
+  TabScrollView,
+  TournamentTitlesCard,
+  CircuitRoleBadges,
+  CircuitInvitationsCard,
+} from '@/components/x4match';
+import { CircularProgressRing } from '@/components/x4match/CircularProgressRing';
 import type { PlayerMatchStats, BadgesSummary } from '@/lib/types';
 
-type ProfileClub = { id: string; name: string; zone?: string; city?: string };
+type ProfileClub = { id: string; name: string; city?: string; location?: string };
+type ProfileTab = 'profile' | 'settings';
+
+const LIME = '#D7FF00';
+const MUTED = '#8E8E9F';
+const CARD_BG = '#161616';
+const CARD_BORDER = 'rgba(255,255,255,0.10)';
+
+const ICON_PROFILE = require('../../assets/figma/shared/profile.png');
+const ICON_INSIGNIA = require('../../assets/figma/shared/insignia.png');
+const ICON_CALENDAR = require('../../assets/figma/shared/calendar.png');
+const ICON_CLUB = require('../../assets/figma/shared/edificio-primary.png');
+const ICON_TROFEO = require('../../assets/figma/shared/trofeo.png');
+const ICON_APARIENCIA = require('../../assets/figma/shared/apariencia.png');
+const ICON_NOTE = require('../../assets/figma/shared/note.png');
+const ICON_PASSWORD = require('../../assets/figma/auth/password.png');
+const ICON_TRASH = require('../../assets/figma/shared/trash.png');
+const ICON_LOGOUT = require('../../assets/figma/shared/logout.png');
+
+const PROFILE_TOUR_STEPS: TourStep[] = [
+  {
+    target: 'profile.tabs',
+    fixed: true,
+    title: 'Perfil y configuración',
+    description:
+      '"Mi perfil" muestra tu información de jugador. En "Configuración" editás tus datos, disponibilidad, contraseña y apariencia.',
+  },
+  {
+    target: 'profile.card',
+    title: 'Tu tarjeta',
+    description: 'Tocá tu foto para cambiarla. Abajo ves cuántos te siguen y a quién seguís.',
+  },
+  {
+    target: 'profile.level',
+    title: 'Tu nivel',
+    description:
+      'Tu puntaje (0 a 1000) y tu categoría. Los primeros 5 partidos competitivos son de nivelación. Tocá el "?" para ver cómo se calcula.',
+  },
+  {
+    target: 'profile.club',
+    title: 'Tu club principal',
+    description: 'Elegí tu club para entrar en su ranking interno, sumar puntos jugando y canjearlos por premios.',
+  },
+  {
+    target: 'profile.stats',
+    title: 'Estadísticas e historial',
+    description: 'Tus victorias, derrotas y el historial de partidos con lo que ganaste o perdiste de nivel en cada uno.',
+  },
+];
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -73,40 +131,252 @@ function resolveLocality(parts: Array<string | null | undefined>): string {
 }
 function MenuRow({
   icon,
-  iconBg,
-  iconColor,
   title,
   subtitle,
   onPress,
-  danger,
+  muted,
 }: {
-  icon: keyof typeof Ionicons.glyphMap;
-  iconBg: string;
-  iconColor: string;
+  icon: ImageSourcePropType;
   title: string;
   subtitle: string;
   onPress: () => void;
-  danger?: boolean;
+  /** Icono gris (acciones destructivas / sesión). */
+  muted?: boolean;
 }) {
+  const ringColor = muted ? 'rgba(255,255,255,0.18)' : LIME;
   return (
-    <TouchableOpacity onPress={onPress} activeOpacity={0.8}>
-      <AppCard padding="sm">
+    <TouchableOpacity onPress={onPress} activeOpacity={0.8} style={{ marginBottom: 10 }}>
+      <View
+        style={{
+          backgroundColor: CARD_BG,
+          borderRadius: 18,
+          borderWidth: 1,
+          borderColor: CARD_BORDER,
+          paddingVertical: 14,
+          paddingHorizontal: 14,
+        }}
+      >
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-            <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: iconBg, alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
-              <Ionicons name={icon} size={20} color={iconColor} />
+          <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, gap: 12 }}>
+            <View
+              style={{
+                width: 44,
+                height: 44,
+                borderRadius: 22,
+                borderWidth: muted ? 1 : 0,
+                borderColor: muted ? ringColor : 'transparent',
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: muted ? '#1A2025' : 'transparent',
+              }}
+            >
+              <Image source={icon} style={{ width: 22, height: 22 }} resizeMode="contain" />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 14, fontWeight: '700', color: danger ? ui.colors.danger : ui.colors.textPrimary }}>
+              <Text
+                style={{
+                  fontSize: 15,
+                  fontWeight: '700',
+                  color: ui.colors.textPrimary,
+                  fontFamily: fontFamily.regular,
+                }}
+              >
                 {title}
               </Text>
-              <Text style={{ fontSize: 12, color: ui.colors.textSecondary, marginTop: 2 }}>{subtitle}</Text>
+              <Text
+                style={{
+                  fontSize: 12,
+                  color: MUTED,
+                  marginTop: 3,
+                  fontFamily: fontFamily.regular,
+                }}
+              >
+                {subtitle}
+              </Text>
             </View>
           </View>
-          <Ionicons name="chevron-forward" size={18} color={ui.colors.textMuted} />
+          <Ionicons name="chevron-forward" size={18} color={MUTED} />
         </View>
-      </AppCard>
+      </View>
     </TouchableOpacity>
+  );
+}
+
+function ProfileTabs({
+  value,
+  onChange,
+}: {
+  value: ProfileTab;
+  onChange: (tab: ProfileTab) => void;
+}) {
+  const options: { value: ProfileTab; label: string }[] = [
+    { value: 'profile', label: 'Mi perfil' },
+    { value: 'settings', label: 'Configuración' },
+  ];
+
+  return (
+    <View
+      style={{
+        flexDirection: 'row',
+        width: '100%',
+        borderBottomWidth: 1,
+        borderBottomColor: 'rgba(255,255,255,0.08)',
+        marginBottom: ui.spacing.lg,
+      }}
+    >
+      {options.map((opt) => {
+        const active = value === opt.value;
+        return (
+          <Pressable
+            key={opt.value}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: active }}
+            onPress={() => {
+              void hapticSelection();
+              onChange(opt.value);
+            }}
+            style={{
+              flex: 1,
+              paddingVertical: 12,
+              alignItems: 'center',
+              borderBottomWidth: 2,
+              borderBottomColor: active ? LIME : 'transparent',
+              marginBottom: -1,
+            }}
+          >
+            <Text
+              style={{
+                fontSize: 15,
+                lineHeight: 20,
+                fontFamily: fontFamily.regular,
+                fontWeight: active ? '700' : '400',
+                color: active ? LIME : MUTED,
+                textAlign: 'center',
+              }}
+            >
+              {opt.label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+const LEVEL_STRIPES = require('../../assets/figma/profile/tiras.png');
+const DETAILS_STRIPES = require('../../assets/figma/profile/tiras-detalles.png');
+
+function LevelStripes({ width = 200, height = 160 }: { width?: number; height?: number }) {
+  return (
+    <Image
+      source={LEVEL_STRIPES}
+      style={{ width, height }}
+      resizeMode="cover"
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+    />
+  );
+}
+
+function DetailsStripes({ width = 220, height = 180 }: { width?: number; height?: number }) {
+  return (
+    <Image
+      source={DETAILS_STRIPES}
+      style={{ width, height }}
+      resizeMode="contain"
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+    />
+  );
+}
+
+function formatPositionLabel(pos?: string | null) {
+  if (!pos?.trim()) return 'No definida';
+  const key = pos.trim().toLowerCase();
+  if (key === 'drive') return 'Drive';
+  if (key === 'reves' || key === 'revés') return 'Revés';
+  if (key === 'ambos' || key === 'both') return 'Ambos';
+  return pos.charAt(0).toUpperCase() + pos.slice(1);
+}
+
+function formatGenderLabel(gender?: string | null) {
+  if (!gender?.trim()) return 'No informado';
+  const key = gender.trim().toLowerCase();
+  if (key === 'male' || key === 'masculino' || key === 'hombre') return 'Masculino';
+  if (key === 'female' || key === 'femenino' || key === 'mujer') return 'Femenino';
+  if (key === 'other' || key === 'otro') return 'Otro';
+  return gender.charAt(0).toUpperCase() + gender.slice(1);
+}
+
+function ProfileDetailItem({
+  icon,
+  label,
+  value,
+}: {
+  icon: ComponentProps<typeof MaterialCommunityIcons>['name'];
+  label: string;
+  value: string;
+}) {
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
+      <MaterialCommunityIcons name={icon} size={18} color={LIME} style={{ marginTop: 1 }} />
+      <View style={{ flex: 1 }}>
+        <Text style={{ fontSize: 13, color: MUTED, fontFamily: fontFamily.regular }}>{label}</Text>
+        <Text
+          style={{
+            marginTop: 2,
+            fontSize: 15,
+            fontWeight: '700',
+            color: ui.colors.textPrimary,
+            fontFamily: fontFamily.regular,
+          }}
+          numberOfLines={2}
+        >
+          {value}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+function LimeButton({
+  label,
+  onPress,
+  loading,
+}: {
+  label: string;
+  onPress: () => void;
+  loading?: boolean;
+}) {
+  return (
+    <PressableScale
+      onPress={onPress}
+      disabled={loading}
+      style={{
+        backgroundColor: LIME,
+        borderRadius: 999,
+        paddingVertical: 14,
+        paddingHorizontal: 20,
+        alignItems: 'center',
+        justifyContent: 'center',
+        opacity: loading ? 0.7 : 1,
+      }}
+    >
+      {loading ? (
+        <ActivityIndicator color="#000" />
+      ) : (
+        <Text
+          style={{
+            color: '#000000',
+            fontSize: 15,
+            fontWeight: '700',
+            fontFamily: fontFamily.regular,
+          }}
+        >
+          {label}
+        </Text>
+      )}
+    </PressableScale>
   );
 }
 
@@ -125,10 +395,22 @@ export default function ProfileScreen() {
   const [updatingLocation, setUpdatingLocation] = useState(false);
   const [localPhotoUri, setLocalPhotoUri] = useState<string | null>(null);
   const [localityOverride, setLocalityOverride] = useState<string | null>(null);
+  const [profileTab, setProfileTab] = useState<ProfileTab>('profile');
   const isClubAccount = useMemo(() => isClub(user?.role), [user?.role]);
   const canOrganize = useMemo(() => canOrganizeEvents(user?.role) && !isClub(user?.role), [user?.role]);
   const isPlayerAccount = useMemo(() => isPlayer(user?.role), [user?.role]);
   const authed = Boolean(token);
+  const scrollRef = useRef<ScrollView>(null);
+  useScreenTour('profile', PROFILE_TOUR_STEPS, {
+    enabled: isPlayerAccount && profileTab === 'profile',
+    scrollRef,
+  });
+
+  const handleReplayTours = async () => {
+    if (!user?.id) return;
+    await resetScreenTours(user.id);
+    router.navigate('/(tabs)/home' as any);
+  };
 
   const { data: me, refetch, isRefetching } = useQuery({
     queryKey: ['profile-me'],
@@ -180,7 +462,7 @@ export default function ProfileScreen() {
     const q = clubSearch.trim().toLowerCase();
     if (!q) return list;
     return list.filter((club) => {
-      const haystack = [club.name, club.zone, club.city].filter(Boolean).join(' ').toLowerCase();
+      const haystack = [club.name, club.city, club.location].filter(Boolean).join(' ').toLowerCase();
       return haystack.includes(q);
     });
   }, [clubOptions, clubSearch]);
@@ -275,12 +557,10 @@ export default function ProfileScreen() {
       },
     });
   };
-  const zone = resolveLocality([
+  const locality = resolveLocality([
     localityOverride,
     me?.location,
     isPlaceholderLocation(user?.location) ? null : user?.location,
-    me?.zone,
-    me?.player?.zone,
     me?.city,
     me?.player?.city,
   ]);
@@ -331,13 +611,25 @@ export default function ProfileScreen() {
     5,
   );
   const isInPlacement = categoryStatus === 'provisional';
+  const courtPosition =
+    me?.preferences?.courtPosition ??
+    me?.player?.courtPosition ??
+    me?.player?.position ??
+    user?.courtPosition;
+  const gender = me?.gender || me?.player?.gender || user?.gender;
+  const birthDateRaw = me?.birthDate ?? me?.player?.birthDate ?? user?.birthDate;
+  const playerAge = birthDateRaw ? ageFromBirthDate(new Date(birthDateRaw)) : null;
+  const detailsLocation = locality && locality !== 'Sin localidad' ? locality : 'No definida';
+  const placementPlayed = Math.min(placementMatchesPlayed, placementMatchesRequired);
 
   if (isClubAccount) {
     return (
       <Screen>
-        <AppHeader title="Perfil" />
-        <View style={{ flex: 1, paddingHorizontal: ui.spacing.lg }}>
-          <ClubProfilePanel onLogout={handleLogout} />
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+          <Text style={{ color: MUTED, textAlign: 'center', marginBottom: 16 }}>
+            La sede se gestiona desde Inicio.
+          </Text>
+          <LimeButton label="Ir a Inicio" onPress={() => router.replace('/(tabs)/home' as any)} />
         </View>
       </Screen>
     );
@@ -345,8 +637,13 @@ export default function ProfileScreen() {
 
   return (
     <Screen>
-      <AppHeader title="Perfil" />
-      <ScrollView
+      <View style={{ paddingTop: insets.top + 8, paddingHorizontal: ui.spacing.lg }}>
+        <TourTarget id="profile.tabs">
+          <ProfileTabs value={profileTab} onChange={setProfileTab} />
+        </TourTarget>
+      </View>
+      <TabScrollView
+        ref={scrollRef}
         contentContainerStyle={{
           ...tabScreenPadding,
           paddingBottom: bottomPad,
@@ -360,6 +657,7 @@ export default function ProfileScreen() {
               refetchHistory();
               refetchBadges();
               refetchFollowCounts();
+              queryClient.invalidateQueries({ queryKey: ['player-tournament-titles', user?.id] });
               if (mainClubId) {
                 refetchMainClub();
                 refetchMainClubPoints();
@@ -370,412 +668,676 @@ export default function ProfileScreen() {
           />
         }
       >
-        <FadeInUp index={0}>
-          <View style={{ alignItems: 'center', marginBottom: ui.spacing.lg }}>
-            <TouchableOpacity onPress={handlePhotoPress} disabled={uploadingPhoto} activeOpacity={0.9}>
-              <View style={{ position: 'relative' }}>
-                <Avatar name={displayName} photo={profileImage} size="xl" style={{ marginBottom: 0 }} />
-                <View
+        {profileTab === 'profile' ? (
+          <>
+            <FadeInUp index={0}>
+              <TourTarget id="profile.card" style={{ marginBottom: ui.spacing.md }}>
+                <AppCard
                   style={{
-                    position: 'absolute',
-                    right: 0,
-                    bottom: 0,
-                    width: 34,
-                    height: 34,
-                    borderRadius: 17,
-                    backgroundColor: ui.colors.primary,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    borderWidth: 3,
-                    borderColor: ui.colors.bg,
+                    marginBottom: 0,
+                    backgroundColor: CARD_BG,
                   }}
                 >
-                  {uploadingPhoto ? (
-                    <ActivityIndicator size="small" color={ui.colors.onPrimary} />
-                  ) : (
-                    <Ionicons name="camera" size={16} color={ui.colors.onPrimary} />
-                  )}
-                </View>
+                  <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 14 }}>
+                    <TouchableOpacity onPress={handlePhotoPress} disabled={uploadingPhoto} activeOpacity={0.9}>
+                      <View style={{ position: 'relative' }}>
+                        {profileImage ? (
+                          <Avatar name={displayName} photo={profileImage} size="xl" style={{ marginBottom: 0 }} />
+                        ) : (
+                          <View
+                            style={{
+                              width: 80,
+                              height: 80,
+                              borderRadius: 40,
+                              backgroundColor: '#2A2A2A',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                            }}
+                          >
+                            <Ionicons name="person" size={36} color="#6B6B6B" />
+                          </View>
+                        )}
+                        <View
+                          style={{
+                            position: 'absolute',
+                            right: -2,
+                            bottom: -2,
+                            width: 28,
+                            height: 28,
+                            borderRadius: 14,
+                            backgroundColor: LIME,
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            borderWidth: 3,
+                            borderColor: CARD_BG,
+                          }}
+                        >
+                          {uploadingPhoto ? (
+                            <ActivityIndicator size="small" color="#000" />
+                          ) : (
+                            <Ionicons name="add" size={18} color="#000" />
+                          )}
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text
+                        style={{
+                          fontSize: 22,
+                          fontWeight: '700',
+                          fontFamily: fontFamily.regular,
+                          color: ui.colors.textPrimary,
+                          lineHeight: 28,
+                        }}
+                      >
+                        {displayName}
+                      </Text>
+                      <Text
+                        style={{
+                          fontSize: 13,
+                          color: MUTED,
+                          marginTop: 4,
+                          fontFamily: fontFamily.regular,
+                        }}
+                        numberOfLines={2}
+                      >
+                        {user?.email}
+                        {user?.role ? ` · ${roleLabel(user.role)}` : ''}
+                      </Text>
+                      <CircuitRoleBadges userId={user?.id} />
+                    </View>
+                  </View>
+
+                  {isPlayer(user?.role) ? (
+                    <View
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        marginTop: 18,
+                        paddingTop: 16,
+                        borderTopWidth: 1,
+                        borderTopColor: 'rgba(255,255,255,0.06)',
+                      }}
+                    >
+                      <TouchableOpacity
+                        style={{ flex: 1, alignItems: 'center' }}
+                        activeOpacity={0.75}
+                        onPress={() =>
+                          router.push({
+                            pathname: `/follows/${user?.id}` as any,
+                            params: { tab: 'followers', name: displayName },
+                          })
+                        }
+                      >
+                        <Text style={{ fontSize: 15, color: ui.colors.textPrimary, fontFamily: fontFamily.regular }}>
+                          <Text style={{ fontWeight: '700' }}>{followCounts?.followers ?? 0}</Text>
+                          {'  '}
+                          <Text style={{ color: MUTED }}>Seguidores</Text>
+                        </Text>
+                      </TouchableOpacity>
+                      <View style={{ width: 1, height: 18, backgroundColor: 'rgba(255,255,255,0.2)' }} />
+                      <TouchableOpacity
+                        style={{ flex: 1, alignItems: 'center' }}
+                        activeOpacity={0.75}
+                        onPress={() =>
+                          router.push({
+                            pathname: `/follows/${user?.id}` as any,
+                            params: { tab: 'following', name: displayName },
+                          })
+                        }
+                      >
+                        <Text style={{ fontSize: 15, color: ui.colors.textPrimary, fontFamily: fontFamily.regular }}>
+                          <Text style={{ fontWeight: '700' }}>{followCounts?.following ?? 0}</Text>
+                          {'  '}
+                          <Text style={{ color: MUTED }}>Seguidos</Text>
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : null}
+                </AppCard>
+              </TourTarget>
+            </FadeInUp>
+
+            {isPlayer(user?.role) ? (
+              <>
+                <FadeInUp index={1}>
+                  <TourTarget id="profile.level" style={{ marginBottom: ui.spacing.md }}>
+                    <AppCard
+                      style={{
+                        marginBottom: 0,
+                        backgroundColor: CARD_BG,
+                        overflow: 'hidden',
+                      }}
+                    >
+                      <View style={{ position: 'relative', minHeight: 100 }}>
+                        <View
+                          pointerEvents="none"
+                          style={{
+                            position: 'absolute',
+                            right: -24,
+                            top: -20,
+                            bottom: -20,
+                            width: 200,
+                            opacity: 1,
+                          }}
+                        >
+                          <LevelStripes width={200} height={180} />
+                        </View>
+                        <TouchableOpacity
+                          onPress={() => setShowLevelingHelp(true)}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          style={{ position: 'absolute', right: 0, top: 0, zIndex: 2 }}
+                          accessibilityLabel="Cómo funciona la nivelación"
+                        >
+                          <Ionicons name="help-circle-outline" size={20} color={MUTED} />
+                        </TouchableOpacity>
+
+                        <Text
+                          style={{
+                            fontSize: 11,
+                            letterSpacing: 1.2,
+                            fontWeight: '700',
+                            color: MUTED,
+                            fontFamily: fontFamily.regular,
+                            marginBottom: 8,
+                          }}
+                        >
+                          TU NIVEL
+                        </Text>
+                        <Text
+                          style={{
+                            fontSize: 18,
+                            fontWeight: '700',
+                            color: ui.colors.textPrimary,
+                            fontFamily: fontFamily.regular,
+                            marginBottom: 12,
+                            maxWidth: '70%',
+                          }}
+                        >
+                          {isInPlacement ? 'Nivel en nivelación' : 'Nivel actual'}
+                        </Text>
+                        <View
+                          style={{
+                            alignSelf: 'flex-start',
+                            //backgroundColor: LIME,
+                            borderRadius: 999,
+                            borderWidth: 1,
+                            borderColor: LIME,
+                            paddingHorizontal: 14,
+                            paddingVertical: 7,
+                            marginBottom: 14,
+                          }}
+                        >
+                          <Text
+                            style={{
+                              color: '#fff',
+                              fontSize: 13,
+                              fontWeight: '700',
+                              fontFamily: fontFamily.regular,
+                            }}
+                          >
+                            {formatSkillScore(skillScore)}
+
+                            {levelCategory || declaredCategory
+                              ? `.${levelCategory || declaredCategory}`
+                              : ''}
+                          </Text>
+                        </View>
+                        {isInPlacement ? (
+                          <Text
+                            style={{
+                              fontSize: 12,
+                              color: MUTED,
+                              lineHeight: 18,
+                              fontFamily: fontFamily.regular,
+                              maxWidth: '92%',
+                            }}
+                          >
+                            En nivelación:{' '}
+                            {Math.min(placementMatchesPlayed, placementMatchesRequired)}/
+                            {placementMatchesRequired} partidos completados con resultado confirmado
+                            para confirmar tu categoría real.
+                          </Text>
+                        ) : declaredCategory ? (
+                          <Text style={{ fontSize: 12, color: MUTED, fontFamily: fontFamily.regular }}>
+                            Categoría: {declaredCategory}
+                          </Text>
+                        ) : null}
+                      </View>
+                    </AppCard>
+                  </TourTarget>
+                </FadeInUp>
+
+                <FadeInUp index={2}>
+                  <AppCard
+                    style={{
+                      marginBottom: ui.spacing.md,
+                      backgroundColor: CARD_BG,
+                      overflow: 'hidden',
+                    }}
+                  >
+                    <View style={{ position: 'relative' }}>
+                      <View
+                        pointerEvents="none"
+                        style={{
+                          position: 'absolute',
+                          right: -28,
+                          bottom: -36,
+                          width: 220,
+                          height: 180,
+                          opacity: 1,
+                        }}
+                      >
+                        <DetailsStripes width={220} height={180} />
+                      </View>
+                      <Text
+                        style={{
+                          fontSize: 18,
+                          fontWeight: '700',
+                          color: ui.colors.textPrimary,
+                          fontFamily: fontFamily.regular,
+                          marginBottom: 18,
+                        }}
+                      >
+                        Detalles
+                      </Text>
+                      <View style={{ flexDirection: 'row' }}>
+                        <View style={{ flex: 1, gap: 18, paddingRight: 14 }}>
+                          <ProfileDetailItem
+                            icon="map-search"
+                            label="Posición"
+                            value={formatPositionLabel(courtPosition)}
+                          />
+                          <ProfileDetailItem
+                            icon="account"
+                            label="Género"
+                            value={formatGenderLabel(gender)}
+                          />
+                          <ProfileDetailItem
+                            icon="calendar"
+                            label="Edad"
+                            value={playerAge != null ? `${playerAge} años` : 'No informada'}
+                          />
+                        </View>
+                        <View
+                          style={{
+                            width: 1,
+                            backgroundColor: 'rgba(255,255,255,0.12)',
+                          }}
+                        />
+                        <View style={{ flex: 1, gap: 18, paddingLeft: 14 }}>
+                          <ProfileDetailItem
+                            icon="map-marker"
+                            label="Ubicación"
+                            value={detailsLocation}
+                          />
+                          <ProfileDetailItem
+                            icon="tag"
+                            label="Categoría"
+                            value={declaredCategory || 'No definida'}
+                          />
+                          {isInPlacement ? (
+                            <ProfileDetailItem
+                              icon="check"
+                              label="En nivelación"
+                              value={`${placementPlayed}/${placementMatchesRequired} partidos`}
+                            />
+                          ) : null}
+                        </View>
+                      </View>
+                    </View>
+                  </AppCard>
+                </FadeInUp>
+
+                <FadeInUp index={3}>
+                  <LinearGradient
+                    colors={['rgba(215, 255, 0, 0.58)', 'rgba(248, 255, 210, 0.58)']}
+                    start={{ x: 0.02, y: 0.48 }}
+                    end={{ x: 0.98, y: 0.52 }}
+                    style={{
+                      borderRadius: ui.radius.lg,
+                      padding: 1,
+                      marginBottom: ui.spacing.md,
+                    }}
+                  >
+                    <View
+                      style={{
+                        backgroundColor: CARD_BG,
+                        borderRadius: ui.radius.lg - 1,
+                        padding: ui.spacing.lg,
+                        overflow: 'hidden',
+                      }}
+                    >
+                      <Text
+                        style={{
+                          fontSize: 15,
+                          fontWeight: '700',
+                          color: ui.colors.textPrimary,
+                          fontFamily: fontFamily.regular,
+                          marginBottom: 14,
+                        }}
+                      >
+                        Puntos competitivos (
+                        {me?.competitiveMonthly?.monthKey ??
+                          new Date().toISOString().slice(0, 7)}
+                        )
+                      </Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
+                        <CircularProgressRing
+                          value={Number(me?.competitiveMonthly?.points ?? 0)}
+                          maxValue={Math.max(100, Number(me?.competitiveMonthly?.points ?? 0))}
+                          size={64}
+                          strokeWidth={5}
+                          color={LIME}
+                          trackColor="rgba(255,255,255,0.12)"
+                        />
+                        <Text style={{ fontSize: 14, color: MUTED, fontFamily: fontFamily.regular }}>
+                          pts · {me?.competitiveMonthly?.matchesPlayed ?? 0} partidos
+                        </Text>
+                      </View>
+                    </View>
+                  </LinearGradient>
+                </FadeInUp>
+              </>
+            ) : null}
+
+            {isPlayerAccount ? (
+              <FadeInUp index={3}>
+                <TourTarget id="profile.club" style={{ marginBottom: ui.spacing.md }}>
+                  <AppCard style={{ marginBottom: 0, backgroundColor: CARD_BG }}>
+                    <Pressable
+                      disabled={!mainClubId}
+                      onPress={() => {
+                        void hapticSelection();
+                        router.push(`/club/${mainClubId}` as any);
+                      }}
+                      accessibilityRole={mainClubId ? 'button' : undefined}
+                      accessibilityLabel={
+                        mainClubId ? `Ver página de ${mainClub?.name ?? 'tu club principal'}` : undefined
+                      }
+                      style={({ pressed }) => ({ gap: 12, opacity: pressed ? 0.7 : 1 })}
+                    >
+                      <View
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                        }}
+                      >
+                        <Text
+                          style={{
+                            fontSize: 15,
+                            fontWeight: '700',
+                            color: ui.colors.textPrimary,
+                            fontFamily: fontFamily.regular,
+                          }}
+                        >
+                          Club principal
+                        </Text>
+                        {mainClubId ? (
+                          <Ionicons name="chevron-forward" size={18} color={MUTED} />
+                        ) : null}
+                      </View>
+
+                      {mainClubId ? (
+                        <>
+                          <Text
+                            style={{
+                              fontSize: 16,
+                              fontWeight: '700',
+                              color: ui.colors.textPrimary,
+                              fontFamily: fontFamily.regular,
+                            }}
+                            numberOfLines={2}
+                          >
+                            {mainClub?.name || 'Cargando…'}
+                          </Text>
+                          {mainClub && (mainClub.city || mainClub.location) ? (
+                            <Text style={{ fontSize: 12, color: MUTED }} numberOfLines={1}>
+                              {mainClub.city || mainClub.location}
+                            </Text>
+                          ) : null}
+                        </>
+                      ) : null}
+                    </Pressable>
+
+                    {mainClubId ? (
+                      <View style={{ gap: 12, marginTop: 12 }}>
+                        <View
+                          style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: 12,
+                            borderRadius: ui.radius.md,
+                            backgroundColor: ui.colors.surfaceAlt,
+                            borderWidth: 1,
+                            borderColor: ui.colors.border,
+                          }}
+                        >
+                          <View style={{ flex: 1, marginRight: 12 }}>
+                            <Text style={{ fontSize: 12, color: ui.colors.textSecondary }}>
+                              Puntos globales canjeables
+                            </Text>
+                            <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6, marginTop: 2 }}>
+                              <AnimatedNumber
+                                value={redeemablePoints}
+                                suffix=" pts"
+                                style={{ color: LIME, fontSize: 22 }}
+                              />
+                            </View>
+                          </View>
+                          <Ionicons name="gift-outline" size={22} color={ui.colors.accent} />
+                        </View>
+                        <View style={{ flexDirection: 'row', gap: 10 }}>
+                          <View style={{ flex: 1 }}>
+                            <PrimaryButton
+                              label="Ver premios"
+                              variant="outline"
+                              fullWidth
+                              size="sm"
+                              onPress={() => router.push(`/club/${mainClubId}?tab=rewards` as any)}
+                            />
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <PrimaryButton
+                              label="Cambiar club"
+                              variant="ghost"
+                              fullWidth
+                              size="sm"
+                              onPress={() => setShowClubPicker(true)}
+                              style={{ backgroundColor: ui.colors.surfaceAlt }}
+                            />
+                          </View>
+                        </View>
+                      </View>
+                    ) : (
+                      <View style={{ gap: 14, marginTop: 12 }}>
+                        <Text style={{ fontSize: 14, color: MUTED, fontFamily: fontFamily.regular }}>
+                          Sin club principal
+                        </Text>
+                        <LimeButton label="Elegir club principal" onPress={() => setShowClubPicker(true)} />
+                      </View>
+                    )}
+                  </AppCard>
+                </TourTarget>
+              </FadeInUp>
+            ) : null}
+
+            {isPlayer(user?.role) ? (
+              <View style={{ marginBottom: ui.spacing.md, gap: 12 }}>
+                <CircuitInvitationsCard style={{ marginBottom: 0 }} />
+                <TournamentTitlesCard playerId={user?.id} isSelf />
+                <TourTarget id="profile.stats">
+                  <PlayerMatchStatsCard
+                    stats={
+                      (me?.stats as PlayerMatchStats) ?? {
+                        wins: 0,
+                        losses: 0,
+                        completed: 0,
+                        notCompleted: 0,
+                        total: 0,
+                      }
+                    }
+                    title="Resumen de partidos"
+                  />
+                </TourTarget>
+                <PlayerMatchHistoryList
+                  data={matchHistory}
+                  title="Historial de partidos"
+                  showRatingChange
+                  limit={15}
+                />
               </View>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={handlePhotoPress} disabled={uploadingPhoto} style={{ marginTop: 12 }}>
-              <Text style={{ color: ui.colors.primary, fontWeight: '600', fontSize: 14 }}>
-                {uploadingPhoto ? 'Subiendo foto...' : profileImage ? 'Cambiar foto de perfil' : 'Agregar foto de perfil'}
-              </Text>
-            </TouchableOpacity>
-            <Text style={{ fontSize: 11, color: ui.colors.textMuted, marginTop: 8 }}>
-              {profileImage ? 'Tocá la foto para verla o cambiarla' : 'Mostrá tu foto para que te reconozcan en la app'}
-            </Text>
-            <Text style={{ fontSize: 22, fontWeight: '800', color: ui.colors.textPrimary, marginTop: 12 }}>{displayName}</Text>
-            <Text style={{ fontSize: 13, color: ui.colors.textMuted, marginTop: 4 }}>{user?.email}</Text>
-            <Text style={{ fontSize: 12, color: ui.colors.textMuted, marginTop: 2 }}>
-              {roleLabel(user?.role)}
-            </Text>
+            ) : null}
+
+            {!isPlayer(user?.role) ? (
+              <AppCard variant="gradient" style={{ marginBottom: ui.spacing.md }}>
+                <Text style={{ fontSize: 12, color: ui.colors.textSecondary }}>Modo de cuenta</Text>
+                <Text style={{ fontSize: 16, fontWeight: '700', color: ui.colors.textPrimary }}>
+                  {roleLabel(user?.role)}
+                </Text>
+              </AppCard>
+            ) : null}
+          </>
+        ) : (
+          <>
             {isPlayer(user?.role) ? (
               <View
                 style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 28,
-                  marginTop: 16,
-                }}
-              >
-                <View style={{ alignItems: 'center', minWidth: 72 }}>
-                  <Text style={{ fontSize: 20, fontWeight: '800', color: ui.colors.textPrimary }}>
-                    {followCounts?.followers ?? 0}
-                  </Text>
-                  <Text style={{ fontSize: 12, color: ui.colors.textSecondary, marginTop: 2 }}>
-                    Seguidores
-                  </Text>
-                </View>
-                <View style={{ width: 1, height: 28, backgroundColor: ui.colors.border }} />
-                <View style={{ alignItems: 'center', minWidth: 72 }}>
-                  <Text style={{ fontSize: 20, fontWeight: '800', color: ui.colors.textPrimary }}>
-                    {followCounts?.following ?? 0}
-                  </Text>
-                  <Text style={{ fontSize: 12, color: ui.colors.textSecondary, marginTop: 2 }}>
-                    Seguidos
-                  </Text>
-                </View>
-              </View>
-            ) : null}
-          </View>
-        </FadeInUp>
-
-        {isPlayer(user?.role) ? (
-          <FadeInUp index={1}>
-            <AppCard variant="elevated" style={{ marginBottom: ui.spacing.md }}>
-              <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 12, color: ui.colors.textSecondary }}>Localidad</Text>
-                  <Text style={{ fontSize: 16, fontWeight: '700', color: ui.colors.textPrimary }}>{zone}</Text>
-                </View>
-                <TouchableOpacity
-                  onPress={() => setShowLevelingHelp(true)}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  accessibilityLabel="Cómo funciona la nivelación"
-                >
-                  <Ionicons name="help-circle-outline" size={22} color={ui.colors.textMuted} />
-                </TouchableOpacity>
-              </View>
-              <TouchableOpacity
-                onPress={() => void handleUseCurrentLocation()}
-                disabled={updatingLocation}
-                activeOpacity={0.8}
-                style={{
-                  marginTop: 12,
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: 8,
-                  alignSelf: 'flex-start',
-                  paddingVertical: 8,
-                  paddingHorizontal: 12,
-                  borderRadius: ui.radius.sm,
-                  backgroundColor: ui.colors.primarySoft,
+                  backgroundColor: CARD_BG,
+                  borderRadius: 18,
                   borderWidth: 1,
-                  borderColor: ui.colors.border,
-                  opacity: updatingLocation ? 0.7 : 1,
+                  borderColor: CARD_BORDER,
+                  padding: 16,
+                  marginBottom: 14,
                 }}
               >
-                {updatingLocation ? (
-                  <ActivityIndicator size="small" color={ui.colors.primary} />
-                ) : (
-                  <Ionicons name="navigate-outline" size={16} color={ui.colors.primary} />
-                )}
-                <Text style={{ fontSize: 13, fontWeight: '600', color: ui.colors.primary }}>
-                  {updatingLocation ? 'Actualizando…' : 'Usar ubicación actual'}
+                <Text
+                  style={{
+                    fontSize: 12,
+                    color: MUTED,
+                    fontFamily: fontFamily.regular,
+                    marginBottom: 4,
+                  }}
+                >
+                  Localidad
                 </Text>
-              </TouchableOpacity>
-              <View style={{ marginTop: 12 }}>
-                <SkillProgress
-                  score={skillScore}
-                  category={levelCategory}
-                  label={isInPlacement ? 'Nivel en nivelación' : 'Nivel actual'}
+                <Text
+                  style={{
+                    fontSize: 16,
+                    fontWeight: '700',
+                    color: ui.colors.textPrimary,
+                    fontFamily: fontFamily.regular,
+                    marginBottom: 14,
+                  }}
+                >
+                  {locality}
+                </Text>
+                <LimeButton
+                  label={updatingLocation ? 'Actualizando…' : 'Usar ubicación actual'}
+                  onPress={() => void handleUseCurrentLocation()}
+                  loading={updatingLocation}
                 />
               </View>
-              {isInPlacement ? (
-                <View
-                  style={{
-                    marginTop: 12,
-                    padding: 12,
-                    borderRadius: ui.radius.md,
-                    backgroundColor: ui.colors.surfaceAlt,
-                  }}
-                >
-                  <Text style={{ fontSize: 13, fontWeight: '700', color: ui.colors.textPrimary }}>
-                    En nivelación · {Math.min(placementMatchesPlayed, placementMatchesRequired)}/
-                    {placementMatchesRequired} partidos
-                  </Text>
-                  <Text style={{ fontSize: 12, color: ui.colors.textSecondary, marginTop: 4 }}>
-                    Categoría declarada: {declaredCategory || levelCategory || '—'}. Jugá partidos
-                    competitivos con resultado confirmado para confirmar tu categoría real.
-                  </Text>
-                </View>
-              ) : declaredCategory ? (
-                <Text style={{ fontSize: 12, color: ui.colors.textSecondary, marginTop: 10 }}>
-                  Categoría:{' '}
-                  <Text style={{ fontWeight: '700', color: ui.colors.textPrimary }}>{declaredCategory}</Text>
-                </Text>
-              ) : null}
-              {me?.competitiveMonthly != null ? (
-                <>
-                  <Text style={[ui.typography.bodySm, { color: ui.colors.textSecondary, marginTop: 12 }]}>
-                    Puntos competitivos ({me.competitiveMonthly.monthKey})
-                  </Text>
-                  <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6, marginTop: 4 }}>
-                    <AnimatedNumber value={me.competitiveMonthly.points} suffix=" pts" style={{ color: ui.colors.primary, fontSize: 22 }} />
-                    <Text style={[ui.typography.bodySm, { color: ui.colors.textSecondary }]}>
-                      · {me.competitiveMonthly.matchesPlayed} partidos
-                    </Text>
-                  </View>
-                  <Text style={{ fontSize: 11, color: ui.colors.textMuted, marginTop: 4 }}>
-                    Ganás más si los rivales son más fuertes; perdés más si perdés contra más débiles
-                  </Text>
-                </>
-              ) : null}
-            </AppCard>
-          </FadeInUp>
-        ) : null}
+            ) : null}
 
-        {isPlayerAccount ? (
-          <FadeInUp index={2}>
-            <AppCard style={{ marginBottom: ui.spacing.md }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                <View style={{ flex: 1, marginRight: 12 }}>
-                  <Text style={{ fontSize: 12, color: ui.colors.textSecondary }}>Club principal</Text>
-                  <Text
-                    style={{ fontSize: 16, fontWeight: '800', color: ui.colors.textPrimary, marginTop: 4 }}
-                    numberOfLines={2}
-                  >
-                    {mainClub?.name || (mainClubId ? 'Cargando…' : 'Sin club principal')}
-                  </Text>
-                  {mainClub && (mainClub.zone || mainClub.city) ? (
-                    <Text style={{ fontSize: 12, color: ui.colors.textMuted, marginTop: 4 }} numberOfLines={1}>
-                      {mainClub.zone || mainClub.city}
-                    </Text>
-                  ) : null}
-                </View>
-                <View
-                  style={{
-                    width: 44,
-                    height: 44,
-                    borderRadius: 22,
-                    backgroundColor: ui.colors.primarySoft,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  <Ionicons name="business-outline" size={22} color={ui.colors.primary} />
-                </View>
-              </View>
-
-              {mainClubId ? (
-                <View style={{ marginTop: 14, gap: 12 }}>
-                  <View
-                    style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: 12,
-                      borderRadius: ui.radius.md,
-                      backgroundColor: ui.colors.surfaceAlt,
-                      borderWidth: 1,
-                      borderColor: ui.colors.border,
-                    }}
-                  >
-                    <View style={{ flex: 1, marginRight: 12 }}>
-                      <Text style={{ fontSize: 12, color: ui.colors.textSecondary }}>Puntos globales canjeables</Text>
-                      <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6, marginTop: 2 }}>
-                        <AnimatedNumber
-                          value={redeemablePoints}
-                          suffix=" pts"
-                          style={{ color: ui.colors.primary, fontSize: 22 }}
-                        />
-                      </View>
-                      <Text style={{ fontSize: 11, color: ui.colors.textMuted, marginTop: 4 }}>
-                        Saldo para canjear en toda la app
-                      </Text>
-                    </View>
-                    <Ionicons name="gift-outline" size={22} color={ui.colors.accent} />
-                  </View>
-                  <View style={{ flexDirection: 'row', gap: 10 }}>
-                    <View style={{ flex: 1 }}>
-                      <PrimaryButton
-                        label="Ver premios"
-                        variant="outline"
-                        fullWidth
-                        size="sm"
-                        onPress={() => router.push(`/club/${mainClubId}?tab=rewards` as any)}
-                      />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <PrimaryButton
-                        label="Cambiar club"
-                        variant="ghost"
-                        fullWidth
-                        size="sm"
-                        onPress={() => setShowClubPicker(true)}
-                        style={{ backgroundColor: ui.colors.surfaceAlt }}
-                      />
-                    </View>
-                  </View>
-                </View>
-              ) : (
-                <View style={{ marginTop: 14, gap: 12 }}>
-                  <Text style={{ fontSize: 13, color: ui.colors.textMuted }}>
-                    Elegí tu club principal para seguir el ranking interno y sumar puntos globales canjeables.
-                  </Text>
-                  <PrimaryButton
-                    label="Elegir club principal"
-                    fullWidth
-                    onPress={() => setShowClubPicker(true)}
-                  />
-                </View>
-              )}
-            </AppCard>
-          </FadeInUp>
-        ) : null}
-
-        {isPlayer(user?.role) ? (
-          <View style={{ marginBottom: ui.spacing.md, gap: 12 }}>
-            <PlayerMatchStatsCard
-              stats={(me?.stats as PlayerMatchStats) ?? {
-                wins: 0,
-                losses: 0,
-                completed: 0,
-                notCompleted: 0,
-                total: 0,
-              }}
-              title="Resumen de partidos"
-            />
-            <PlayerMatchHistoryList
-              data={matchHistory}
-              title="Historial de partidos"
-              showRatingChange
-              limit={15}
-            />
-            <BadgesSection
-              badges={badgesSummary?.earned}
-              earnedCount={badgesSummary?.earnedCount}
-              total={badgesSummary?.total}
-              onPress={() => router.push('/badges' as any)}
-            />
-          </View>
-        ) : null}
-
-        {!isPlayer(user?.role) ? (
-          <AppCard variant="gradient" style={{ marginBottom: ui.spacing.md }}>
-            <Text style={{ fontSize: 12, color: ui.colors.textSecondary }}>Modo de cuenta</Text>
-            <Text style={{ fontSize: 16, fontWeight: '700', color: ui.colors.textPrimary }}>{roleLabel(user?.role)}</Text>
-          </AppCard>
-        ) : null}
-
-        <View style={{ flexDirection: 'row', gap: 10, marginBottom: ui.spacing.lg }}>
-          <View style={{ flex: 1 }}>
-            <PrimaryButton label="Editar perfil" variant="outline" fullWidth onPress={() => router.push('/edit-profile' as any)} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <PrimaryButton
-              label={isClubAccount ? 'Horarios' : 'Jugar'}
-              variant="dark"
-              fullWidth
-              onPress={() => {
-                if (isClubAccount) router.push('/(tabs)/court-slots' as any);
-                else router.push('/(tabs)/search' as any);
-              }}
-            />
-          </View>
-        </View>
-
-        {isPlayer(user?.role) && (
-          <>
             <MenuRow
-              icon="bag-outline"
-              iconBg={ui.colors.accentSoft}
-              iconColor={ui.colors.accent}
-              title="Shop x4"
-              subtitle="Productos de patrocinadores"
-              onPress={() => router.push('/shop' as any)}
+              icon={ICON_PROFILE}
+              title="Editar perfil"
+              subtitle="Nombre, foto y datos personales"
+              onPress={() => router.push('/edit-profile' as any)}
+            />
+            {isPlayer(user?.role) && (
+              <>
+                <MenuRow
+                  icon={ICON_INSIGNIA}
+                  title="Insignias"
+                  subtitle={
+                    badgesSummary
+                      ? `${badgesSummary.earnedCount}/${badgesSummary.total} desbloqueadas`
+                      : 'Logros y reconocimientos'
+                  }
+                  onPress={() => router.push('/badges' as any)}
+                />
+                <MenuRow
+                  icon={ICON_CALENDAR}
+                  title="Configurar disponibilidad"
+                  subtitle="Horarios en los que podés jugar"
+                  onPress={() => router.push('/availability' as any)}
+                />
+                {/* <MenuRow
+                  icon={ICON_CLUB}
+                  title="Club y premios"
+                  subtitle={
+                    mainClubId
+                      ? `${redeemablePoints} pts canjeables · premios del club`
+                      : 'Puntos canjeables y premios del club'
+                  }
+                  onPress={() =>
+                    router.push(
+                      (mainClubId ? `/club/${mainClubId}?tab=rewards` : '/clubs') as any,
+                    )
+                  }
+                />
+                <MenuRow
+                  icon={ICON_TROFEO}
+                  title="Módulo de organizador"
+                  subtitle="Torneos y circuitos"
+                  onPress={() => router.push('/(tabs)/organizer' as any)}
+                /> */}
+              </>
+            )}
+            {canOrganize && !isPlayer(user?.role) && (
+              <MenuRow
+                icon={ICON_TROFEO}
+                title="Módulo de organizador"
+                subtitle="Torneos y circuitos"
+                onPress={() => router.push('/(tabs)/organizer' as any)}
+              />
+            )}
+            {/* <MenuRow
+              icon={ICON_APARIENCIA}
+              title="Apariencia"
+              subtitle={themePreferenceLabel(preference)}
+              onPress={cyclePreference}
+            /> */}
+            <MenuRow
+              icon={ICON_NOTE}
+              title="Ver tutoriales de nuevo"
+              subtitle="Volvé a ver la explicación de cada pantalla"
+              onPress={() => void handleReplayTours()}
             />
             <MenuRow
-              icon="calendar-outline"
-              iconBg={ui.colors.primarySoft}
-              iconColor={ui.colors.primary}
-              title="Configurar disponibilidad"
-              subtitle="Horarios en los que podés jugar"
-              onPress={() => router.push('/availability' as any)}
+              icon={ICON_PASSWORD}
+              title="Cambiar contraseña"
+              subtitle="Actualizá tu contraseña"
+              onPress={() => router.push('/change-password' as any)}
             />
             <MenuRow
-              icon="business-outline"
-              iconBg={ui.colors.accentSoft}
-              iconColor={ui.colors.accent}
-              title="Clubs y premios"
-              subtitle={
-                mainClubId
-                  ? `${redeemablePoints} pts canjeables · ranking y premios`
-                  : 'Ranking interno y canje de puntos'
-              }
-              onPress={() =>
-                router.push(
-                  (mainClubId ? `/club/${mainClubId}?tab=rewards` : '/(tabs)/clubs') as any,
-                )
-              }
+              icon={ICON_PROFILE}
+              title="Usuarios bloqueados"
+              subtitle="Desbloqueá jugadores que bloqueaste"
+              onPress={() => router.push('/blocked-users' as any)}
             />
             <MenuRow
-              icon="trophy-outline"
-              iconBg={ui.colors.primarySoft}
-              iconColor={ui.colors.primary}
-              title="Mis torneos y circuitos"
-              subtitle="Creá y gestioná eventos"
-              onPress={() => router.push('/(tabs)/organizer' as any)}
+              icon={ICON_TRASH}
+              title="Eliminar cuenta"
+              subtitle="Borrar tu cuenta de forma permanente"
+              onPress={() => router.push('/delete-account' as any)}
+              muted
             />
             <MenuRow
-              icon="time-outline"
-              iconBg={ui.colors.surfaceAlt}
-              iconColor={ui.colors.textSecondary}
-              title="Historial de organización"
-              subtitle="Torneos que organizaste"
-              onPress={() => router.push('/(tabs)/history' as any)}
+              icon={ICON_LOGOUT}
+              title="Cerrar sesión"
+              subtitle="Cerrar sesión de la aplicación"
+              onPress={handleLogout}
+              muted
             />
           </>
         )}
-        {canOrganize && !isPlayer(user?.role) && (
-          <MenuRow
-            icon="trophy-outline"
-            iconBg={ui.colors.primarySoft}
-            iconColor={ui.colors.primary}
-            title="Panel de organización"
-            subtitle="Torneos y circuitos"
-            onPress={() => router.push('/(tabs)/organizer' as any)}
-          />
-        )}
-        <MenuRow
-          icon="color-palette-outline"
-          iconBg={ui.colors.primarySoft}
-          iconColor={ui.colors.primary}
-          title="Apariencia"
-          subtitle={themePreferenceLabel(preference)}
-          onPress={cyclePreference}
-        />
-        <MenuRow
-          icon="lock-closed-outline"
-          iconBg={ui.colors.warningSoft}
-          iconColor={ui.colors.warning}
-          title="Cambiar contraseña"
-          subtitle="Actualizá tu contraseña"
-          onPress={() => router.push('/change-password' as any)}
-        />
-        <MenuRow
-          icon="log-out-outline"
-          iconBg={ui.colors.dangerSoft}
-          iconColor={ui.colors.danger}
-          title="Cerrar sesión"
-          subtitle="Cerrar sesión de la aplicación"
-          onPress={handleLogout}
-          danger
-        />
-      </ScrollView>
+      </TabScrollView>
       <ProfilePhotoViewer
         visible={showPhotoViewer}
         photo={profileImage}
@@ -880,9 +1442,9 @@ export default function ProfileScreen() {
                     <Text style={{ fontWeight: '700', color: ui.colors.textPrimary }} numberOfLines={1}>
                       {club.name}
                     </Text>
-                    {club.zone || club.city ? (
+                    {club.city || club.location ? (
                       <Text style={{ fontSize: 11, color: ui.colors.textMuted, marginTop: 2 }} numberOfLines={1}>
-                        {club.zone || club.city}
+                        {club.city || club.location}
                       </Text>
                     ) : null}
                   </View>

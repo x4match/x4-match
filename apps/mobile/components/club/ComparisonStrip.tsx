@@ -1,52 +1,116 @@
 import { Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { AppCard } from '@/components/ui';
-import type { ManagerComparisonMetric } from '@/lib/club-manager';
+import type { ManagerComparisonMetric } from '@/lib/club/club-manager';
 import { ui } from '@/theme/tokens';
 
-function Delta({ label, pct }: { label: string; pct: number }) {
-  const up = pct > 0;
-  const down = pct < 0;
-  const color = up ? ui.colors.success : down ? ui.colors.danger : ui.colors.textMuted;
+function formatPct(pct: number) {
+  if (pct === 0) return '0%';
+  return `${pct > 0 ? '+' : ''}${pct}%`;
+}
+
+function Cell({ value, emphasize }: { value: string; emphasize?: boolean }) {
   return (
-    <View style={{ flex: 1, alignItems: 'center' }}>
-      <Text style={{ fontSize: 10, color: ui.colors.textMuted, marginBottom: 4 }}>{label}</Text>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
-        <Ionicons
-          name={up ? 'arrow-up' : down ? 'arrow-down' : 'remove'}
-          size={12}
-          color={color}
-        />
-        <Text style={{ fontSize: 13, fontWeight: '800', color, fontVariant: ['tabular-nums'] }}>
-          {Math.abs(pct)}%
-        </Text>
-      </View>
-    </View>
+    <Text
+      style={{
+        flex: 1,
+        textAlign: 'right',
+        fontSize: 13,
+        fontWeight: emphasize ? '700' : '600',
+        color: emphasize ? ui.colors.textPrimary : ui.colors.textSecondary,
+        fontVariant: ['tabular-nums'],
+      }}
+    >
+      {value}
+    </Text>
   );
 }
 
-export function ComparisonStrip({ metrics }: { metrics: ManagerComparisonMetric[] }) {
+export function ComparisonStrip({
+  metrics,
+  periodLabel = 'Periodo 7 días',
+}: {
+  metrics: ManagerComparisonMetric[];
+  periodLabel?: string;
+}) {
   return (
-    <View style={{ marginBottom: 20, gap: 10 }}>
-      {metrics.map((m) => (
-        <AppCard key={m.id} padding="sm">
+    <AppCard padding="md" style={{ marginBottom: 24 }}>
+      <View
+        style={{
+          flexDirection: 'row',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: 14,
+        }}
+      >
+        <Text style={{ fontSize: 16, fontWeight: '700', color: ui.colors.textPrimary }}>
+          Comparativos
+        </Text>
+        <Text style={{ fontSize: 12, color: ui.colors.textMuted }}>{periodLabel}</Text>
+      </View>
+
+      <View style={{ flexDirection: 'row', marginBottom: 10, paddingHorizontal: 2 }}>
+        <Text style={{ flex: 1.2, fontSize: 11, color: ui.colors.textMuted }} />
+        <Text
+          style={{
+            flex: 1,
+            textAlign: 'right',
+            fontSize: 11,
+            fontWeight: '600',
+            color: ui.colors.textMuted,
+          }}
+        >
+          Hoy
+        </Text>
+        <Text
+          style={{
+            flex: 1,
+            textAlign: 'right',
+            fontSize: 11,
+            fontWeight: '600',
+            color: ui.colors.textMuted,
+          }}
+        >
+          Semana
+        </Text>
+        <Text
+          style={{
+            flex: 1,
+            textAlign: 'right',
+            fontSize: 11,
+            fontWeight: '600',
+            color: ui.colors.textMuted,
+          }}
+        >
+          Mes
+        </Text>
+      </View>
+
+      {metrics.map((m, index) => (
+        <View
+          key={m.id}
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            paddingVertical: 10,
+            borderTopWidth: index === 0 ? 0 : 1,
+            borderTopColor: ui.colors.border,
+          }}
+        >
           <Text
             style={{
+              flex: 1.2,
               fontSize: 13,
-              fontWeight: '700',
+              fontWeight: '600',
               color: ui.colors.textPrimary,
-              marginBottom: 10,
             }}
           >
             {m.label}
           </Text>
-          <View style={{ flexDirection: 'row' }}>
-            <Delta label="vs ayer" pct={m.vsYesterdayPct} />
-            <Delta label="vs semana" pct={m.vsWeekPct} />
-            <Delta label="vs mes" pct={m.vsMonthPct} />
-          </View>
-        </AppCard>
+          <Cell value={formatPct(m.vsYesterdayPct)} emphasize />
+          <Cell value={formatPct(m.vsWeekPct)} />
+          <Cell value={formatPct(m.vsMonthPct)} />
+        </View>
       ))}
-    </View>
+    </AppCard>
   );
 }

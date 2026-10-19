@@ -5,8 +5,6 @@ import {
   ScrollView,
   TextInput,
   Alert,
-  KeyboardAvoidingView,
-  Platform,
   TouchableOpacity,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -14,49 +12,49 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/contexts/AuthContext';
 import { api } from '@/lib/api';
-import type { DirectMessage } from '@/lib/types';
+import type { DirectConversation, DirectMessage } from '@/lib/types';
 import { formatRelativeTime } from '@/lib/format';
+import { UNREAD_MESSAGES_QUERY_KEY } from '@/lib/hooks/use-unread-messages';
 import { ui } from '@/theme/tokens';
-import { Screen, StackHeader, PrimaryButton, Avatar } from '@/components/padely';
+import { Screen, StackHeader, PrimaryButton, Avatar, ChatBubble, KeyboardAvoid } from '@/components/x4match';
 
 export default function ConversationScreen() {
-  const { id, name, status, userId: userIdParam } = useLocalSearchParams<{
+  const { id, name, status, userId: userIdParam, clubId: clubIdParam, draft } = useLocalSearchParams<{
     id: string;
     name?: string;
     status?: string;
     userId?: string;
+    clubId?: string;
+    draft?: string;
   }>();
   const router = useRouter();
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const [text, setText] = useState('');
+  const [text, setText] = useState(draft ?? '');
   const scrollRef = useRef<ScrollView>(null);
-  const isPending = status === 'pending';
 
   const { data: conversations } = useQuery({
     queryKey: ['conversations'],
     queryFn: async () => {
       const res = await api.get('/conversations');
-      return res.data as Array<{
-        id: string;
-        other_user_id: string;
-        other_user_name: string;
-        other_user_photo?: string;
-      }>;
+      return res.data as DirectConversation[];
     },
   });
 
   const conversationMeta = conversations?.find((c) => c.id === id);
+  const isPending = (conversationMeta?.status ?? status) === 'pending';
   const otherUserId = userIdParam || conversationMeta?.other_user_id;
-  const displayName = name || conversationMeta?.other_user_name || 'Chat';
+  const otherClubId = clubIdParam || conversationMeta?.other_club_id || undefined;
+  const displayName = conversationMeta?.other_user_name || name || 'Chat';
   const otherUserPhoto = conversationMeta?.other_user_photo;
+  const canOpenProfile = !!(otherClubId || otherUserId);
 
   const openProfile = () => {
-    if (!otherUserId) return;
-    router.push(`/player/${otherUserId}` as any);
+    if (otherClubId) router.push(`/club/${otherClubId}` as any);
+    else if (otherUserId) router.push(`/player/${otherUserId}` as any);
   };
 
-  const { data: messages, isLoading, refetch } = useQuery({
+  const { data: messages, isLoading, refetch, dataUpdatedAt } = useQuery({
     queryKey: ['dm-messages', id],
     queryFn: async () => {
       const res = await api.get(`/conversations/${id}/messages`);
@@ -65,11 +63,27 @@ export default function ConversationScreen() {
     enabled: !!id && !isPending,
   });
 
+  useEffect(() => {
+    if (!id || isPending || !dataUpdatedAt) return;
+    queryClient.setQueryData<DirectConversation[]>(['conversations'], (prev) =>
+      prev?.map((c) => (c.id === id ? { ...c, unread_count: 0 } : c)),
+    );
+    api
+      .post(`/conversations/${id}/read`)
+      .then(() => {
+        queryClient.invalidateQueries({ queryKey: UNREAD_MESSAGES_QUERY_KEY });
+        queryClient.invalidateQueries({ queryKey: ['notifications'] });
+        queryClient.invalidateQueries({ queryKey: ['unread-count'] });
+      })
+      .catch(() => undefined);
+  }, [id, isPending, dataUpdatedAt, queryClient]);
+
   const acceptMutation = useMutation({
     mutationFn: () => api.post(`/conversations/${id}/accept`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['conversations'] });
       queryClient.invalidateQueries({ queryKey: ['conversations-pending'] });
+      queryClient.invalidateQueries({ queryKey: UNREAD_MESSAGES_QUERY_KEY });
       router.setParams({ status: 'active' } as any);
       refetch();
     },
@@ -86,6 +100,72 @@ export default function ConversationScreen() {
     onError: (e: any) => Alert.alert('Error', e?.response?.data?.message || 'No se pudo enviar'),
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: (messageId: string) => api.delete(`/conversations/${id}/messages/${messageId}`),
+    onSuccess: () => {
+      refetch();
+      queryClient.invalidateQueries({ queryKey: ['conversations'] });
+    },
+    onError: (e: any) => Alert.alert('Error', e?.response?.data?.message || 'No se pudo borrar'),
+  });
+
+  const deleteChatMutation = useMutation({
+    mutationFn: () => api.delete(`/conversations/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['conversations'] });
+      queryClient.invalidateQueries({ queryKey: ['conversations-pending'] });
+      queryClient.invalidateQueries({ queryKey: UNREAD_MESSAGES_QUERY_KEY });
+      queryClient.removeQueries({ queryKey: ['dm-messages', id] });
+      router.back();
+    },
+    onError: (e: any) =>
+      Alert.alert('Error', e?.response?.data?.message || 'No se pudo borrar el chat'),
+  });
+
+  const confirmDeleteMessage = (messageId: string) => {
+    Alert.alert('Borrar mensaje', '¿Querés borrar este mensaje? Se eliminará para ambos.', [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Borrar',
+        style: 'destructive',
+        onPress: () => deleteMutation.mutate(messageId),
+      },
+    ]);
+  };
+
+  const openChatActions = () => {
+    const buttons: Array<{
+      text: string;
+      style?: 'cancel' | 'destructive' | 'default';
+      onPress?: () => void;
+    }> = [];
+
+    if (canOpenProfile) {
+      buttons.push({ text: otherClubId ? 'Ver club' : 'Ver perfil', onPress: openProfile });
+    }
+    buttons.push({
+      text: 'Borrar chat',
+      style: 'destructive',
+      onPress: () => {
+        Alert.alert(
+          'Borrar chat',
+          `¿Querés borrar el chat con ${displayName}?`,
+          [
+            { text: 'Cancelar', style: 'cancel' },
+            {
+              text: 'Borrar',
+              style: 'destructive',
+              onPress: () => deleteChatMutation.mutate(),
+            },
+          ],
+        );
+      },
+    });
+    buttons.push({ text: 'Cancelar', style: 'cancel' });
+
+    Alert.alert(displayName, undefined, buttons);
+  };
+
   useEffect(() => {
     if (messages?.length) {
       setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
@@ -97,36 +177,28 @@ export default function ConversationScreen() {
       <StackHeader
         title={displayName}
         rightAction={
-          otherUserId ? (
-            <TouchableOpacity
-              onPress={openProfile}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              accessibilityLabel={`Ver perfil de ${displayName}`}
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: 6,
-                paddingHorizontal: 10,
-                paddingVertical: 8,
-                borderRadius: ui.radius.md,
-                backgroundColor: ui.colors.surface,
-              }}
-            >
-              <Ionicons name="person-outline" size={18} color={ui.colors.textInverse} />
-              <Text style={{ fontSize: 13, fontWeight: '600', color: ui.colors.textInverse }}>Perfil</Text>
-            </TouchableOpacity>
-          ) : undefined
+          <TouchableOpacity
+            onPress={openChatActions}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityLabel="Opciones del chat"
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: 20,
+              backgroundColor: ui.colors.surface,
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Ionicons name="ellipsis-horizontal" size={20} color={ui.colors.textInverse} />
+          </TouchableOpacity>
         }
       />
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={88}
-      >
+      <KeyboardAvoid style={{ flex: 1 }} keyboardVerticalOffset={88}>
         {isPending ? (
           <View style={{ flex: 1, padding: ui.spacing.lg, justifyContent: 'center' }}>
             <View style={{ alignItems: 'center', marginBottom: 24 }}>
-              <TouchableOpacity onPress={openProfile} disabled={!otherUserId} activeOpacity={0.85}>
+              <TouchableOpacity onPress={openProfile} disabled={!canOpenProfile} activeOpacity={0.85}>
                 <Avatar name={displayName} photo={otherUserPhoto} size="xl" />
               </TouchableOpacity>
               <Text style={{ fontSize: 18, fontWeight: '700', color: ui.colors.textInverse, marginTop: 16, textAlign: 'center' }}>
@@ -135,9 +207,11 @@ export default function ConversationScreen() {
               <Text style={{ fontSize: 14, color: ui.colors.textMuted, marginTop: 8, textAlign: 'center' }}>
                 {displayName} quiere enviarte mensajes. Aceptá para empezar a chatear.
               </Text>
-              {otherUserId ? (
+              {canOpenProfile ? (
                 <TouchableOpacity onPress={openProfile} style={{ marginTop: 12 }}>
-                  <Text style={{ fontSize: 14, fontWeight: '600', color: ui.colors.primary }}>Ver perfil</Text>
+                  <Text style={{ fontSize: 14, fontWeight: '600', color: ui.colors.primary }}>
+                    {otherClubId ? 'Ver club' : 'Ver perfil'}
+                  </Text>
                 </TouchableOpacity>
               ) : null}
             </View>
@@ -148,6 +222,7 @@ export default function ConversationScreen() {
             <ScrollView
               ref={scrollRef}
               contentContainerStyle={{ padding: ui.spacing.lg, flexGrow: 1 }}
+              keyboardShouldPersistTaps="handled"
               onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: false })}
             >
               {isLoading ? (
@@ -158,28 +233,15 @@ export default function ConversationScreen() {
                 messages.map((msg) => {
                   const mine = msg.sender_id === user?.id;
                   return (
-                    <View
-                      key={msg.id}
-                      style={{
-                        alignSelf: mine ? 'flex-end' : 'flex-start',
-                        maxWidth: '80%',
-                        marginBottom: 10,
-                        backgroundColor: mine ? ui.colors.primary : ui.colors.surface,
-                        borderRadius: ui.radius.md,
-                        padding: 12,
-                      }}
-                    >
-                      <Text style={{ color: mine ? '#fff' : ui.colors.textPrimary, fontSize: 15 }}>{msg.content}</Text>
-                      <Text
-                        style={{
-                          fontSize: 10,
-                          color: mine ? 'rgba(255,255,255,0.7)' : ui.colors.textMuted,
-                          marginTop: 4,
-                          textAlign: 'right',
-                        }}
-                      >
-                        {formatRelativeTime(msg.created_at)}
-                      </Text>
+                    <View key={msg.id} style={{ marginBottom: 8 }}>
+                      <ChatBubble
+                        mine={mine}
+                        content={msg.content}
+                        timeLabel={formatRelativeTime(msg.created_at)}
+                        disabled={deleteMutation.isPending}
+                        onLongPress={mine ? () => confirmDeleteMessage(msg.id) : undefined}
+                        accessibilityHint={mine ? 'Mantener pulsado para borrar' : undefined}
+                      />
                     </View>
                   );
                 })
@@ -224,12 +286,12 @@ export default function ConversationScreen() {
                   opacity: !text.trim() ? 0.5 : 1,
                 }}
               >
-                <Ionicons name="send" size={20} color="#fff" />
+                <Ionicons name="send" size={20} color={ui.colors.onPrimary} />
               </TouchableOpacity>
             </View>
           </>
         )}
-      </KeyboardAvoidingView>
+      </KeyboardAvoid>
     </Screen>
   );
 }

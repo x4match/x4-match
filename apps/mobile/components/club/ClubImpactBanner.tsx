@@ -2,7 +2,7 @@ import { View, Text } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { formatCurrency } from '@/lib/currency';
 import { ui } from '@/theme/tokens';
-import { AppCard } from '@/components/padely';
+import { AppCard } from '@/components/x4match';
 
 export interface ClubImpactSummary {
   monthKey: string;
@@ -93,7 +93,7 @@ export function ClubImpactBanner({ impact, clubName, loading }: ClubImpactBanner
               </Text>
               {(impact.revenueDeposits > 0 || impact.revenueShop > 0) && (
                 <Text style={{ color: onMuted, fontSize: 10, marginTop: 4 }}>
-                  {impact.revenueDeposits > 0 ? `Señas ${formatCurrency(impact.revenueDeposits)}` : ''}
+                  {impact.revenueDeposits > 0 ? `Turnos ${formatCurrency(impact.revenueDeposits)}` : ''}
                   {impact.revenueDeposits > 0 && impact.revenueShop > 0 ? ' · ' : ''}
                   {impact.revenueShop > 0 ? `Tienda ${formatCurrency(impact.revenueShop)}` : ''}
                 </Text>

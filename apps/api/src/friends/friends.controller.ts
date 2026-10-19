@@ -38,6 +38,11 @@ export class FriendsController {
     return this.friendsService.rejectRequest(user.sub, requestId);
   }
 
+  @Post('cancel/:requestId')
+  cancel(@CurrentUser() user: { sub: string }, @Param('requestId') requestId: string) {
+    return this.friendsService.cancelRequest(user.sub, requestId);
+  }
+
   @Delete(':friendId')
   remove(@CurrentUser() user: { sub: string }, @Param('friendId') friendId: string) {
     return this.friendsService.removeFriend(user.sub, friendId);

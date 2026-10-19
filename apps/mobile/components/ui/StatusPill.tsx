@@ -22,6 +22,11 @@ const statusConfig: Record<string, { label: string; bg: string; text: string }> 
   INTERNAL: { label: 'Interno', bg: ui.colors.surface3, text: ui.colors.textSecondary },
   EXTERNAL: { label: 'Externo', bg: ui.colors.primarySoft, text: ui.colors.primary },
   NOT_REQUIRED: { label: 'Sin validación', bg: ui.colors.surface3, text: ui.colors.textMuted },
+  PENDING_OPPONENT: { label: 'Esperando rival', bg: ui.colors.warningSoft, text: ui.colors.warning },
+  SCHEDULED: { label: 'Programado', bg: ui.colors.primarySoft, text: ui.colors.primary },
+  DECLINED: { label: 'Rechazado', bg: ui.colors.dangerSoft, text: ui.colors.danger },
+  COMPLETED: { label: 'Finalizado', bg: ui.colors.surface3, text: ui.colors.textSecondary },
+  EXPIRED: { label: 'Vencido', bg: ui.colors.surface3, text: ui.colors.textMuted },
 };
 
 type StatusPillProps = {

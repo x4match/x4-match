@@ -570,11 +570,16 @@ export class MatchesRepository {
          LEFT JOIN court_availability_slots cas ON cas.id = m.court_slot_id
          WHERE m.status = 'OPEN'
            AND m.date > NOW()
-           AND COALESCE(m.level_min, 0) <= $2
-           AND COALESCE(m.level_max, 1000) >= $1
            AND (
-             $10::int IS NULL
-             OR (COALESCE(m.level_min, 0) <= $11::int AND COALESCE(m.level_max, 1000) >= $10::int)
+             m.mode IS DISTINCT FROM 'competitive'
+             OR (
+               COALESCE(m.level_min, 0) <= $2
+               AND COALESCE(m.level_max, 1000) >= $1
+               AND (
+                 $10::int IS NULL
+                 OR (COALESCE(m.level_min, 0) <= $11::int AND COALESCE(m.level_max, 1000) >= $10::int)
+               )
+             )
            )
        )
        SELECT mp.*,

@@ -34,3 +34,9 @@ services:
         sync: false
       - key: CLOUDINARY_API_SECRET
         sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        value: x4 match <no-reply@x4match.com>
+      - key: EMAIL_ADMIN_NOTIFY
+        sync: false

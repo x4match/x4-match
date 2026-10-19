@@ -4,41 +4,137 @@ import {
   Text,
   Alert,
   ScrollView,
-  KeyboardAvoidingView,
-  Platform,
   ActivityIndicator,
   Image,
   InteractionManager,
+  TextInput,
+  TouchableOpacity,
+  Pressable,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/contexts/AuthContext';
-import { isClub } from '@/lib/roles';
+import { postAuthRoute } from '@/lib/auth/onboarding';
 import { api } from '@/lib/api';
-import { AppleSignInButton } from '@/components/auth/AppleSignInButton';
 import {
   getAppleSignInErrorMessage,
   isApplePlatform,
   isAppleSignInAvailable,
   setPendingAppleSignup,
   signInWithApple,
-} from '@/lib/apple-auth';
+} from '@/lib/auth/apple-auth';
 import {
   getGoogleSignInErrorMessage,
   isGoogleSignInAvailable,
+  setPendingGoogleSignup,
   signInWithGoogle,
-} from '@/lib/google-auth';
-import { ui } from '@/theme/tokens';
-import { Screen, InputField, PrimaryButton, FadeInUp, PressableScale } from '@/components/padely';
+} from '@/lib/auth/google-auth';
+import { ui, fontFamily } from '@/theme/tokens';
+import { Screen, FadeInUp, PressableScale, KeyboardAvoid } from '@/components/x4match';
+import {
+  getAccountVerificationState,
+  getEmailNotVerified,
+  pendingVerificationHref,
+  verifyEmailHref,
+} from '@/lib/auth/verification';
+
+const LIME = '#D7FF00';
+const MUTED = '#8E8E9F';
+const FIELD_BORDER = 'rgba(255,255,255,0.14)';
+
+const LOGO = require('../../assets/figma/shared/x4match-logo.png');
+const ICON_EMAIL = require('../../assets/figma/auth/email.png');
+const ICON_PASSWORD = require('../../assets/figma/auth/password.png');
+const ICON_GOOGLE = require('../../assets/figma/auth/google.png');
+const ICON_APPLE = require('../../assets/figma/auth/apple.png');
 
 async function navigateAfterAuth(go: () => void) {
-  // Espera a que se cierre el overlay de Google / teclado antes de montar tabs.
   await new Promise<void>((resolve) => {
     InteractionManager.runAfterInteractions(() => resolve());
   });
   await new Promise<void>((resolve) => setTimeout(resolve, 50));
   go();
+}
+
+function AuthField({
+  label,
+  icon,
+  error,
+  secureTextEntry,
+  ...props
+}: {
+  label: string;
+  icon: number;
+  error?: string;
+  value: string;
+  onChangeText: (text: string) => void;
+  placeholder: string;
+  secureTextEntry?: boolean;
+  keyboardType?: 'email-address' | 'default';
+  autoCapitalize?: 'none' | 'sentences';
+}) {
+  const [showPassword, setShowPassword] = useState(false);
+  const isPassword = Boolean(secureTextEntry);
+
+  return (
+    <View style={{ marginBottom: 16, width: '100%' }}>
+      <Text
+        style={{
+          fontSize: 14,
+          fontFamily: fontFamily.regular,
+          fontWeight: '600',
+          color: '#FFFFFF',
+          marginBottom: 8,
+        }}
+      >
+        {label}
+      </Text>
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          borderWidth: 1,
+          borderColor: error ? ui.colors.danger : FIELD_BORDER,
+          borderRadius: 16,
+          backgroundColor: '#0A0A0A',
+          minHeight: 52,
+          paddingHorizontal: 14,
+          gap: 10,
+        }}
+      >
+        <Image source={icon} style={{ width: 14, height: 14 }} resizeMode="contain" />
+        <TextInput
+          {...props}
+          placeholderTextColor={MUTED}
+          secureTextEntry={isPassword && !showPassword}
+          style={{
+            flex: 1,
+            fontSize: 15,
+            fontFamily: fontFamily.regular,
+            color: '#FFFFFF',
+            paddingVertical: 14,
+          }}
+        />
+        {isPassword ? (
+          <TouchableOpacity
+            onPress={() => setShowPassword((v) => !v)}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityLabel={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+          >
+            <Ionicons
+              name={showPassword ? 'eye-outline' : 'eye-off-outline'}
+              size={20}
+              color={MUTED}
+            />
+          </TouchableOpacity>
+        ) : null}
+      </View>
+      {error ? (
+        <Text style={{ color: ui.colors.danger, fontSize: 12, marginTop: 6 }}>{error}</Text>
+      ) : null}
+    </View>
+  );
 }
 
 export default function LoginScreen() {
@@ -51,6 +147,7 @@ export default function LoginScreen() {
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
   const { login } = useAuth();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const googleEnabled = isGoogleSignInAvailable();
   const socialBusy = loading || googleLoading || appleLoading;
   const showApple = isApplePlatform() && appleEnabled;
@@ -75,11 +172,26 @@ export default function LoginScreen() {
     try {
       const response = await api.post('/auth/login', { email, password });
       await login(response.data.access_token, response.data.user);
-      const role = response.data.user?.role;
       await navigateAfterAuth(() => {
-        router.replace(isClub(role) ? '/(tabs)/gerente' : '/(tabs)/home');
+        router.replace(postAuthRoute(response.data.user) as any);
       });
     } catch (error: any) {
+      const unverifiedEmail = getEmailNotVerified(error);
+      if (unverifiedEmail) {
+        router.push(
+          verifyEmailHref({
+            email: unverifiedEmail.email ?? email.trim(),
+            devCode: unverifiedEmail.devCode,
+            from: 'login',
+          }) as any,
+        );
+        return;
+      }
+      const verification = getAccountVerificationState(error);
+      if (verification) {
+        router.push(pendingVerificationHref(verification, email.trim()) as any);
+        return;
+      }
       const message = error.response?.data?.message || 'Error al iniciar sesión';
       Alert.alert('Error', typeof message === 'string' ? message : JSON.stringify(message));
     } finally {
@@ -92,21 +204,29 @@ export default function LoginScreen() {
     try {
       const idToken = await signInWithGoogle();
       const response = await api.post('/auth/google', { idToken });
-      await login(response.data.access_token, response.data.user);
-      const role = response.data.user?.role;
-      if (response.data.isNewUser && !isClub(role)) {
-        await navigateAfterAuth(() => router.replace('/onboarding'));
+      if (response.data?.needsRegistration) {
+        setPendingGoogleSignup({
+          idToken,
+          email: response.data.email,
+          fullName: response.data.fullName,
+          photo: response.data.photo,
+        });
+        await navigateAfterAuth(() => router.push('/(auth)/register'));
         return;
       }
+      await login(response.data.access_token, response.data.user);
       await navigateAfterAuth(() => {
-        router.replace(isClub(role) ? '/(tabs)/gerente' : '/(tabs)/home');
+        router.replace(postAuthRoute(response.data.user) as any);
       });
     } catch (error: any) {
+      const verification = getAccountVerificationState(error);
+      if (verification) {
+        await navigateAfterAuth(() => router.push(pendingVerificationHref(verification) as any));
+        return;
+      }
       const apiMessage = error.response?.data?.message;
       const message =
-        typeof apiMessage === 'string'
-          ? apiMessage
-          : getGoogleSignInErrorMessage(error);
+        typeof apiMessage === 'string' ? apiMessage : getGoogleSignInErrorMessage(error);
       if (message !== 'Inicio de sesión cancelado') {
         Alert.alert('Error', message);
       }
@@ -131,11 +251,15 @@ export default function LoginScreen() {
         return;
       }
       await login(response.data.access_token, response.data.user);
-      const role = response.data.user?.role;
       await navigateAfterAuth(() => {
-        router.replace(isClub(role) ? '/(tabs)/gerente' : '/(tabs)/home');
+        router.replace(postAuthRoute(response.data.user) as any);
       });
     } catch (error: any) {
+      const verification = getAccountVerificationState(error);
+      if (verification) {
+        await navigateAfterAuth(() => router.push(pendingVerificationHref(verification) as any));
+        return;
+      }
       const apiMessage = error.response?.data?.message;
       const message =
         typeof apiMessage === 'string' ? apiMessage : getAppleSignInErrorMessage(error);
@@ -149,79 +273,118 @@ export default function LoginScreen() {
 
   return (
     <Screen>
-      <LinearGradient colors={[ui.colors.bg, ui.colors.bgElevated, ui.colors.surface0]} style={{ flex: 1 }}>
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-          <ScrollView
+      <View style={{ flex: 1, backgroundColor: '#000000' }}>
+        <KeyboardAvoid style={{ flex: 1 }}>
+        <ScrollView
             contentContainerStyle={{
               flexGrow: 1,
               justifyContent: 'center',
-              paddingHorizontal: ui.spacing.lg,
-              paddingVertical: 48,
+              paddingHorizontal: 24,
+              paddingTop: Math.max(insets.top, 16),
+              paddingBottom: Math.max(insets.bottom, 24) + 16,
             }}
             keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
           >
             <FadeInUp index={0}>
-              <View style={{ alignItems: 'center', marginBottom: 40 }}>
+              <View style={{ alignItems: 'center', marginBottom: 36 }}>
                 <Image
-                  source={require('../../assets/x4match.png')}
+                  source={LOGO}
                   accessibilityLabel="x4 match"
-                  style={{
-                    width: 132,
-                    height: 132,
-                    borderRadius: 32,
-                    marginBottom: 20,
-                  }}
+                  style={{ width: 148, height: 148 }}
+                  resizeMode="contain"
                 />
-                <Text style={[ui.typography.bodySm, { color: ui.colors.textSecondary, marginTop: 6 }]}>
-                  Tu rendimiento de pádel, vivo
+                <Text
+                  style={{
+                    marginTop: 10,
+                    fontSize: 12,
+                    letterSpacing: 1.4,
+                    fontFamily: fontFamily.regular,
+                    fontWeight: '600',
+                    color: '#FFFFFF',
+                    textAlign: 'center',
+                  }}
+                >
+                  JUGÁ. COMPETÍ. SUBÍ DE NIVEL
                 </Text>
               </View>
             </FadeInUp>
 
             <FadeInUp index={1}>
-              <InputField
+              <AuthField
                 label="Email"
-                placeholder="tu@email.com"
+                icon={ICON_EMAIL}
+                placeholder="Ingresá tu email"
                 value={email}
                 onChangeText={setEmail}
                 error={errors.email}
                 keyboardType="email-address"
                 autoCapitalize="none"
-                leftIcon={<Ionicons name="mail-outline" size={20} color={ui.colors.textMuted} />}
               />
-              <InputField
+              <AuthField
                 label="Contraseña"
-                placeholder="Tu contraseña"
+                icon={ICON_PASSWORD}
+                placeholder="Ingresar contraseña"
                 value={password}
                 onChangeText={setPassword}
                 error={errors.password}
                 secureTextEntry
-                leftIcon={<Ionicons name="lock-closed-outline" size={20} color={ui.colors.textMuted} />}
+                autoCapitalize="none"
               />
+
               <PressableScale
                 onPress={() => router.push('/(auth)/forgot-password')}
                 accessibilityRole="link"
                 accessibilityLabel="Olvidé mi contraseña"
-                style={{ alignSelf: 'flex-end', marginTop: -8, marginBottom: 16, minHeight: 36, justifyContent: 'center' }}
+                style={{
+                  alignSelf: 'flex-end',
+                  marginTop: -4,
+                  marginBottom: 20,
+                  minHeight: 32,
+                  justifyContent: 'center',
+                }}
               >
                 <Text
                   style={{
-                    color: ui.colors.primary,
-                    fontFamily: ui.typography.label.fontFamily,
-                    fontSize: 14,
+                    color: LIME,
+                    fontFamily: fontFamily.regular,
+                    fontSize: 13,
+                    fontWeight: '600',
                   }}
                 >
                   ¿Olvidaste tu contraseña?
                 </Text>
               </PressableScale>
-              <PrimaryButton
-                label="Iniciar sesión"
-                onPress={handleLogin}
-                loading={loading}
+
+              <PressableScale
+                onPress={() => void handleLogin()}
                 disabled={socialBusy}
-                fullWidth
-                size="lg"
-              />
+                accessibilityRole="button"
+                accessibilityLabel="Iniciar sesión"
+                style={{
+                  backgroundColor: LIME,
+                  borderRadius: 999,
+                  minHeight: 54,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  opacity: socialBusy ? 0.7 : 1,
+                }}
+              >
+                {loading ? (
+                  <ActivityIndicator color="#000" />
+                ) : (
+                  <Text
+                    style={{
+                      color: '#000000',
+                      fontSize: 16,
+                      fontWeight: '700',
+                      fontFamily: fontFamily.regular,
+                    }}
+                  >
+                    Iniciar sesión
+                  </Text>
+                )}
+              </PressableScale>
 
               {showSocial ? (
                 <>
@@ -229,61 +392,118 @@ export default function LoginScreen() {
                     style={{
                       flexDirection: 'row',
                       alignItems: 'center',
+                      marginVertical: 22,
                       gap: 12,
-                      marginVertical: 20,
                     }}
                   >
-                    <View style={{ flex: 1, height: 1, backgroundColor: ui.colors.border }} />
-                    <Text style={{ color: ui.colors.textMuted, fontSize: 13 }}>o</Text>
-                    <View style={{ flex: 1, height: 1, backgroundColor: ui.colors.border }} />
+                    <View style={{ flex: 1, height: 1, backgroundColor: 'rgba(255,255,255,0.12)' }} />
+                    <View
+                      style={{
+                        width: 10,
+                        height: 10,
+                        borderRadius: 5,
+                        borderWidth: 1.5,
+                        borderColor: 'rgba(255,255,255,0.22)',
+                      }}
+                    />
+                    <View style={{ flex: 1, height: 1, backgroundColor: 'rgba(255,255,255,0.12)' }} />
                   </View>
 
-                  {showApple ? (
-                    <AppleSignInButton
-                      loading={appleLoading}
-                      disabled={socialBusy}
-                      onPress={() => void handleAppleLogin()}
-                      style={{ marginBottom: googleEnabled ? 12 : 0 }}
-                    />
-                  ) : null}
+                  <View style={{ flexDirection: 'row', width: '100%', gap: 10 }}>
+                    {showApple ? (
+                      <Pressable
+                        onPress={() => void handleAppleLogin()}
+                        disabled={socialBusy}
+                        accessibilityRole="button"
+                        accessibilityLabel="Iniciar sesión con Apple"
+                        style={{
+                          flex: 1,
+                          minWidth: 0,
+                          minHeight: 48,
+                          borderRadius: 22,
+                          backgroundColor: '#FFFFFF',
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 8,
+                          paddingHorizontal: 10,
+                          opacity: socialBusy ? 0.7 : 1,
+                        }}
+                      >
+                        {appleLoading ? (
+                          <ActivityIndicator color="#000" />
+                        ) : (
+                          <>
+                            <Image
+                              source={ICON_APPLE}
+                              style={{ width: 16, height: 16 }}
+                              resizeMode="contain"
+                            />
+                            <Text
+                              style={{
+                                color: '#000000',
+                                fontSize: 12,
+                                fontWeight: '600',
+                                fontFamily: fontFamily.regular,
+                                flexShrink: 1,
+                              }}
+                              numberOfLines={1}
+                            >
+                              Iniciar sesión con Apple
+                            </Text>
+                          </>
+                        )}
+                      </Pressable>
+                    ) : null}
 
-                  {googleEnabled ? (
-                    <PressableScale
-                      onPress={handleGoogleLogin}
-                      disabled={socialBusy}
-                      accessibilityRole="button"
-                      accessibilityLabel="Continuar con Google"
-                      style={{
-                        minHeight: 52,
-                        borderRadius: ui.radius.lg,
-                        borderWidth: 1,
-                        borderColor: ui.colors.border,
-                        backgroundColor: ui.colors.surface0,
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: 10,
-                        opacity: socialBusy ? 0.7 : 1,
-                      }}
-                    >
-                      {googleLoading ? (
-                        <ActivityIndicator color={ui.colors.textPrimary} />
-                      ) : (
-                        <>
-                          <Ionicons name="logo-google" size={20} color={ui.colors.textPrimary} />
-                          <Text
-                            style={{
-                              color: ui.colors.textPrimary,
-                              fontFamily: ui.typography.label.fontFamily,
-                              fontSize: 16,
-                            }}
-                          >
-                            Continuar con Google
-                          </Text>
-                        </>
-                      )}
-                    </PressableScale>
-                  ) : null}
+                    {googleEnabled ? (
+                      <Pressable
+                        onPress={() => void handleGoogleLogin()}
+                        disabled={socialBusy}
+                        accessibilityRole="button"
+                        accessibilityLabel="Continuar con Google"
+                        style={{
+                          flex: 1,
+                          minWidth: 0,
+                          minHeight: 48,
+                          borderRadius: 22,
+                          borderWidth: 1,
+                          borderColor: FIELD_BORDER,
+                          backgroundColor: '#111111',
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 8,
+                          paddingHorizontal: 10,
+                          opacity: socialBusy ? 0.7 : 1,
+                        }}
+                      >
+                        {googleLoading ? (
+                          <ActivityIndicator color="#FFFFFF" />
+                        ) : (
+                          <>
+                            <Image
+                              source={ICON_GOOGLE}
+                              style={{ width: 18, height: 18 }}
+                              resizeMode="contain"
+                            />
+                            <Text
+                              style={{
+                                color: '#FFFFFF',
+                                fontSize: 12,
+                                fontWeight: '600',
+                                fontFamily: fontFamily.regular,
+                                flexShrink: 1,
+                              }}
+                              numberOfLines={1}
+                            >
+                              Continuar con Google
+                            </Text>
+                          </>
+                        )}
+                      </Pressable>
+                    ) : null}
+                  </View>
                 </>
               ) : null}
             </FadeInUp>
@@ -298,20 +518,19 @@ export default function LoginScreen() {
                 <Text
                   style={{
                     textAlign: 'center',
-                    color: ui.colors.textMuted,
-                    fontFamily: ui.typography.body.fontFamily,
+                    color: MUTED,
+                    fontFamily: fontFamily.regular,
+                    fontSize: 14,
                   }}
                 >
                   ¿No tenés cuenta?{' '}
-                  <Text style={{ color: ui.colors.primary, fontFamily: ui.typography.label.fontFamily }}>
-                    Registrate
-                  </Text>
+                  <Text style={{ color: LIME, fontWeight: '700' }}>Registrate</Text>
                 </Text>
               </PressableScale>
             </FadeInUp>
           </ScrollView>
-        </KeyboardAvoidingView>
-      </LinearGradient>
+        </KeyboardAvoid>
+      </View>
     </Screen>
   );
 }

@@ -59,7 +59,7 @@ Fuente de verdad visual para la app móvil x4 match.
 
 ## Tipografía
 
-- Familia: **Geist** (400–800)
+- Familia: **Utendo Regular** (fuente global)
 - Display/H1 para títulos de pantalla
 - Label semibold para botones y chips
 - Stat tabular para ratings, puntos, posiciones
@@ -89,7 +89,7 @@ Importar desde `@/components/ui`:
 - `Sheet`, `ToastProvider`, `FloatingTabBar`
 - Theme: `ThemeProvider`, `useTheme` (`@/contexts/ThemeContext`)
 
-Componentes de dominio siguen en `@/components/padely` (re-exportan ui + lógica específica).
+Componentes de dominio siguen en `@/components/x4match` (re-exportan ui + lógica específica).
 
 ## Decisions log
 
