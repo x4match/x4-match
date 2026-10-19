@@ -1,4 +1,4 @@
-export const MIN_PLAYER_AGE = 16;
+export const MIN_PLAYER_AGE = 10;
 
 /** Edad en años cumplidos a partir de una fecha de nacimiento. */
 export function ageFromBirthDate(date: Date | null | undefined): number | null {

@@ -27,7 +27,7 @@ export const termsPlayers: LegalDocument = {
       title: '3. Registro y elegibilidad',
       paragraphs: [
         'Debés proporcionar información veraz y mantenerla actualizada. Sos responsable de la confidencialidad de tu cuenta.',
-        'La edad mínima para usar la Plataforma es 16 años. Si tenés entre 16 y 18 años, declarás contar con autorización de tu madre, padre o tutor.',
+        'La edad mínima para usar la Plataforma es 10 años. Si tenés entre 10 y 18 años, declarás contar con autorización de tu madre, padre o tutor.',
         'Está prohibido crear múltiples cuentas para manipular rankings, resultados o matchmaking.',
       ],
     },
@@ -240,7 +240,7 @@ export const privacyPolicy: LegalDocument = {
     {
       title: '9. Menores',
       paragraphs: [
-        'No recopilamos intencionalmente datos de menores de 16 años. Si detectamos una cuenta de menor sin autorización, podremos suspenderla y eliminar los datos.',
+        'No recopilamos intencionalmente datos de menores de 10 años. Los usuarios de entre 10 y 18 años deben contar con autorización de su madre, padre o tutor. Si detectamos una cuenta de menor sin autorización, podremos suspenderla y eliminar los datos.',
       ],
     },
     {

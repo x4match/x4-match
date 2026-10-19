@@ -459,8 +459,8 @@ export class UsersService {
         if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
           age -= 1;
         }
-        if (age < 16) {
-          throw new BadRequestException('Debés tener al menos 16 años');
+        if (age < 10) {
+          throw new BadRequestException('Debés tener al menos 10 años');
         }
         if (age > 120) {
           throw new BadRequestException('Fecha de nacimiento inválida');
