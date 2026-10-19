@@ -20,7 +20,7 @@ import {
   resolveMatchLevelBand,
   categoryOverlapsMatchLevel,
 } from '../common/utils/level-range.util';
-import { resolveVisibleLevelCategory, resolvePlayerRating, PLACEMENT_ELO_K_FACTOR, PLACEMENT_MATCHES_REQUIRED, resolveMatchGenderFromPartner, normalizeBinaryGender, playerFitsMatchGender, type MatchGender } from '../common/utils';
+import { resolveVisibleLevelCategory, resolvePlayerRating, PLACEMENT_ELO_K_FACTOR, isPlacementComplete, resolvePlacementCategory, getInitialRatingForCategory, PLAYER_CATEGORIES, type PlayerCategory, resolveMatchGenderFromPartner, normalizeBinaryGender, playerFitsMatchGender, type MatchGender } from '../common/utils';
 import { CreateMatchDto, type CourtBookingMode } from './dto/create-match.dto';
 import { ListOpenMatchesQueryDto } from './dto/list-open-matches.query.dto';
 import { MatchInviteDto } from './dto/match-invite.dto';
@@ -1161,7 +1161,7 @@ export class MatchesService {
     await this.clubPointsService.awardForFinishedMatch(matchId, winnerTeam);
     await this.competitiveScoringService.awardForFinishedMatch(matchId);
     await this.applyMatchRatings(matchId, winnerTeam);
-    await this.advancePlacementIfCompetitive(matchId);
+    await this.advancePlacementIfCompetitive(matchId, winnerTeam);
     await this.badgesService.evaluateForFinishedMatch(matchId);
     await this.challengesService.completeFromMatch(matchId);
     const detail = await this.findOne(matchId);
@@ -1169,20 +1169,51 @@ export class MatchesService {
     return true;
   }
 
-  private async advancePlacementIfCompetitive(matchId: string) {
+  private async advancePlacementIfCompetitive(
+    matchId: string,
+    winnerTeam: string | null | undefined,
+  ) {
     const match = await this.matchesRepository.getById(matchId);
     if (!match || match.mode !== 'competitive' || match.tournament_id) return;
 
     const participants = await this.matchesRepository.getParticipantsForRating(matchId);
-    const provisionalUserIds = participants
-      .filter((player) => player.categoryStatus === 'provisional')
-      .map((player) => player.userId);
-    if (provisionalUserIds.length === 0) return;
+    if (!participants.some((player) => player.categoryStatus === 'provisional')) return;
 
-    await this.matchesRepository.advancePlacementForCompetitiveMatch(
-      provisionalUserIds,
-      PLACEMENT_MATCHES_REQUIRED,
+    const neededPlayers = Number(match.needed_players) || participants.length;
+    const { teamA, teamB } = splitParticipantsByTeam(participants, neededPlayers);
+    const normalizedWinner = String(winnerTeam || '').toUpperCase().trim();
+    const winners = normalizedWinner === 'A' ? teamA : normalizedWinner === 'B' ? teamB : [];
+    const winnerIds = new Set(winners.map((player) => player.userId));
+
+    const progress = await this.matchesRepository.advancePlacementForCompetitiveMatch(
+      participants
+        .filter((player) => player.categoryStatus === 'provisional')
+        .map((player) => ({ userId: player.userId, won: winnerIds.has(player.userId) })),
     );
+
+    for (const player of progress) {
+      if (!isPlacementComplete(player.matchesPlayed)) continue;
+
+      const declared = (PLAYER_CATEGORIES as readonly string[]).includes(
+        player.declaredCategory ?? '',
+      )
+        ? (player.declaredCategory as PlayerCategory)
+        : null;
+      if (!declared) {
+        await this.matchesRepository.confirmPlacement(player.userId);
+        continue;
+      }
+
+      const category = resolvePlacementCategory({
+        declaredCategory: declared,
+        wins: player.wins,
+        matchesPlayed: player.matchesPlayed,
+      });
+      await this.matchesRepository.confirmPlacement(player.userId, {
+        category,
+        rating: getInitialRatingForCategory(category),
+      });
+    }
   }
 
   private async applyMatchRatings(matchId: string, winnerTeam: string | null | undefined) {

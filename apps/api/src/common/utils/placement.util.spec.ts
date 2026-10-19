@@ -1,6 +1,7 @@
 import {
   isPlacementComplete,
   normalizeCategoryStatus,
+  resolvePlacementCategory,
   resolveVisibleLevelCategory,
 } from './placement.util';
 import {
@@ -50,5 +51,26 @@ describe('placement.util', () => {
     expect(isPlacementComplete(PLACEMENT_MATCHES_REQUIRED)).toBe(true);
     expect(normalizeCategoryStatus('provisional')).toBe('provisional');
     expect(normalizeCategoryStatus('confirmed')).toBe('confirmed');
+  });
+
+  describe('resolvePlacementCategory', () => {
+    it('confirma la categoría con 3 o más victorias', () => {
+      expect(resolvePlacementCategory({ declaredCategory: '5ta', wins: 3 })).toBe('5ta');
+      expect(resolvePlacementCategory({ declaredCategory: '5ta', wins: 5 })).toBe('5ta');
+    });
+
+    it('baja una categoría con 3 o 4 derrotas', () => {
+      expect(resolvePlacementCategory({ declaredCategory: '5ta', wins: 2 })).toBe('6ta');
+      expect(resolvePlacementCategory({ declaredCategory: '5ta', wins: 1 })).toBe('6ta');
+    });
+
+    it('baja dos categorías si pierde los 5 partidos', () => {
+      expect(resolvePlacementCategory({ declaredCategory: '5ta', wins: 0 })).toBe('7ma');
+    });
+
+    it('no baja de 8va', () => {
+      expect(resolvePlacementCategory({ declaredCategory: '7ma', wins: 0 })).toBe('8va');
+      expect(resolvePlacementCategory({ declaredCategory: '8va', wins: 1 })).toBe('8va');
+    });
   });
 });

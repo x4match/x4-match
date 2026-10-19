@@ -40,6 +40,8 @@ export {
   normalizeCategoryStatus,
   resolveVisibleLevelCategory,
   isPlacementComplete,
+  resolvePlacementCategory,
+  PLACEMENT_WINS_TO_CONFIRM,
 } from './placement.util';
 export {
   normalizeBinaryGender,

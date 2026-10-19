@@ -964,19 +964,64 @@ export class MatchesRepository {
     }));
   }
 
-  async advancePlacementForCompetitiveMatch(userIds: string[], matchesRequired: number) {
-    if (userIds.length === 0) return;
+  async advancePlacementForCompetitiveMatch(
+    players: Array<{ userId: string; won: boolean }>,
+  ): Promise<
+    Array<{
+      userId: string;
+      matchesPlayed: number;
+      wins: number;
+      declaredCategory: string | null;
+    }>
+  > {
+    if (players.length === 0) return [];
+    const result = await this.db.query(
+      `UPDATE players p
+       SET placement_matches_played = p.placement_matches_played + 1,
+           placement_wins = p.placement_wins + CASE WHEN v.won THEN 1 ELSE 0 END,
+           updated_at = NOW()
+       FROM UNNEST($1::uuid[], $2::boolean[]) AS v(user_id, won)
+       WHERE p.user_id = v.user_id
+         AND p.category_status = 'provisional'
+       RETURNING p.user_id, p.placement_matches_played, p.placement_wins, p.extras`,
+      [players.map((player) => player.userId), players.map((player) => player.won)],
+    );
+    return result.rows.map((row) => {
+      const extras =
+        row.extras && typeof row.extras === 'object' && !Array.isArray(row.extras)
+          ? row.extras
+          : {};
+      return {
+        userId: row.user_id as string,
+        matchesPlayed: Number(row.placement_matches_played),
+        wins: Number(row.placement_wins),
+        declaredCategory:
+          typeof extras.declaredCategory === 'string' ? extras.declaredCategory : null,
+      };
+    });
+  }
+
+  async confirmPlacement(
+    userId: string,
+    result?: { category: string; rating: number },
+  ) {
+    if (!result) {
+      await this.db.query(
+        `UPDATE players
+         SET category_status = 'confirmed', updated_at = NOW()
+         WHERE user_id = $1 AND category_status = 'provisional'`,
+        [userId],
+      );
+      return;
+    }
     await this.db.query(
       `UPDATE players
-       SET placement_matches_played = placement_matches_played + 1,
-           category_status = CASE
-             WHEN placement_matches_played + 1 >= $1 THEN 'confirmed'
-             ELSE category_status
-           END,
+       SET category_status = 'confirmed',
+           rating = $2,
+           extras = COALESCE(extras, '{}'::jsonb) || jsonb_build_object('declaredCategory', $3::text),
            updated_at = NOW()
-       WHERE user_id = ANY($2::uuid[])
-         AND category_status = 'provisional'`,
-      [matchesRequired, userIds],
+       WHERE user_id = $1 AND category_status = 'provisional'`,
+      [userId, result.rating, result.category],
     );
   }
 
