@@ -66,8 +66,21 @@ export const VERIFICATION_STATUS_LABELS: Record<string, string> = {
   REJECTED: 'Rechazado',
 };
 
+export const PLAYER_POSITION_LABELS: Record<string, string> = {
+  drive: 'Drive',
+  reves: 'Revés',
+  ambos: 'Ambos lados',
+};
+
+export const CATEGORY_STATUS_LABELS: Record<string, string> = {
+  provisional: 'Provisoria',
+  confirmed: 'Confirmada',
+};
+
 export type LabelCategory =
   | 'userRole'
+  | 'playerPosition'
+  | 'categoryStatus'
   | 'verificationStatus'
   | 'billingStatus'
   | 'mpStatus'
@@ -79,6 +92,8 @@ export type LabelCategory =
 
 const LABEL_MAPS: Record<LabelCategory, Record<string, string>> = {
   userRole: USER_ROLE_LABELS,
+  playerPosition: PLAYER_POSITION_LABELS,
+  categoryStatus: CATEGORY_STATUS_LABELS,
   verificationStatus: VERIFICATION_STATUS_LABELS,
   billingStatus: BILLING_STATUS_LABELS,
   mpStatus: MP_STATUS_LABELS,
@@ -142,6 +157,10 @@ export function badgeTone(
     if (v === 'CONFIRMED' || v === 'IN_PROGRESS' || v === 'FULL') return 'success';
     if (v === 'CANCELLED' || v === 'DISPUTED') return 'danger';
     if (v === 'FINISHED') return 'neutral';
+  }
+  if (category === 'categoryStatus') {
+    if (v === 'confirmed') return 'success';
+    if (v === 'provisional') return 'warning';
   }
   if (category === 'userRole' && v === 'SUPER_ADMIN') return 'success';
   return 'neutral';
