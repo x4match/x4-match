@@ -3,24 +3,12 @@
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, Building2, CalendarDays, ChevronRight, Handshake, Mail, MapPin } from 'lucide-react';
+import { Building2, CalendarDays, ChevronRight, Handshake, Mail, MapPin } from 'lucide-react';
+import { DetailBack, DetailHero, formatDate, initials } from '@/components/DetailHero';
 import { StatusBadge, StatusText } from '@/components/StatusBadge';
 import { api } from '@/lib/api';
 
 const PLACEMENT_MATCHES_REQUIRED = 5;
-
-function initials(name?: string | null) {
-  return (name || '?')
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase())
-    .join('');
-}
-
-function formatDate(value: string) {
-  return new Date(value).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' });
-}
 
 export default function UserDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -39,38 +27,32 @@ export default function UserDetailPage() {
 
   return (
     <div>
-      <div className="detail-back">
-        <Link href="/users" className="tile-link">
-          <ArrowLeft size={14} aria-hidden /> Usuarios
-        </Link>
-      </div>
+      <DetailBack href="/users" label="Usuarios" />
 
-      <section className="card detail-hero">
-        <span className="ops-avatar detail-avatar">
-          {player?.photo_url ? <img src={player.photo_url} alt="" /> : initials(user.name)}
-        </span>
-        <div className="detail-hero-main">
-          <h1 className="detail-hero-title">{user.name}</h1>
-          {player?.nickname ? <p className="detail-hero-handle">@{player.nickname}</p> : null}
-          <ul className="detail-meta">
-            <li>
-              <Mail size={14} aria-hidden /> {user.email}
-            </li>
-            {player?.city ? (
-              <li>
-                <MapPin size={14} aria-hidden /> {player.city}
-              </li>
-            ) : null}
-            <li>
-              <CalendarDays size={14} aria-hidden /> Alta {formatDate(user.created_at)}
-            </li>
-          </ul>
-        </div>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <StatusBadge value={user.role} category="userRole" />
-          {player ? <StatusBadge value={player.category_status} category="categoryStatus" /> : null}
-        </div>
-      </section>
+      <DetailHero
+        title={user.name}
+        avatar={player?.photo_url ? <img src={player.photo_url} alt="" /> : initials(user.name)}
+        handle={player?.nickname ? `@${player.nickname}` : null}
+        meta={[
+          <>
+            <Mail size={14} aria-hidden /> {user.email}
+          </>,
+          player?.city ? (
+            <>
+              <MapPin size={14} aria-hidden /> {player.city}
+            </>
+          ) : null,
+          <>
+            <CalendarDays size={14} aria-hidden /> Alta {formatDate(user.created_at)}
+          </>,
+        ]}
+        badges={
+          <>
+            <StatusBadge value={user.role} category="userRole" />
+            {player ? <StatusBadge value={player.category_status} category="categoryStatus" /> : null}
+          </>
+        }
+      />
 
       {player ? (
         <div className="ops-kpi-grid" style={{ marginBottom: 16 }}>

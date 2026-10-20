@@ -77,10 +77,54 @@ export const CATEGORY_STATUS_LABELS: Record<string, string> = {
   confirmed: 'Confirmada',
 };
 
+export const MATCH_MODE_LABELS: Record<string, string> = {
+  friendly: 'Amistoso',
+  competitive: 'Competitivo',
+};
+
+export const MATCH_GENDER_LABELS: Record<string, string> = {
+  male: 'Masculino',
+  female: 'Femenino',
+  mixed: 'Mixto',
+  open: 'Libre',
+};
+
+export const COURT_BOOKING_LABELS: Record<string, string> = {
+  none: 'Sin reserva',
+  external: 'Reserva externa',
+  in_app: 'Reservada en la app',
+};
+
+export const MATCH_PLAYER_STATUS_LABELS: Record<string, string> = {
+  JOINED: 'Anotado',
+  CONFIRMED: 'Confirmado',
+  REQUESTED: 'Solicitó unirse',
+  WAITLIST: 'En espera',
+  DECLINED: 'Rechazado',
+  LEFT: 'Se bajó',
+};
+
+export const RESULT_STATUS_LABELS: Record<string, string> = {
+  pending: 'Pendiente',
+  confirmed: 'Confirmado',
+  disputed: 'Disputado',
+};
+
+export const GUEST_ROLE_LABELS: Record<string, string> = {
+  partner: 'Compañero',
+  opponent: 'Rival',
+};
+
 export type LabelCategory =
   | 'userRole'
   | 'playerPosition'
   | 'categoryStatus'
+  | 'matchMode'
+  | 'matchGender'
+  | 'courtBooking'
+  | 'matchPlayerStatus'
+  | 'resultStatus'
+  | 'guestRole'
   | 'verificationStatus'
   | 'billingStatus'
   | 'mpStatus'
@@ -94,6 +138,12 @@ const LABEL_MAPS: Record<LabelCategory, Record<string, string>> = {
   userRole: USER_ROLE_LABELS,
   playerPosition: PLAYER_POSITION_LABELS,
   categoryStatus: CATEGORY_STATUS_LABELS,
+  matchMode: MATCH_MODE_LABELS,
+  matchGender: MATCH_GENDER_LABELS,
+  courtBooking: COURT_BOOKING_LABELS,
+  matchPlayerStatus: MATCH_PLAYER_STATUS_LABELS,
+  resultStatus: RESULT_STATUS_LABELS,
+  guestRole: GUEST_ROLE_LABELS,
   verificationStatus: VERIFICATION_STATUS_LABELS,
   billingStatus: BILLING_STATUS_LABELS,
   mpStatus: MP_STATUS_LABELS,
@@ -158,6 +208,17 @@ export function badgeTone(
     if (v === 'CANCELLED' || v === 'DISPUTED') return 'danger';
     if (v === 'FINISHED') return 'neutral';
   }
+  if (category === 'matchPlayerStatus') {
+    if (v === 'JOINED' || v === 'CONFIRMED') return 'success';
+    if (v === 'REQUESTED' || v === 'WAITLIST') return 'warning';
+    if (v === 'DECLINED' || v === 'LEFT') return 'danger';
+  }
+  if (category === 'resultStatus') {
+    if (v === 'confirmed') return 'success';
+    if (v === 'pending') return 'warning';
+    if (v === 'disputed') return 'danger';
+  }
+  if (category === 'mpStatus' && v === 'DISCONNECTED') return 'warning';
   if (category === 'categoryStatus') {
     if (v === 'confirmed') return 'success';
     if (v === 'provisional') return 'warning';

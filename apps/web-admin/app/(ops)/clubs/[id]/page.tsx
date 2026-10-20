@@ -2,7 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import Link from 'next/link';
 import { useParams } from 'next/navigation';
+import { Building2, CalendarDays, ChevronRight, MapPin, Phone } from 'lucide-react';
+import { DetailBack, DetailHero, formatDate, initials } from '@/components/DetailHero';
 import { StatusBadge, StatusText } from '@/components/StatusBadge';
 import { api } from '@/lib/api';
 export default function ClubDetailPage() {
@@ -91,40 +94,130 @@ export default function ClubDetailPage() {
     reactivate.isPending ||
     suspend.isPending;
 
+  const mpStatus = club.mp_status || 'DISCONNECTED';
+  const { requiredDone, requiredTotal } = trial.checklist;
+  const checklistPct = requiredTotal ? Math.round((requiredDone / requiredTotal) * 100) : 0;
+  const location = [club.zone, club.city].filter(Boolean).join(', ');
+
   return (
     <div>
-      <h1 style={{ marginTop: 0 }}>{club.name}</h1>
-      <div
-        style={{
-          color: 'var(--muted)',
-          marginBottom: 16,
-          display: 'flex',
-          flexWrap: 'wrap',
-          gap: 8,
-          alignItems: 'center',
-        }}
-      >
-        <span>{club.city || 'Sin ciudad'}</span>
-        <span>·</span>
-        <StatusBadge value={trial.status} category="billingStatus" />
+      <DetailBack href="/clubs" label="Clubes" />
+
+      <DetailHero
+        title={club.name}
+        avatar={club.logo_url ? <img src={club.logo_url} alt="" /> : initials(club.name)}
+        meta={[
+          location ? (
+            <>
+              <MapPin size={14} aria-hidden /> {location}
+            </>
+          ) : null,
+          club.address ? (
+            <>
+              <Building2 size={14} aria-hidden /> {club.address}
+            </>
+          ) : null,
+          club.phone ? (
+            <>
+              <Phone size={14} aria-hidden /> {club.phone}
+            </>
+          ) : null,
+          club.created_at ? (
+            <>
+              <CalendarDays size={14} aria-hidden /> Alta {formatDate(club.created_at)}
+            </>
+          ) : null,
+        ]}
+        badges={
+          <>
+            <StatusBadge value={trial.status} category="billingStatus" />
+            <StatusBadge value={mpStatus} category="mpStatus" />
+          </>
+        }
+      />
+
+      <div className="ops-kpi-grid" style={{ marginBottom: 16 }}>
+        <div className="ops-kpi">
+          <p className="ops-kpi-label">Estado</p>
+          <p className="ops-kpi-value" style={{ fontFamily: 'var(--font-sans)', fontSize: 20 }}>
+            <StatusText value={trial.status} category="billingStatus" />
+          </p>
+          <p className="ops-kpi-hint">
+            {trial.daysRemaining != null ? `${trial.daysRemaining} días restantes` : 'Sin vencimiento'}
+          </p>
+        </div>
+        <div className="ops-kpi meter">
+          <div className="meter-head">
+            <p className="ops-kpi-label">Checklist requerido</p>
+            <span className="meter-value num">
+              {requiredDone}/{requiredTotal}
+            </span>
+          </div>
+          <div className="meter-track">
+            <span className="meter-fill" style={{ width: `${checklistPct}%` }} />
+          </div>
+          <p className="meter-hint">
+            {requiredDone >= requiredTotal ? 'Listo para activar' : `Faltan ${requiredTotal - requiredDone} ítems`}
+          </p>
+        </div>
+        <div className="ops-kpi">
+          <p className="ops-kpi-label">Comisión x4 Match</p>
+          <p className="ops-kpi-value">{savedFee != null ? `${Number(savedFee)}%` : '—'}</p>
+          <p className="ops-kpi-hint">Sobre cobros online</p>
+        </div>
+        <div className="ops-kpi">
+          <p className="ops-kpi-label">Mercado Pago</p>
+          <p className="ops-kpi-value" style={{ fontFamily: 'var(--font-sans)', fontSize: 20 }}>
+            <StatusText value={mpStatus} category="mpStatus" />
+          </p>
+          <p className="ops-kpi-hint">
+            {club.mp_connected_at ? `Desde ${formatDate(club.mp_connected_at)}` : 'Cobros online deshabilitados'}
+          </p>
+        </div>
       </div>
 
       <div className="ops-grid-2" style={{ marginBottom: 16 }}>
-        <div className="card">
-          <h3 style={{ marginTop: 0 }}>Billing y trial</h3>
-          <p>
-            Modo: <StatusText value={trial.trialMode} category="trialMode" fallback="—" />
-          </p>
-          <p>Días restantes: {trial.daysRemaining ?? '—'}</p>
-          <p>
-            Plan pago desde:{' '}
-            {trial.activatedAt ? new Date(trial.activatedAt).toLocaleDateString('es-AR') : '—'}
-          </p>
-          <p>
-            Checklist: {trial.checklist.requiredDone}/{trial.checklist.requiredTotal} requeridos
-          </p>
+        <div className="card bento-tile">
+          <div className="tile-header">
+            <div>
+              <h3 className="tile-title">Billing y trial</h3>
+              <p className="tile-subtitle">Ciclo de prueba y plan de pago del club</p>
+            </div>
+          </div>
+          <dl className="detail-list">
+            <div>
+              <dt>Modo</dt>
+              <dd>
+                <StatusText value={trial.trialMode} category="trialMode" fallback="—" />
+              </dd>
+            </div>
+            <div>
+              <dt>Inicio trial</dt>
+              <dd>{formatDate(trial.trialStartedAt)}</dd>
+            </div>
+            <div>
+              <dt>Fin trial</dt>
+              <dd>{formatDate(trial.trialEndsAt)}</dd>
+            </div>
+            <div>
+              <dt>Plan pago desde</dt>
+              <dd>{formatDate(trial.activatedAt)}</dd>
+            </div>
+            {trial.graceEndsAt ? (
+              <div>
+                <dt>Fin de gracia</dt>
+                <dd>{formatDate(trial.graceEndsAt)}</dd>
+              </div>
+            ) : null}
+            {trial.suspendedAt ? (
+              <div>
+                <dt>Suspendido el</dt>
+                <dd>{formatDate(trial.suspendedAt)}</dd>
+              </div>
+            ) : null}
+          </dl>
 
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
+          <div className="detail-actions">
             {canStartTrial ? (
               <>
                 <button
@@ -169,32 +262,49 @@ export default function ClubDetailPage() {
             ) : null}
           </div>
 
-          <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 12, marginBottom: 0 }}>
+          <p className="detail-note">
             Suspender bloquea el acceso sin borrar datos. Desactivar plan vuelve el club a &quot;Sin iniciar&quot;.
           </p>
         </div>
 
-        <div className="card">
-          <h3 style={{ marginTop: 0 }}>Admins</h3>
-          <ul style={{ margin: 0, paddingLeft: 18 }}>
-            {admins.map((a: any) => (
-              <li key={a.id}>
-                {a.name} · {a.email}
-              </li>
-            ))}
-          </ul>
-          <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 12 }}>
-            Mercado Pago: <StatusText value={club.mp_status || 'DISCONNECTED'} category="mpStatus" />
-          </p>
+        <div className="card bento-tile">
+          <div className="tile-header">
+            <div>
+              <h3 className="tile-title">Admins</h3>
+              <p className="tile-subtitle">Usuarios que gestionan el club</p>
+            </div>
+          </div>
+          {admins.length === 0 ? (
+            <p className="detail-empty">El club no tiene admins.</p>
+          ) : (
+            <ul className="recent-list">
+              {admins.map((a: any) => (
+                <li key={a.id}>
+                  <Link href={`/users/${a.id}`} className="recent-row">
+                    <span className="ops-avatar ops-avatar--sm">{initials(a.name)}</span>
+                    <span className="recent-main">
+                      <span className="recent-name">{a.name}</span>
+                      <span className="recent-secondary">{a.email}</span>
+                    </span>
+                    <ChevronRight size={16} aria-hidden style={{ color: 'var(--muted)' }} />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       </div>
 
-      <div className="card" style={{ marginBottom: 16 }}>
-        <h3 style={{ marginTop: 0 }}>Comisión x4 Match</h3>
-        <p style={{ marginTop: 0 }}>
-          Porcentaje que retiene la plataforma sobre cada cobro online del club (turnos pagados con
-          Mercado Pago).
-        </p>
+      <div className="card bento-tile" style={{ marginBottom: 16 }}>
+        <div className="tile-header">
+          <div>
+            <h3 className="tile-title">Comisión x4 Match</h3>
+            <p className="tile-subtitle">
+              Porcentaje que retiene la plataforma sobre cada cobro online del club (turnos pagados con
+              Mercado Pago).
+            </p>
+          </div>
+        </div>
         <form
           style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}
           onSubmit={(e) => {
@@ -223,13 +333,20 @@ export default function ClubDetailPage() {
             {updateFee.isPending ? 'Guardando…' : 'Guardar'}
           </button>
         </form>
-        <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 12, marginBottom: 0 }}>
+        <p className="detail-note">
           Solo se aplica si el club conectó su cuenta de Mercado Pago. Entre 0% y 30%.
         </p>
       </div>
 
-      <div className="card">
-        <h3 style={{ marginTop: 0 }}>Checklist de activación</h3>
+      <div className="card card-table">
+        <div className="tile-header" style={{ padding: '16px 16px 4px' }}>
+          <div>
+            <h3 className="tile-title">Checklist de activación</h3>
+            <p className="tile-subtitle">
+              {requiredDone}/{requiredTotal} ítems requeridos completos
+            </p>
+          </div>
+        </div>
         <table className="table">
           <thead>
             <tr>
