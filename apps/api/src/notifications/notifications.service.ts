@@ -3,6 +3,16 @@ import { DatabaseService } from '../database/database.service';
 
 type PushPlatform = 'ios' | 'android';
 
+type ExpoPushResult = {
+  status?: 'ok' | 'error';
+  id?: string;
+  message?: string;
+  details?: { error?: string; fault?: string };
+};
+
+/** Expo recomienda esperar ~15 min; 30 s alcanza para la mayoría de los recibos y sirve para diagnosticar. */
+const PUSH_RECEIPT_DELAY_MS = 30_000;
+
 type NotificationPayload = {
   userId: string;
   type: string;
@@ -147,7 +157,10 @@ export class NotificationsService {
       `SELECT token FROM user_push_tokens WHERE user_id = $1`,
       [params.userId],
     );
-    if (tokens.rows.length === 0) return;
+    if (tokens.rows.length === 0) {
+      this.logger.log(`Push omitido type=${params.type} user=${params.userId}: sin tokens registrados`);
+      return;
+    }
 
     const messages = tokens.rows.map((row) => ({
       to: row.token,
@@ -179,18 +192,16 @@ export class NotificationsService {
       return;
     }
 
-    const payload = (await res.json()) as {
-      data?: Array<{
-        status?: string;
-        message?: string;
-        details?: { error?: string; fault?: string };
-      }>;
-    };
+    const payload = (await res.json()) as { data?: ExpoPushResult[] };
     const staleTokens: string[] = [];
+    const receiptTokens = new Map<string, string>();
     payload.data?.forEach((ticket, index) => {
-      if (ticket.status !== 'error') return;
+      const token: string | undefined = tokens.rows[index]?.token;
+      if (ticket.status === 'ok' && ticket.id) {
+        if (token) receiptTokens.set(ticket.id, token);
+        return;
+      }
       const errorCode = ticket.details?.error;
-      const token = tokens.rows[index]?.token;
       if (errorCode === 'DeviceNotRegistered' && token) {
         staleTokens.push(token);
         return;
@@ -200,10 +211,58 @@ export class NotificationsService {
         `Expo push ticket error token=${token?.slice(0, 24) ?? '?'}… code=${errorCode ?? 'unknown'} message=${ticket.message ?? ''}`,
       );
     });
-    if (staleTokens.length > 0) {
-      await this.db.query(`DELETE FROM user_push_tokens WHERE token = ANY($1::text[])`, [
-        staleTokens,
-      ]);
+    await this.deleteTokens(staleTokens);
+
+    if (receiptTokens.size > 0) {
+      this.logger.log(
+        `Push enviado a Expo type=${params.type} user=${params.userId} tickets=${[...receiptTokens.keys()].join(',')}`,
+      );
+      setTimeout(() => {
+        void this.checkPushReceipts(receiptTokens).catch((error: unknown) => {
+          this.logger.warn(`No se pudieron leer recibos de Expo: ${(error as Error).message}`);
+        });
+      }, PUSH_RECEIPT_DELAY_MS);
     }
+  }
+
+  /** Los errores de FCM/APNs (credenciales, token inválido) solo aparecen en los recibos, no en el ticket. */
+  private async checkPushReceipts(receiptTokens: Map<string, string>) {
+    const res = await fetch('https://exp.host/--/api/v2/push/getReceipts', {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ ids: [...receiptTokens.keys()] }),
+    });
+    if (!res.ok) {
+      this.logger.warn(`Expo receipts HTTP ${res.status}`);
+      return;
+    }
+
+    const payload = (await res.json()) as { data?: Record<string, ExpoPushResult> };
+    const staleTokens: string[] = [];
+    for (const [ticketId, token] of receiptTokens) {
+      const receipt = payload.data?.[ticketId];
+      if (!receipt) {
+        this.logger.log(`Push recibo pendiente ticket=${ticketId}`);
+        continue;
+      }
+      if (receipt.status === 'ok') {
+        this.logger.log(`Push entregado a FCM/APNs ticket=${ticketId}`);
+        continue;
+      }
+      const errorCode = receipt.details?.error;
+      if (errorCode === 'DeviceNotRegistered') staleTokens.push(token);
+      this.logger.warn(
+        `Push recibo error ticket=${ticketId} token=${token.slice(0, 24)}… code=${errorCode ?? 'unknown'} message=${receipt.message ?? ''}`,
+      );
+    }
+    await this.deleteTokens(staleTokens);
+  }
+
+  private async deleteTokens(tokens: string[]) {
+    if (tokens.length === 0) return;
+    await this.db.query(`DELETE FROM user_push_tokens WHERE token = ANY($1::text[])`, [tokens]);
   }
 }

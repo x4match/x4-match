@@ -116,19 +116,7 @@ export default function UsersPage() {
         error={errorMessage}
       />
 
-      <div className="card" style={{ marginBottom: 16 }}>
-        <h3 style={{ marginTop: 0 }}>Operadores (SUPER_ADMIN)</h3>
-        <p style={{ color: 'var(--muted)', fontSize: 14, marginTop: 0 }}>
-          Solo estos usuarios pueden ingresar al backoffice.
-        </p>
-        <ul style={{ margin: 0, paddingLeft: 18 }}>
-          {(opsUsers ?? []).map((u: any) => (
-            <li key={u.id}>
-              {u.name} · {u.email}
-            </li>
-          ))}
-        </ul>
-      </div>
+
 
       <Modal open={modalOpen} title="Crear operador SUPER_ADMIN" onClose={closeModal}>
         <p style={{ color: 'var(--muted)', fontSize: 14, marginTop: 0 }}>
@@ -175,77 +163,77 @@ export default function UsersPage() {
           <p style={{ padding: 16, margin: 0 }}>Cargando usuarios…</p>
         ) : (
           <>
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Nombre</th>
-              <th>Email</th>
-              <th>Rol</th>
-              <th>Alta</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="table-empty">
-                  No hay usuarios con esos filtros.
-                </td>
-              </tr>
-            ) : (
-              items.map((u: any) => (
-              <tr key={u.id}>
-                <td>
-                  <Link href={`/users/${u.id}`} style={{ color: 'var(--primary)', fontWeight: 600 }}>
-                    {u.name}
-                  </Link>
-                </td>
-                <td>{u.email}</td>
-                <td><StatusBadge value={u.role} category="userRole" /></td>
-                <td>{new Date(u.created_at).toLocaleDateString('es-AR')}</td>
-                <td>
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-                    <Link href={`/users/${u.id}`} style={{ color: 'var(--primary)', fontWeight: 700 }}>
-                      Ver
-                    </Link>
-                    {u.role !== 'SUPER_ADMIN' ? (
-                      <>
-                        <button
-                          className="btn btn-outline"
-                          type="button"
-                          disabled={promote.isPending}
-                          onClick={() => promote.mutate(u.id)}
-                        >
-                          Hacer ops
-                        </button>
-                        {u.role !== 'PARTNER' ? (
-                          <button
-                            className="btn btn-outline"
-                            type="button"
-                            disabled={makePartner.isPending}
-                            onClick={() => makePartner.mutate(u.id)}
-                          >
-                            Hacer partner
-                          </button>
-                        ) : null}
-                      </>
-                    ) : (
-                      <span className="badge badge-success">Operador</span>
-                    )}
-                  </div>
-                </td>
-              </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-        <TablePagination
-          page={page}
-          pageSize={pageSize}
-          total={total}
-          onPageChange={setPage}
-          isLoading={isLoading}
-        />
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Nombre</th>
+                  <th>Email</th>
+                  <th>Rol</th>
+                  <th>Alta</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="table-empty">
+                      No hay usuarios con esos filtros.
+                    </td>
+                  </tr>
+                ) : (
+                  items.map((u: any) => (
+                    <tr key={u.id}>
+                      <td>
+                        <Link href={`/users/${u.id}`} style={{ color: 'var(--primary)', fontWeight: 600 }}>
+                          {u.name}
+                        </Link>
+                      </td>
+                      <td>{u.email}</td>
+                      <td><StatusBadge value={u.role} category="userRole" /></td>
+                      <td>{new Date(u.created_at).toLocaleDateString('es-AR')}</td>
+                      <td>
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                          <Link href={`/users/${u.id}`} style={{ color: 'var(--primary)', fontWeight: 700 }}>
+                            Ver
+                          </Link>
+                          {u.role !== 'SUPER_ADMIN' ? (
+                            <>
+                              <button
+                                className="btn btn-outline"
+                                type="button"
+                                disabled={promote.isPending}
+                                onClick={() => promote.mutate(u.id)}
+                              >
+                                Hacer ops
+                              </button>
+                              {u.role !== 'PARTNER' ? (
+                                <button
+                                  className="btn btn-outline"
+                                  type="button"
+                                  disabled={makePartner.isPending}
+                                  onClick={() => makePartner.mutate(u.id)}
+                                >
+                                  Hacer partner
+                                </button>
+                              ) : null}
+                            </>
+                          ) : (
+                            <span className="badge badge-success">Operador</span>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+            <TablePagination
+              page={page}
+              pageSize={pageSize}
+              total={total}
+              onPageChange={setPage}
+              isLoading={isLoading}
+            />
           </>
         )}
       </div>
