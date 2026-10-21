@@ -59,12 +59,18 @@ export class ClubsService {
     private readonly paymentsService: PaymentsService,
   ) {}
 
-  async findAll() {
+  async findAll({ onlyActive = false }: { onlyActive?: boolean } = {}) {
     const result = await this.db.query(
-      `SELECT id, name, city, address, phone, logo_url, cover_url, latitude, longitude,
-              subscription_plan, created_at
-       FROM clubs
-       ORDER BY name ASC`,
+      `SELECT c.id, c.name, c.city, c.address, c.phone, c.logo_url, c.cover_url, c.latitude, c.longitude,
+              c.subscription_plan, c.created_at
+       FROM clubs c
+       ${
+         onlyActive
+           ? `INNER JOIN club_billing cb ON cb.club_id = c.id
+       WHERE cb.status IN ('TRIAL', 'ACTIVE', 'GRACE')`
+           : ''
+       }
+       ORDER BY c.name ASC`,
     );
     return result.rows;
   }
@@ -72,11 +78,12 @@ export class ClubsService {
   /**
    * Listado de clubs según el viewer:
    * - CLUB_ADMIN → solo sedes en club_admins
-   * - resto / anónimo → todos (descubrimiento de jugadores)
+   * - SUPER_ADMIN → todos
+   * - resto / anónimo → solo clubs activos (en trial, activos o en gracia)
    */
   async findAllForViewer(userId?: string | null) {
     if (!userId) {
-      return this.findAll();
+      return this.findAll({ onlyActive: true });
     }
     const roleResult = await this.db.query<{ role: string }>(
       `SELECT role FROM users WHERE id = $1`,
@@ -86,7 +93,10 @@ export class ClubsService {
     if (role === 'CLUB_ADMIN') {
       return this.findMine(userId);
     }
-    return this.findAll();
+    if (role === 'SUPER_ADMIN') {
+      return this.findAll();
+    }
+    return this.findAll({ onlyActive: true });
   }
 
   /** Clubs/sedes asociados al usuario (club_admins). SUPER_ADMIN ve todos. */
