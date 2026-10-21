@@ -452,12 +452,11 @@ async function main() {
 
     await pool.query(
       `INSERT INTO club_shop_coupons
-         (id, club_id, code, label, discount_percent, points_cost, max_uses, uses_count, active, expires_at)
+         (id, club_id, code, label, discount_percent, max_uses, uses_count, active, expires_at)
        VALUES
-         ($1, $3, 'VALLE20', '20% horario valle', 20, NULL, 50, 3, TRUE, NOW() + INTERVAL '90 days'),
-         ($2, $3, 'PUNTOS100', '100 pts de regalo', NULL, 100, 20, 1, TRUE, NOW() + INTERVAL '60 days')
+         ($1, $2, 'VALLE20', '20% horario valle', 20, 50, 3, TRUE, NOW() + INTERVAL '90 days')
        ON CONFLICT (club_id, code) DO UPDATE SET active = TRUE`,
-      [`${DEMO_PREFIX}000000000301`, `${DEMO_PREFIX}000000000302`, PALERMO],
+      [`${DEMO_PREFIX}000000000301`, PALERMO],
     );
 
     for (let i = 0; i < PLAYERS.length; i += 1) {

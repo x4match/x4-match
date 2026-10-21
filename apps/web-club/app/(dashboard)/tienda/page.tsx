@@ -170,8 +170,6 @@ function ShopInner() {
   const [couponCode, setCouponCode] = useState('');
   const [couponLabel, setCouponLabel] = useState('');
   const [couponPercent, setCouponPercent] = useState('');
-  const [couponPoints, setCouponPoints] = useState('');
-
   const [rewardOpen, setRewardOpen] = useState(false);
   const [editingRewardId, setEditingRewardId] = useState<string | null>(null);
   const [rewardTitle, setRewardTitle] = useState('');
@@ -294,22 +292,19 @@ function ShopInner() {
 
   const createCoupon = useMutation({
     mutationFn: async () => {
-      const points = couponPoints.trim() ? Number(couponPoints) : undefined;
       const percent = couponPercent.trim() ? Number(couponPercent) : undefined;
       if (!couponCode.trim()) throw new Error('Indicá un código');
-      if (!percent && !points) throw new Error('Indicá descuento % o puntos canjeables');
+      if (!percent) throw new Error('Indicá el % de descuento');
       await api.post(`/clubs/${activeClubId}/shop/coupons`, {
         code: couponCode.trim().toUpperCase(),
         label: couponLabel.trim() || couponCode.trim().toUpperCase(),
-        discountPercent: percent || undefined,
-        pointsCost: points || undefined,
+        discountPercent: percent,
       });
     },
     onSuccess: async () => {
       setCouponCode('');
       setCouponLabel('');
       setCouponPercent('');
-      setCouponPoints('');
       await queryClient.invalidateQueries({ queryKey: ['club-shop-coupons', activeClubId] });
       toast.success('Cupón creado');
     },
@@ -656,10 +651,10 @@ function ShopInner() {
             <CardHeader>
               <CardTitle className="text-base">Nuevo cupón</CardTitle>
               <p className="text-sm text-muted-foreground">
-                Descuento en tienda y/o puntos canjeables de regalo (no suman al ranking competitivo).
+                Descuento porcentual en la tienda del club.
               </p>
             </CardHeader>
-            <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <Input
                 placeholder="Código"
                 value={couponCode}
@@ -667,21 +662,15 @@ function ShopInner() {
                 className="rounded-xl"
               />
               <Input
-                placeholder="Nombre (ej. 100 pts de regalo)"
+                placeholder="Nombre (ej. 10% off)"
                 value={couponLabel}
                 onChange={(e) => setCouponLabel(e.target.value)}
                 className="rounded-xl"
               />
               <Input
-                placeholder="% descuento (opcional)"
+                placeholder="% descuento"
                 value={couponPercent}
                 onChange={(e) => setCouponPercent(e.target.value)}
-                className="rounded-xl"
-              />
-              <Input
-                placeholder="Pts canjeables (opcional)"
-                value={couponPoints}
-                onChange={(e) => setCouponPoints(e.target.value)}
                 className="rounded-xl"
               />
               <Button className="rounded-xl" onClick={() => createCoupon.mutate()}>
@@ -699,9 +688,7 @@ function ShopInner() {
                     {(c.discountPercent ?? c.discount_percent) != null
                       ? `${c.discountPercent ?? c.discount_percent}%`
                       : null}
-                    {(c.pointsCost ?? c.points_cost)
-                      ? `${(c.discountPercent ?? c.discount_percent) != null ? ' · ' : ''}+${c.pointsCost ?? c.points_cost} pts canjeables`
-                      : (c.discountPercent ?? c.discount_percent) == null
+                    {(c.discountPercent ?? c.discount_percent) == null
                         ? formatCurrency(c.discountAmount ?? c.discount_amount ?? 0)
                         : ''}
                   </p>

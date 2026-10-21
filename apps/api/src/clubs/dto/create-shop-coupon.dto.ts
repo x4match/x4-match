@@ -20,11 +20,6 @@ export class CreateShopCouponDto {
 
   @IsOptional()
   @IsInt()
-  @Min(0)
-  pointsCost?: number;
-
-  @IsOptional()
-  @IsInt()
   @Min(1)
   maxUses?: number;
 }

@@ -2301,7 +2301,7 @@ export class ClubsService {
   async listShopCoupons(clubId: string, userId: string) {
     await this.assertClubRole(userId, clubId);
     const result = await this.db.query(
-      `SELECT id, code, label, discount_percent, discount_amount, points_cost,
+      `SELECT id, code, label, discount_percent, discount_amount,
               max_uses, uses_count, active, expires_at, created_at
        FROM club_shop_coupons
        WHERE club_id = $1
@@ -2309,133 +2309,6 @@ export class ClubsService {
       [clubId],
     );
     return result.rows;
-  }
-
-  /** Cupones activos que otorgan puntos canjeables (vista jugador). */
-  async listClaimableShopCoupons(clubId: string, userId: string) {
-    assertClubId(clubId);
-    await this.findOne(clubId);
-    const result = await this.db.query(
-      `SELECT c.id, c.code, c.label, c.points_cost, c.discount_percent, c.discount_amount,
-              c.max_uses, c.uses_count, c.expires_at,
-              EXISTS (
-                SELECT 1 FROM club_shop_coupon_claims cl
-                WHERE cl.coupon_id = c.id AND cl.user_id = $2
-              ) AS claimed
-       FROM club_shop_coupons c
-       WHERE c.club_id = $1
-         AND c.active = TRUE
-         AND c.points_cost IS NOT NULL
-         AND c.points_cost > 0
-         AND (c.expires_at IS NULL OR c.expires_at > NOW())
-         AND (c.max_uses IS NULL OR c.uses_count < c.max_uses)
-       ORDER BY c.points_cost DESC, c.created_at DESC`,
-      [clubId, userId],
-    );
-    return result.rows.map((row) => ({
-      id: row.id,
-      code: row.code,
-      label: row.label,
-      pointsCost: Number(row.points_cost),
-      points_cost: Number(row.points_cost),
-      discountPercent: row.discount_percent != null ? Number(row.discount_percent) : null,
-      discount_percent: row.discount_percent != null ? Number(row.discount_percent) : null,
-      discountAmount: row.discount_amount != null ? Number(row.discount_amount) : null,
-      discount_amount: row.discount_amount != null ? Number(row.discount_amount) : null,
-      maxUses: row.max_uses != null ? Number(row.max_uses) : null,
-      usesCount: Number(row.uses_count ?? 0),
-      expiresAt: row.expires_at,
-      claimed: Boolean(row.claimed),
-    }));
-  }
-
-  /**
-   * Canjea un cupón que otorga puntos canjeables (wallet).
-   * Nunca escribe en ranking del club ni en puntos competitivos.
-   */
-  async claimShopCoupon(clubId: string, userId: string, rawCode: string) {
-    assertClubId(clubId);
-    await this.findOne(clubId);
-    const code = rawCode.trim().toUpperCase();
-    if (!code) {
-      throw new BadRequestException('Indicá un código de cupón');
-    }
-
-    return this.db.transaction(async (client) => {
-      const locked = await client.query<{
-        id: string;
-        label: string;
-        points_cost: number | null;
-        max_uses: number | null;
-        uses_count: number;
-        active: boolean;
-        expires_at: Date | null;
-      }>(
-        `SELECT id, label, points_cost, max_uses, uses_count, active, expires_at
-         FROM club_shop_coupons
-         WHERE club_id = $1 AND code = $2
-         FOR UPDATE`,
-        [clubId, code],
-      );
-      const coupon = locked.rows[0];
-      if (!coupon?.active) {
-        throw new NotFoundException('Cupón no encontrado o inactivo');
-      }
-      if (coupon.expires_at && new Date(coupon.expires_at).getTime() < Date.now()) {
-        throw new BadRequestException('Este cupón ya venció');
-      }
-      const pointsAwarded = Number(coupon.points_cost ?? 0);
-      if (pointsAwarded <= 0) {
-        throw new BadRequestException(
-          'Este cupón no otorga puntos canjeables. Pedí el descuento en recepción.',
-        );
-      }
-      if (coupon.max_uses != null && Number(coupon.uses_count) >= Number(coupon.max_uses)) {
-        throw new BadRequestException('Este cupón ya alcanzó el máximo de usos');
-      }
-
-      const claimInsert = await client.query(
-        `INSERT INTO club_shop_coupon_claims (coupon_id, club_id, user_id, points_awarded)
-         VALUES ($1, $2, $3, $4)
-         ON CONFLICT (coupon_id, user_id) DO NOTHING
-         RETURNING id`,
-        [coupon.id, clubId, userId, pointsAwarded],
-      );
-      if (!claimInsert.rows[0]) {
-        throw new BadRequestException('Ya reclamaste este cupón');
-      }
-
-      await client.query(
-        `UPDATE club_shop_coupons
-         SET uses_count = uses_count + 1
-         WHERE id = $1`,
-        [coupon.id],
-      );
-
-      await this.clubPointsService.addPoints(
-        clubId,
-        userId,
-        pointsAwarded,
-        'COUPON_CLAIM',
-        coupon.id,
-        {
-          monthKey: getMonthKey(),
-          baseAmount: pointsAwarded,
-          multiplier: 1,
-          countMatch: false,
-          affectMonthly: false,
-        },
-        client,
-      );
-
-      return {
-        ok: true,
-        code,
-        label: coupon.label,
-        pointsAwarded,
-        message: `Sumaste ${pointsAwarded} puntos canjeables`,
-      };
-    });
   }
 
   async createShopCoupon(clubId: string, userId: string, dto: CreateShopCouponDto) {
@@ -2446,8 +2319,8 @@ export class ClubsService {
     }
     const result = await this.db.query(
       `INSERT INTO club_shop_coupons
-         (club_id, code, label, discount_percent, discount_amount, points_cost, max_uses, active)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE)
+         (club_id, code, label, discount_percent, discount_amount, max_uses, active)
+       VALUES ($1, $2, $3, $4, $5, $6, TRUE)
        RETURNING *`,
       [
         clubId,
@@ -2455,7 +2328,6 @@ export class ClubsService {
         dto.label.trim(),
         dto.discountPercent ?? null,
         dto.discountAmount ?? null,
-        dto.pointsCost ?? null,
         dto.maxUses ?? null,
       ],
     );
