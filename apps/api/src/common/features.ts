@@ -5,8 +5,13 @@ export function circuitsEnabled(): boolean {
   return process.env.CIRCUITS_ENABLED === 'true';
 }
 
+/** Shop x4 (merch y sponsors): oculto en la app salvo que SHOP_ENABLED=true. */
+export function shopEnabled(): boolean {
+  return process.env.SHOP_ENABLED === 'true';
+}
+
 export function featureFlags() {
-  return { circuits: circuitsEnabled() };
+  return { circuits: circuitsEnabled(), shop: shopEnabled() };
 }
 
 @Injectable()
