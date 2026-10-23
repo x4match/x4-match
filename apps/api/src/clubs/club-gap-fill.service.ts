@@ -1,14 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { courtSlotAtSql } from '../common/utils/court-schedule.util';
 import { DatabaseService } from '../database/database.service';
-import { NotificationsService } from '../notifications/notifications.service';
+import { ClubOutreachService } from './club-outreach.service';
 
 const HISTORY_DAYS = 60;
 const OCCUPANCY_THRESHOLD = 0.4;
 const MIN_HISTORICAL_SLOTS = 5;
 const MIN_PLAYER_MATCHES = 2;
 const MAX_CANDIDATES_PER_SLOT = 30;
-const MAX_NOTIFS_PER_USER_CLUB_DAY = 3;
 
 type ValleyBucket = {
   dayOfWeek: number;
@@ -45,7 +44,7 @@ export class ClubGapFillService {
 
   constructor(
     private readonly db: DatabaseService,
-    private readonly notifications: NotificationsService,
+    private readonly outreach: ClubOutreachService,
   ) {}
 
   async runForEnabledClubs(): Promise<{
@@ -366,31 +365,28 @@ export class ClubGapFillService {
         ? `${slot.court_label} · ${dateLabel} ${startLabel}–${endLabel} · Sumá puntos del club`
         : `${slot.court_label} · ${dateLabel} ${startLabel}–${endLabel}`;
 
-    let sent = 0;
-    for (const userId of candidates) {
-      const allowed = await this.tryReserveOutreach(club.id, slot.id, userId);
-      if (!allowed) continue;
-
-      await this.notifications.create({
-        userId,
-        type: matchId ? 'OPEN_MATCH_CREATED' : 'COURT_GAP_OFFER',
-        title,
-        body,
-        data: {
-          clubId: club.id,
-          slotId: slot.id,
-          matchId: matchId ?? null,
-          slotDate: dateLabel,
-          startHour: slot.start_hour,
-          endHour: slot.end_hour,
-          bonusPoints: bonus,
-          reason,
-          promotionLabel: promo?.label ?? null,
-        },
-      });
-      sent += 1;
-    }
-    return sent;
+    const result = await this.outreach.sendSlotOffer({
+      club: { id: club.id, name: club.name },
+      slotId: slot.id,
+      userIds: candidates,
+      source: 'auto',
+      type: matchId ? 'OPEN_MATCH_CREATED' : 'COURT_GAP_OFFER',
+      title,
+      body,
+      slotLabel: `${slot.court_label} · ${dateLabel} ${startLabel}–${endLabel}`,
+      data: {
+        clubId: club.id,
+        slotId: slot.id,
+        matchId: matchId ?? null,
+        slotDate: dateLabel,
+        startHour: slot.start_hour,
+        endHour: slot.end_hour,
+        bonusPoints: bonus,
+        reason,
+        promotionLabel: promo?.label ?? null,
+      },
+    });
+    return result.notified;
   }
 
   private async findCandidateUserIds(
@@ -431,9 +427,12 @@ export class ClubGapFillService {
          GROUP BY p.user_id
          HAVING COUNT(DISTINCT m.id) >= $5
        )
-       SELECT id FROM availability
-       UNION
-       SELECT id FROM history
+       SELECT candidates.id
+       FROM (SELECT id FROM availability UNION SELECT id FROM history) candidates
+       WHERE NOT EXISTS (
+         SELECT 1 FROM user_notification_preferences np
+         WHERE np.user_id = candidates.id AND np.preferences ->> 'club_offers' = 'false'
+       )
        LIMIT $6`,
       [clubId, dayOfWeek, rangeStart, rangeEnd, MIN_PLAYER_MATCHES, MAX_CANDIDATES_PER_SLOT],
     );
@@ -460,33 +459,6 @@ export class ClubGapFillService {
       [clubId, dayOfWeek, startHour, endHour],
     );
     return result.rows[0] ?? null;
-  }
-
-  private async tryReserveOutreach(
-    clubId: string,
-    slotId: string,
-    userId: string,
-  ): Promise<boolean> {
-    const dayCount = await this.db.query<{ count: number }>(
-      `SELECT COUNT(*)::int AS count
-       FROM club_gap_fill_notifications
-       WHERE club_id = $1
-         AND user_id = $2
-         AND created_at >= NOW() - INTERVAL '24 hours'`,
-      [clubId, userId],
-    );
-    if ((dayCount.rows[0]?.count ?? 0) >= MAX_NOTIFS_PER_USER_CLUB_DAY) {
-      return false;
-    }
-
-    const inserted = await this.db.query<{ id: string }>(
-      `INSERT INTO club_gap_fill_notifications (club_id, slot_id, user_id)
-       VALUES ($1, $2, $3)
-       ON CONFLICT (slot_id, user_id) DO NOTHING
-       RETURNING id`,
-      [clubId, slotId, userId],
-    );
-    return Boolean(inserted.rows[0]);
   }
 }
 

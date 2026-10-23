@@ -1,7 +1,20 @@
-import { Body, Controller, Delete, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Put,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RegisterPushTokenDto } from './dto/register-push-token.dto';
+import { UpdateNotificationPreferencesDto } from './dto/update-notification-preferences.dto';
 import { NotificationsService } from './notifications.service';
 
 @Controller('notifications')
@@ -17,6 +30,34 @@ export class NotificationsController {
   @Get('unread-count')
   unreadCount(@CurrentUser() user: { sub: string }) {
     return this.notificationsService.unreadCount(user.sub);
+  }
+
+  @Get('preferences')
+  getPreferences(@CurrentUser() user: { sub: string }) {
+    return this.notificationsService.getPreferences(user.sub);
+  }
+
+  @Patch('preferences')
+  updatePreferences(
+    @CurrentUser() user: { sub: string },
+    @Body() dto: UpdateNotificationPreferencesDto,
+  ) {
+    return this.notificationsService.updatePreferences(user.sub, dto);
+  }
+
+  @Get('muted-clubs')
+  listMutedClubs(@CurrentUser() user: { sub: string }) {
+    return this.notificationsService.listMutedClubs(user.sub);
+  }
+
+  @Put('muted-clubs/:clubId')
+  muteClub(@CurrentUser() user: { sub: string }, @Param('clubId', ParseUUIDPipe) clubId: string) {
+    return this.notificationsService.muteClub(user.sub, clubId);
+  }
+
+  @Delete('muted-clubs/:clubId')
+  unmuteClub(@CurrentUser() user: { sub: string }, @Param('clubId', ParseUUIDPipe) clubId: string) {
+    return this.notificationsService.unmuteClub(user.sub, clubId);
   }
 
   @Post('read-all')

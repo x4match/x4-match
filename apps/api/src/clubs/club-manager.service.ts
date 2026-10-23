@@ -75,10 +75,13 @@ export class ClubManagerService {
       throw new BadRequestException('No hay jugadores en ese segmento');
     }
 
-    let sent = 0;
-    for (const row of recipients) {
-      await this.notifications.create({
-        userId: row.userId,
+    const allowed = await this.notifications.filterClubOfferRecipients(
+      clubId,
+      recipients.map((row) => row.userId),
+    );
+    await this.notifications.createMany(
+      allowed.map((recipientId) => ({
+        userId: recipientId,
         type: 'CLUB_SEGMENT_CAMPAIGN',
         title: input.title,
         body: input.body,
@@ -88,9 +91,9 @@ export class ClubManagerService {
           segment: input.segment,
           actionLabel: input.actionLabel ?? null,
         },
-      });
-      sent += 1;
-    }
+      })),
+    );
+    const sent = allowed.length;
 
     return {
       ok: true,

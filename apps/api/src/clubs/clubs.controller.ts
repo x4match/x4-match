@@ -41,6 +41,7 @@ import { CreateShopProductDto } from './dto/create-shop-product.dto';
 import { GenerateCourtSlotsDto } from './dto/generate-court-slots.dto';
 import { UpdateShopProductDto } from './dto/update-shop-product.dto';
 import { UpdateAutoFillGapsDto } from './dto/update-auto-fill-gaps.dto';
+import { UpdateSlotOfferSettingsDto } from './dto/update-slot-offer-settings.dto';
 import { NotifyClubSegmentDto } from './dto/notify-club-segment.dto';
 import { UpdateCourtDto } from './dto/update-court.dto';
 import { UpdateCourtScheduleDto } from './dto/update-court-schedule.dto';
@@ -300,6 +301,16 @@ export class ClubsController {
     return this.clubsService.getDashboard(id, user.sub);
   }
 
+  @Get(':id/outreach-stats')
+  @UseGuards(JwtAuthGuard)
+  getOutreachStats(
+    @Param('id') id: string,
+    @CurrentUser() user: { sub: string },
+    @Query('days') days?: string,
+  ) {
+    return this.clubsService.getOutreachStats(id, user.sub, days != null ? parseInt(days, 10) : 30);
+  }
+
   @Get(':id/manager-report')
   @UseGuards(JwtAuthGuard)
   getManagerReport(
@@ -350,6 +361,16 @@ export class ClubsController {
       autoCreateMatch: dto.autoCreateMatch,
       notifyEnabled: dto.notifyEnabled,
     });
+  }
+
+  @Patch(':id/slot-offer-settings')
+  @UseGuards(JwtAuthGuard)
+  setSlotOfferSettings(
+    @Param('id') id: string,
+    @CurrentUser() user: { sub: string },
+    @Body() dto: UpdateSlotOfferSettingsDto,
+  ) {
+    return this.clubsService.setSlotOfferSettings(id, user.sub, { radiusKm: dto.radiusKm });
   }
 
   @Post(':id/segments/notify')

@@ -5,6 +5,7 @@ import { TournamentsModule } from '../tournaments/tournaments.module';
 import { OptionalJwtAuthGuard } from '../common/guards/optional-jwt-auth.guard';
 import { ClubGapFillCron } from './club-gap-fill.cron';
 import { ClubGapFillService } from './club-gap-fill.service';
+import { ClubOutreachService } from './club-outreach.service';
 import { ClubManagerService } from './club-manager.service';
 import { ClubsController } from './clubs.controller';
 import { ClubCommentsService } from './club-comments.service';
@@ -24,6 +25,7 @@ import { ClubsService } from './clubs.service';
     ClubCommentsService,
     ClubGapFillService,
     ClubGapFillCron,
+    ClubOutreachService,
     ClubManagerService,
     OptionalJwtAuthGuard,
   ],

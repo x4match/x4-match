@@ -14,6 +14,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { PAYMENTS_SERVICE } from '../payments/payments.tokens';
 import type { PaymentsService } from '../payments/payments.service';
 import { ClubPointsService } from './club-points.service';
+import { ClubOutreachService } from './club-outreach.service';
 import { CreateClubDto } from './dto/create-club.dto';
 import { CreateClubPromotionDto } from './dto/create-club-promotion.dto';
 import { CreateShopCouponDto } from './dto/create-shop-coupon.dto';
@@ -33,6 +34,10 @@ import { UpdateClubDto } from './dto/update-club.dto';
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/** "Avisar jugadores": radio por defecto (cada club lo configura) y tope de destinatarios (los más cercanos primero). */
+const DEFAULT_SLOT_OFFER_RADIUS_KM = 10;
+const SLOT_OFFER_MAX_RECIPIENTS = 2000;
 
 /** Normaliza el género del perfil (Masculino/Femenino, male/female, caballeros/damas). */
 function normalizePlayerGender(raw?: string | null): 'male' | 'female' | null {
@@ -57,6 +62,7 @@ export class ClubsService {
     private readonly clubPointsService: ClubPointsService,
     @Inject(PAYMENTS_SERVICE)
     private readonly paymentsService: PaymentsService,
+    private readonly outreach: ClubOutreachService,
   ) {}
 
   async findAll({ onlyActive = false }: { onlyActive?: boolean } = {}) {
@@ -209,7 +215,7 @@ export class ClubsService {
       `SELECT id, name, city, address, phone, email, description, logo_url, cover_url, latitude, longitude,
               subscription_plan, auto_fill_gaps_enabled, court_price_per_hour, deposit_percent,
               gap_fill_hours_before, gap_fill_auto_create_match, gap_fill_notify_enabled,
-              created_at, updated_at
+              slot_offer_radius_km, created_at, updated_at
        FROM clubs
        WHERE id = $1`,
       [id],
@@ -235,6 +241,7 @@ export class ClubsService {
       gapFillHoursBefore: Number(club.gap_fill_hours_before ?? 8),
       gapFillAutoCreateMatch: Boolean(club.gap_fill_auto_create_match),
       gapFillNotifyEnabled: club.gap_fill_notify_enabled !== false,
+      slotOfferRadiusKm: Number(club.slot_offer_radius_km ?? DEFAULT_SLOT_OFFER_RADIUS_KM),
     };
   }
 
@@ -621,11 +628,14 @@ export class ClubsService {
     const slot = result.rows[0];
 
     let notifiedCount = 0;
+    let notifyScheduledFor: string | null = null;
     if (dto.notifyPlayers !== false) {
-      notifiedCount = await this.notifyPlayersAboutSlot(club, slot);
+      const outreach = await this.notifyPlayersAboutSlot(club, slot);
+      notifiedCount = outreach.notified;
+      notifyScheduledFor = outreach.pushAt?.toISOString() ?? null;
     }
 
-    return { ...slot, notifiedCount };
+    return { ...slot, notifiedCount, notifyScheduledFor };
   }
 
   async updateCourtSlot(userId: string, clubId: string, slotId: string, dto: UpdateCourtSlotDto) {
@@ -1152,25 +1162,60 @@ export class ClubsService {
       bonus_points?: number;
       price_per_hour?: number | null;
     },
-  ): Promise<number> {
+  ): Promise<{ notified: number; pushAt: Date | null }> {
     const startLabel = this.formatHourLabel(slot.start_hour);
     const endLabel = this.formatHourLabel(slot.end_hour);
-    const dateLabel = new Date(`${slot.slot_date}T12:00:00`).toLocaleDateString('es-AR', {
+    const slotDay = new Date(`${slot.slot_date}T12:00:00`);
+    const dateLabel = slotDay.toLocaleDateString('es-AR', {
       weekday: 'long',
       day: 'numeric',
       month: 'short',
     });
+    const shortDateLabel = slotDay.toLocaleDateString('es-AR', {
+      weekday: 'short',
+      day: 'numeric',
+      month: 'numeric',
+    });
 
+    // Con coordenadas de club y jugador se usa el radio; si falta alguna, se compara la ciudad.
     const players = await this.db.query<{ id: string }>(
-      `SELECT DISTINCT u.id
-       FROM users u
-       INNER JOIN players p ON p.user_id = u.id
-       CROSS JOIN clubs c
-       WHERE c.id = $1
-         AND u.role = 'PLAYER'
-         AND p.city = c.city`,
-      [club.id],
+      `WITH club AS (
+         SELECT latitude::float8 AS lat, longitude::float8 AS lng, lower(trim(city)) AS city,
+                COALESCE(slot_offer_radius_km, $2)::float8 AS radius_km
+         FROM clubs WHERE id = $1
+       ),
+       candidates AS (
+         SELECT u.id,
+                CASE
+                  WHEN club.lat IS NOT NULL AND club.lng IS NOT NULL
+                   AND p.latitude IS NOT NULL AND p.longitude IS NOT NULL
+                  THEN 6371 * acos(LEAST(1, GREATEST(-1,
+                         cos(radians(club.lat)) * cos(radians(p.latitude::float8))
+                         * cos(radians(p.longitude::float8) - radians(club.lng))
+                         + sin(radians(club.lat)) * sin(radians(p.latitude::float8))
+                       )))
+                END AS distance_km,
+                lower(trim(p.city)) = club.city AS same_city,
+                club.radius_km
+         FROM users u
+         INNER JOIN players p ON p.user_id = u.id
+         CROSS JOIN club
+         WHERE u.role = 'PLAYER'
+           AND NOT EXISTS (
+             SELECT 1 FROM user_notification_preferences np
+             WHERE np.user_id = u.id AND np.preferences ->> 'club_offers' = 'false'
+           )
+       )
+       SELECT id
+       FROM candidates
+       WHERE (distance_km IS NOT NULL AND distance_km <= radius_km)
+          OR (distance_km IS NULL AND same_city)
+       GROUP BY id
+       ORDER BY MIN(distance_km) NULLS LAST
+       LIMIT $3`,
+      [club.id, DEFAULT_SLOT_OFFER_RADIUS_KM, SLOT_OFFER_MAX_RECIPIENTS],
     );
+    const recipients = players.rows.map((row) => row.id);
 
     const bonus = (slot as { bonus_points?: number }).bonus_points ?? 0;
     const pricePerHour = slot.price_per_hour != null ? Number(slot.price_per_hour) : null;
@@ -1191,25 +1236,31 @@ export class ClubsService {
       bonus > 0 ? ' · Sumá puntos del club' : ''
     }`;
 
-    await this.notifications.createMany(
-      players.rows.map((player) => ({
-        userId: player.id,
-        type: 'COURT_SLOT_AVAILABLE',
-        title,
-        body,
-        data: {
-          clubId: club.id,
-          slotId: slot.id,
-          slotDate: slot.slot_date,
-          startHour: slot.start_hour,
-          endHour: slot.end_hour,
-          pricePerHour,
-          estimatedTotal: total,
-        },
-      })),
-    );
+    return this.outreach.sendSlotOffer({
+      club,
+      slotId: slot.id,
+      userIds: recipients,
+      source: 'manual',
+      type: 'COURT_SLOT_AVAILABLE',
+      title,
+      body,
+      slotLabel: `${slot.court_label} · ${shortDateLabel} ${startLabel}–${endLabel}`,
+      data: {
+        clubId: club.id,
+        slotId: slot.id,
+        slotDate: slot.slot_date,
+        startHour: slot.start_hour,
+        endHour: slot.end_hour,
+        pricePerHour,
+        estimatedTotal: total,
+      },
+    });
+  }
 
-    return players.rows.length;
+  async getOutreachStats(clubId: string, userId: string, days: number) {
+    await this.assertClubRole(userId, clubId);
+    const periodDays = Number.isFinite(days) ? Math.min(Math.max(Math.round(days), 1), 365) : 30;
+    return this.outreach.getStats(clubId, periodDays);
   }
 
   async getDashboard(clubId: string, userId: string) {
@@ -1312,6 +1363,22 @@ export class ClubsService {
       gapFillAutoCreateMatch: Boolean(row.gap_fill_auto_create_match),
       gapFillNotifyEnabled: row.gap_fill_notify_enabled !== false,
     };
+  }
+
+  async setSlotOfferSettings(clubId: string, userId: string, input: { radiusKm: number }) {
+    await this.assertClubRole(userId, clubId);
+    assertClubId(clubId);
+    const radiusKm = Math.min(50, Math.max(1, Math.round(Number(input.radiusKm))));
+    const result = await this.db.query<{ id: string; slot_offer_radius_km: number }>(
+      `UPDATE clubs SET slot_offer_radius_km = $2, updated_at = NOW()
+       WHERE id = $1
+       RETURNING id, slot_offer_radius_km`,
+      [clubId, radiusKm],
+    );
+    if (!result.rows[0]) {
+      throw new NotFoundException('Club no encontrado');
+    }
+    return { id: result.rows[0].id, slotOfferRadiusKm: Number(result.rows[0].slot_offer_radius_km) };
   }
 
   async getClubImpact(clubId: string, userId: string) {
