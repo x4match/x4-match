@@ -715,7 +715,7 @@ export default function MatchDetailScreen() {
       />
 
       {showChat ? (
-        <KeyboardAvoid style={{ flex: 1 }}>
+        <KeyboardAvoid style={{ flex: 1 }} safeAreaBottom>
           <ScrollView
             ref={scrollRef}
             style={{ flex: 1, padding: ui.spacing.lg }}

@@ -28,10 +28,10 @@ import {
   SectionHeader,
   Avatar,
   SelectionChip,
-  InputField,
   SearchableSelect,
 } from '@/components/x4match';
 import { ClubCommentsSection } from '@/components/club/ClubCommentsSection';
+import { ClubMuteButton } from '@/components/club/ClubMuteButton';
 import { ClubHeroHeader } from '@/components/club/ClubHeroHeader';
 import { ClubLocationMap } from '@/components/club/ClubLocationMap';
 import { ClubShopCatalog } from '@/components/shop/ClubShopCatalog';
@@ -73,15 +73,6 @@ interface RewardItem {
   stock?: number | null;
   maxPerUser?: number | null;
   max_per_user?: number | null;
-}
-
-interface ClaimableCoupon {
-  id: string;
-  code: string;
-  label: string;
-  pointsCost?: number;
-  points_cost?: number;
-  claimed: boolean;
 }
 
 interface MyRedemption {
@@ -229,8 +220,6 @@ export default function ClubDetailScreen() {
   const [tab, setTab] = useState<Tab>(
     initialTab === 'shop' || initialTab === 'ranking' || initialTab === 'rewards' ? initialTab : 'info',
   );
-  const [couponCode, setCouponCode] = useState('');
-
   const { data: club, isLoading, refetch } = useQuery({
     queryKey: ['club', id],
     queryFn: async () => {
@@ -317,15 +306,6 @@ export default function ClubDetailScreen() {
     queryFn: async () => {
       const res = await api.get(`/clubs/${id}/my-redemptions`);
       return res.data as MyRedemption[];
-    },
-    enabled: !!id && tab === 'rewards' && isPlayerAccount,
-  });
-
-  const { data: claimableCoupons, refetch: refetchCoupons } = useQuery({
-    queryKey: ['club-claimable-coupons', id],
-    queryFn: async () => {
-      const res = await api.get(`/clubs/${id}/shop/coupons/claimable`);
-      return res.data as ClaimableCoupon[];
     },
     enabled: !!id && tab === 'rewards' && isPlayerAccount,
   });
@@ -424,22 +404,6 @@ export default function ClubDetailScreen() {
     },
   });
 
-  const claimCouponMutation = useMutation({
-    mutationFn: async (code: string) => {
-      const res = await api.post(`/clubs/${id}/shop/coupons/claim`, { code });
-      return res.data as { pointsAwarded: number; message: string; label: string };
-    },
-    onSuccess: (data) => {
-      setCouponCode('');
-      invalidateRedeemablePoints(queryClient);
-      queryClient.invalidateQueries({ queryKey: ['club-claimable-coupons', id] });
-      Alert.alert('Cupón canjeado', data.message || `+${data.pointsAwarded} puntos canjeables`);
-    },
-    onError: (err: any) => {
-      Alert.alert('No se pudo canjear', err.response?.data?.message || 'Error');
-    },
-  });
-
   const handleRedeem = (reward: RewardItem) => {
     const pts = myPoints?.points ?? 0;
     const required = reward.pointsRequired ?? reward.points_required;
@@ -459,7 +423,6 @@ export default function ClubDetailScreen() {
     if (topFiltered) refetchCategoryLb();
     refetchRewards();
     refetchMyRedemptions();
-    refetchCoupons();
     refetchPoints();
     refetchSlots();
     refetchTournamentValidations();
@@ -491,7 +454,10 @@ export default function ClubDetailScreen() {
 
   return (
     <Screen>
-      <StackHeader title={club.name} />
+      <StackHeader
+        title={club.name}
+        rightAction={isPlayerAccount ? <ClubMuteButton clubId={id!} clubName={club.name} /> : undefined}
+      />
       <ScrollView
         contentContainerStyle={{ padding: ui.spacing.lg, paddingBottom: 40 }}
         refreshControl={<RefreshControl refreshing={false} onRefresh={onRefresh} tintColor={ui.colors.primary} />}
@@ -897,58 +863,6 @@ export default function ClubDetailScreen() {
 
         {tab === 'rewards' && (
           <>
-            {isPlayerAccount ? (
-              <>
-                <SectionHeader
-                  title="Cupones"
-                  subtitle="Sumá puntos canjeables (no competitivos)"
-                  dark
-                />
-                <AppCard style={{ marginBottom: 16 }}>
-                  <InputField
-                    label="Código"
-                    value={couponCode}
-                    onChangeText={setCouponCode}
-                    placeholder="PUNTOS100"
-                    autoCapitalize="characters"
-                  />
-                  <PrimaryButton
-                    label="Canjear cupón"
-                    size="sm"
-                    fullWidth
-                    loading={claimCouponMutation.isPending}
-                    disabled={!couponCode.trim()}
-                    onPress={() => claimCouponMutation.mutate(couponCode.trim())}
-                  />
-                </AppCard>
-                {(claimableCoupons || []).length > 0 ? (
-                  <View style={{ marginBottom: 16 }}>
-                    {claimableCoupons!.map((coupon) => {
-                      const pts = coupon.pointsCost ?? coupon.points_cost ?? 0;
-                      return (
-                        <AppCard key={coupon.id} padding="sm" style={{ marginBottom: 8 }}>
-                          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                            <View style={{ flex: 1 }}>
-                              <Text style={{ fontWeight: '800', color: ui.colors.primary }}>{coupon.code}</Text>
-                              <Text style={{ fontSize: 12, color: ui.colors.textSecondary, marginTop: 2 }}>
-                                {coupon.label} · +{pts} pts canjeables
-                              </Text>
-                            </View>
-                            <PrimaryButton
-                              label={coupon.claimed ? 'Ya canjeado' : 'Canjear'}
-                              size="sm"
-                              disabled={coupon.claimed || claimCouponMutation.isPending}
-                              onPress={() => claimCouponMutation.mutate(coupon.code)}
-                            />
-                          </View>
-                        </AppCard>
-                      );
-                    })}
-                  </View>
-                ) : null}
-              </>
-            ) : null}
-
             <SectionHeader
               title="Premios del club"
               subtitle={isPlayerAccount ? `Tenés ${myPoints?.points ?? 0} puntos` : 'Catálogo de beneficios'}

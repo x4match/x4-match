@@ -1001,11 +1001,18 @@ export function ClubProfilePanel({ onLogout }: ClubProfilePanelProps) {
           </AppCard>
 
           {activeClubId ? (
-            <DarkActionButton
-              label="Ver club público"
-              onPress={() => router.push(`/club/${activeClubId}` as any)}
-              icon={<Ionicons name="sparkles-outline" size={18} color={ui.colors.textPrimary} />}
-            />
+            <>
+              <DarkActionButton
+                label="Noticias del club"
+                onPress={() => router.push(`/news/mine?clubId=${activeClubId}` as any)}
+                icon={<Ionicons name="megaphone-outline" size={18} color={ui.colors.textPrimary} />}
+              />
+              <DarkActionButton
+                label="Ver club público"
+                onPress={() => router.push(`/club/${activeClubId}` as any)}
+                icon={<Ionicons name="sparkles-outline" size={18} color={ui.colors.textPrimary} />}
+              />
+            </>
           ) : null}
         </>
       )}

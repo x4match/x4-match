@@ -12,7 +12,6 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
 import { hapticSelection } from '@/lib/haptics';
 import {
   DEFAULT_SHOP_FILTERS,
@@ -29,7 +28,6 @@ import { fontFamily } from '@/theme/tokens';
 import { Screen, StackHeader, EmptyState, Skeleton, FadeInUp } from '@/components/x4match';
 import {
   CategoryChips,
-  MarketplaceEntryCard,
   PartnerChips,
   SHOP_GLASS,
   SHOP_LIME,
@@ -82,7 +80,6 @@ function ShopSkeleton({ width }: { width: number }) {
 }
 
 export default function PlatformShopScreen() {
-  const router = useRouter();
   const { width: windowWidth } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const contentWidth = windowWidth - INSET * 2;
@@ -244,10 +241,6 @@ export default function PlatformShopScreen() {
             ) : null}
           </Pressable>
         </View>
-
-        {!selectedPartner && !hasNarrowing ? (
-          <MarketplaceEntryCard onPress={() => router.push('/marketplace' as any)} />
-        ) : null}
 
         {catalogQuery.isLoading ? (
           <ShopSkeleton width={contentWidth} />

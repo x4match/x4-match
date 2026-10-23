@@ -11,7 +11,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { isClub, canOrganizeEvents, isPlayer } from '@/lib/roles';
 import { api } from '@/lib/api';
 import { mapMatch, mapPlayer, mapTournament, safeMapCircuit } from '@/lib/mappers';
-import { useCircuitsEnabled } from '@/lib/features';
+import { useCircuitsEnabled, useShopEnabled } from '@/lib/features';
 import type { Circuit, CircuitRankingEntry, Match, Player, Tournament } from '@/lib/types';
 import { formatShortDate, formatTime } from '@/lib/format';
 import {
@@ -46,8 +46,8 @@ import {
   ProfilePhotoViewer,
 } from '@/components/x4match';
 import { TourTarget, useScreenTour, type TourStep } from '@/components/tour/ScreenTour';
-import { MarketplaceEntryCard } from '@/components/shop/marketplace';
-
+import { NewsBannerCarousel } from '@/components/news/NewsBannerCarousel';
+import { NEWS_QUERY_KEYS, fetchNewsBanners } from '@/lib/news/api';
 const HOME_TOUR_STEPS: TourStep[] = [
   {
     target: 'home.header',
@@ -70,6 +70,12 @@ const HOME_TOUR_STEPS: TourStep[] = [
     target: 'home.shop',
     title: 'Tienda',
     description: 'Productos y promociones de los clubes y marcas asociadas.',
+  },
+  {
+    target: 'home.news',
+    title: 'Novedades',
+    description:
+      'Las noticias destacadas de clubes y jugadores. "Ver todas" abre el listado completo con filtros, desde donde también podés publicar la tuya.',
   },
   {
     target: 'home.openMatches',
@@ -308,7 +314,12 @@ export default function HomeScreen() {
   const isPlayerAccount = isPlayer(user?.role);
   const authed = Boolean(token);
   const scrollRef = useRef<ScrollView>(null);
-  useScreenTour('home', HOME_TOUR_STEPS, { enabled: isPlayerAccount, scrollRef });
+  const shopEnabled = useShopEnabled();
+  const homeTourSteps = useMemo(
+    () => (shopEnabled ? HOME_TOUR_STEPS : HOME_TOUR_STEPS.filter((step) => step.target !== 'home.shop')),
+    [shopEnabled],
+  );
+  useScreenTour('home', homeTourSteps, { enabled: isPlayerAccount, scrollRef });
   /** Ancho de card en carrusel: una card dominante + peek de la siguiente. */
   const tournamentCarouselCardWidth = Math.round(Math.min(288, windowWidth - 72));
 
@@ -608,9 +619,17 @@ export default function HomeScreen() {
     router.push('/(tabs)/rankings' as any);
   }, [featuredCategoryId, featuredCircuit?.id, router]);
 
+  const { data: newsBanners = [], refetch: refetchNewsBanners } = useQuery({
+    queryKey: NEWS_QUERY_KEYS.banners,
+    queryFn: fetchNewsBanners,
+    enabled: !isClubAccount,
+    staleTime: 60_000,
+  });
+
   const onRefresh = useCallback(() => {
     refetchFeed();
     refetchTournaments();
+    refetchNewsBanners();
     if (isPlayerAccount) {
       refetchNearby();
       refetchUnreadNotifications();
@@ -643,6 +662,7 @@ export default function HomeScreen() {
     refetchFeed,
     refetchFeaturedCircuit,
     refetchHomeClubs,
+    refetchNewsBanners,
     refetchNearby,
     refetchUnreadNotifications,
     playerMainClubId,
@@ -1249,12 +1269,62 @@ export default function HomeScreen() {
               </TourTarget>
             </FadeInUp>
 
-            <TourTarget id="home.shop" style={{ marginBottom: ui.spacing.lg, marginTop: 8 }}>
-              <ShopPromoBanner onPress={() => router.push('/shop' as any)} />
-              <MarketplaceEntryCard
-                onPress={() => router.push('/marketplace' as any)}
-                style={{ marginTop: 12 }}
+            {shopEnabled ? (
+              <TourTarget id="home.shop" style={{ marginBottom: ui.spacing.lg, marginTop: 8 }}>
+                <ShopPromoBanner onPress={() => router.push('/shop' as any)} />
+              </TourTarget>
+            ) : null}
+
+            <TourTarget id="home.news" style={{ marginBottom: ui.spacing.lg }}>
+              <SectionHeader
+                title="Novedades"
+                style={{ marginBottom: ui.spacing.sm }}
+                action={
+                  <PressableScale
+                    onPress={() => router.push('/news' as any)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Ver todas las novedades"
+                  >
+                    <Text style={{ color: ui.colors.primary, fontSize: 13, fontFamily: ui.typography.label.fontFamily }}>
+                      Ver todas
+                    </Text>
+                  </PressableScale>
+                }
               />
+              {newsBanners.length > 0 ? (
+                <NewsBannerCarousel
+                  posts={newsBanners}
+                  onPressPost={(post) => router.push(`/news/${post.id}` as any)}
+                />
+              ) : (
+                <PressableScale
+                  accessibilityRole="button"
+                  accessibilityLabel="Ver novedades de la comunidad"
+                  onPress={() => router.push('/news' as any)}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 12,
+                    padding: 14,
+                    borderRadius: ui.radius.lg,
+                    borderWidth: 1,
+                    borderStyle: 'dashed',
+                    borderColor: ui.colors.border,
+                    backgroundColor: ui.colors.surface1,
+                  }}
+                >
+                  <Ionicons name="megaphone-outline" size={22} color={ui.colors.primary} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: ui.colors.textPrimary, fontSize: 14, fontFamily: ui.typography.label.fontFamily }}>
+                      Novedades de la comunidad
+                    </Text>
+                    <Text style={{ color: ui.colors.textMuted, fontSize: 12, marginTop: 2 }}>
+                      Torneos, clínicas, ventas y más. También podés publicar la tuya.
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color={ui.colors.textMuted} />
+                </PressableScale>
+              )}
             </TourTarget>
 
             <TourTarget id="home.openMatches" style={{ marginTop: ui.spacing.lg, marginBottom: ui.spacing.md }}>

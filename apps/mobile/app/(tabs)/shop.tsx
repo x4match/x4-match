@@ -83,7 +83,6 @@ interface ShopCouponRow {
   label: string;
   discount_percent?: number | null;
   discount_amount?: number | string | null;
-  points_cost?: number | null;
   max_uses?: number | null;
   uses_count: number;
   active: boolean;
@@ -266,7 +265,6 @@ export default function ShopScreen() {
   const [couponCode, setCouponCode] = useState('');
   const [couponLabel, setCouponLabel] = useState('');
   const [couponDiscount, setCouponDiscount] = useState('');
-  const [couponPoints, setCouponPoints] = useState('');
   const [showCouponForm, setShowCouponForm] = useState(false);
 
   const [rewardTitle, setRewardTitle] = useState('');
@@ -547,22 +545,19 @@ export default function ShopScreen() {
     mutationFn: async () => {
       if (!activeClubId || !couponCode.trim() || !couponLabel.trim()) throw new Error('Completá código y nombre');
       const discountPercent = parseInt(couponDiscount, 10) || undefined;
-      const pointsCost = couponPoints.trim() ? parseInt(couponPoints, 10) : undefined;
-      if (!discountPercent && !pointsCost) {
-        throw new Error('Indicá descuento % o puntos canjeables de regalo');
+      if (!discountPercent) {
+        throw new Error('Indicá el % de descuento');
       }
       await api.post(`/clubs/${activeClubId}/shop/coupons`, {
         code: couponCode.trim(),
         label: couponLabel.trim(),
         discountPercent,
-        pointsCost,
       });
     },
     onSuccess: () => {
       setCouponCode('');
       setCouponLabel('');
       setCouponDiscount('');
-      setCouponPoints('');
       setShowCouponForm(false);
       queryClient.invalidateQueries({ queryKey: ['club-shop-coupons', activeClubId] });
       Alert.alert('Listo', 'Cupón creado');
@@ -1332,13 +1327,6 @@ export default function ShopScreen() {
                       onChangeText={setCouponDiscount}
                       keyboardType="number-pad"
                     />
-                    <InputField
-                      label="Puntos canjeables de regalo (opcional)"
-                      value={couponPoints}
-                      onChangeText={setCouponPoints}
-                      keyboardType="number-pad"
-                      placeholder="Ej. 100 — no suman al ranking"
-                    />
                     <View style={{ flexDirection: 'row', gap: 8 }}>
                       <View style={{ flex: 1 }}>
                         <SelectionChip label="Cancelar" selected={false} onPress={() => setShowCouponForm(false)} flex />
@@ -1367,7 +1355,7 @@ export default function ShopScreen() {
                 {!activeCoupons.length ? (
                   <AppCard>
                     <Text style={{ color: ui.colors.textSecondary, fontSize: 13 }}>
-                      Creá cupones de descuento o que otorguen puntos canjeables (no competitivos).
+                      Creá cupones de descuento para la tienda del club.
                     </Text>
                   </AppCard>
                 ) : (
@@ -1379,9 +1367,6 @@ export default function ShopScreen() {
                           <Text style={{ fontWeight: '600', color: ui.colors.textPrimary, marginTop: 4 }}>{coupon.label}</Text>
                           <Text style={{ fontSize: 12, color: ui.colors.textSecondary, marginTop: 4 }}>
                             {coupon.discount_percent ? `${coupon.discount_percent}% off` : ''}
-                            {coupon.points_cost
-                              ? `${coupon.discount_percent ? ' · ' : ''}+${coupon.points_cost} pts canjeables`
-                              : ''}
                             {coupon.max_uses ? ` · ${coupon.uses_count}/${coupon.max_uses} usos` : ''}
                           </Text>
                         </View>

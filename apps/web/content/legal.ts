@@ -1,6 +1,6 @@
 import type { LegalDocument } from '@/lib/legal-types';
 
-const updated = '15 de octubre de 2026';
+const updated = '23 de octubre de 2026';
 
 export const termsPlayers: LegalDocument = {
   slug: 'terminos',
@@ -57,28 +57,44 @@ export const termsPlayers: LegalDocument = {
       ],
     },
     {
-      title: '7. Propiedad intelectual',
+      title: '7. Avisos de clubes y notificaciones',
+      paragraphs: [
+        'Los clubes adheridos pueden avisarte, por notificación en la app, cuando liberan un turno, arman un partido abierto o lanzan una propuesta. Estos avisos llegan a jugadores ubicados dentro del radio que define cada club o, si no compartiste tu ubicación, a jugadores de la misma ciudad.',
+        'Para evitar abusos, x4 match limita la cantidad de avisos que un mismo club puede enviarte por día, agrupa los avisos cercanos en el tiempo y no envía notificaciones push durante la noche (de 23 a 8 h); las que se generen en ese horario se envían a la mañana.',
+        'Podés elegir qué tipos de notificaciones recibir desde Perfil → Notificaciones, desactivar todos los avisos de clubes o silenciar clubes en particular. También podés desactivar las notificaciones desde la configuración de tu teléfono.',
+      ],
+    },
+    {
+      title: '8. Contenido que publicás',
+      paragraphs: [
+        'Podés enviar noticias con texto e imágenes para que se muestren en la sección Novedades. Las noticias de jugadores pasan por una revisión de x4 match antes de publicarse.',
+        'Al publicar contenido declarás que es tuyo o que tenés permiso para usarlo, y que no infringe derechos de terceros. Le otorgás a x4 match una licencia gratuita y no exclusiva para mostrarlo, adaptarlo al formato de la app y destacarlo dentro de la Plataforma mientras esté publicado.',
+        'Está prohibido publicar contenido falso, ofensivo, discriminatorio, sexual, publicidad no autorizada o imágenes de terceros sin su consentimiento. x4 match puede rechazar, editar o retirar cualquier publicación que incumpla estas reglas.',
+      ],
+    },
+    {
+      title: '9. Propiedad intelectual',
       paragraphs: [
         'La marca, software, diseño y contenidos de x4 match son propiedad de la sociedad operadora o sus licenciantes.',
         'No podés copiar, descompilar ni explotar comercialmente la Plataforma sin autorización escrita.',
       ],
     },
     {
-      title: '8. Limitación de responsabilidad',
+      title: '10. Limitación de responsabilidad',
       paragraphs: [
         'La Plataforma se ofrece "tal cual". No garantizamos disponibilidad ininterrumpida ni ausencia de errores.',
         'x4 match no responde por lesiones, daños o conflictos derivados de partidos, reservas o relaciones con clubes u otros jugadores, salvo disposición legal imperativa en contrario.',
       ],
     },
     {
-      title: '9. Modificaciones y terminación',
+      title: '11. Modificaciones y terminación',
       paragraphs: [
         'Podemos actualizar estos términos. Te notificaremos por la app o por email ante cambios relevantes.',
         'Podés dejar de usar la Plataforma en cualquier momento. Podemos suspender el servicio ante incumplimiento grave.',
       ],
     },
     {
-      title: '10. Ley aplicable y jurisdicción',
+      title: '12. Ley aplicable y jurisdicción',
       paragraphs: [
         'Estos términos se rigen por las leyes de la República Argentina.',
         'Para cualquier controversia, las partes se someten a los tribunales ordinarios de la Ciudad Autónoma de Buenos Aires, con renuncia a cualquier otro fuero.',
@@ -97,7 +113,7 @@ export const termsClubs: LegalDocument = {
     {
       title: '1. Objeto',
       paragraphs: [
-        'x4 match otorga al Club una licencia no exclusiva, revocable y limitada para usar el panel de gestión, publicación de turnos, torneos, tienda y herramientas asociadas ("Software").',
+        'x4 match otorga al Club una licencia no exclusiva, revocable y limitada para usar el panel de gestión, publicación de turnos, avisos a jugadores, noticias, torneos, tienda y herramientas asociadas ("Software").',
         'El Club actúa como responsable frente a sus jugadores por horarios, precios, cancelaciones y cumplimiento fiscal de sus ventas.',
       ],
     },
@@ -134,38 +150,48 @@ export const termsClubs: LegalDocument = {
         'El Club garantiza tener derecho a publicar logos, fotos, precios y datos de contacto cargados en la Plataforma.',
         'Los datos de clientes generados en el Club son de titularidad del Club. x4 match actúa como encargado del tratamiento para prestar el servicio.',
         'Al finalizar la relación, el Club puede solicitar exportación de datos durante 30 días; luego se aplicará baja lógica según política de retención.',
+        'Las noticias que publica el Club se muestran al instante en la sección Novedades. El Club otorga a x4 match una licencia gratuita y no exclusiva para mostrarlas y, a criterio de x4 match, destacarlas en el inicio de la app. x4 match puede retirar noticias con contenido falso, ofensivo, que infrinja derechos de terceros o ajeno a la actividad del Club.',
       ],
     },
     {
-      title: '6. Nivel de servicio',
+      title: '6. Avisos a jugadores',
+      paragraphs: [
+        'El Club puede enviar avisos por notificación a jugadores cercanos cuando publica un turno libre, un partido abierto o una campaña. El Club define el radio de alcance (entre 1 y 50 km) desde su panel; los jugadores sin ubicación compartida reciben avisos de clubes de su ciudad.',
+        'Para proteger a los jugadores, x4 match aplica reglas que el Club no puede desactivar: un tope diario de avisos por jugador y por club, la agrupación de avisos cercanos en el tiempo, la postergación de notificaciones push durante la noche y el respeto de las preferencias de cada jugador, que puede desactivar estos avisos o silenciar al Club.',
+        'Por eso x4 match no garantiza una cantidad mínima de destinatarios, la entrega de cada notificación ni que el turno se ocupe. El Club solo recibe métricas agregadas (avisos enviados, reservas generadas), no la identidad de los jugadores notificados.',
+        'El Club debe usar esta herramienta solo para ofrecer turnos y actividades propias reales. x4 match puede limitar o suspender su uso ante envíos engañosos, reiterados o ajenos a esa finalidad.',
+      ],
+    },
+    {
+      title: '7. Nivel de servicio',
       paragraphs: [
         'El Software se provee con esfuerzo comercial razonable ("best effort"). En fase beta o pilot no se garantiza uptime del 100%.',
         'Mantenimientos programados serán comunicados con antelación razonable cuando sea posible.',
       ],
     },
     {
-      title: '7. Confidencialidad y propiedad intelectual',
+      title: '8. Confidencialidad y propiedad intelectual',
       paragraphs: [
         'Cada parte mantendrá confidencial la información comercial no pública de la otra.',
         'x4 match retiene todos los derechos sobre el Software. El Club no adquiere propiedad sobre el código ni la marca.',
       ],
     },
     {
-      title: '8. Limitación de responsabilidad',
+      title: '9. Limitación de responsabilidad',
       paragraphs: [
         'La responsabilidad total de x4 match frente al Club por cualquier concepto no excederá el monto de las comisiones percibidas por x4 match de ese Club en los últimos 12 meses.',
         'No respondemos por lucro cesante, pérdida de datos por causas ajenas a nuestra negligencia grave, ni por actos del Club frente a jugadores.',
       ],
     },
     {
-      title: '9. Terminación',
+      title: '10. Terminación',
       paragraphs: [
         'Cualquiera de las partes puede rescindir con un preaviso de 30 días. x4 match puede suspender de inmediato ante incumplimiento grave o uso fraudulento.',
         'Tras la terminación, cesan los derechos de uso del Software y se desconecta la integración con Mercado Pago. Las comisiones devengadas por cobros anteriores subsisten.',
       ],
     },
     {
-      title: '10. Ley aplicable',
+      title: '11. Ley aplicable',
       paragraphs: [
         'Este acuerdo se rige por las leyes de la República Argentina. Jurisdicción: tribunales de la Ciudad Autónoma de Buenos Aires.',
         'Consultas comerciales: clubes@x4match.com · Consultas legales: legal@x4match.com.',
@@ -190,7 +216,7 @@ export const privacyPolicy: LegalDocument = {
     {
       title: '2. Datos que recopilamos',
       paragraphs: [
-        'Jugadores: nombre, email, teléfono, foto de perfil, nivel deportivo, historial de partidos, preferencias de juego y, si lo autorizás, ubicación aproximada para mostrar clubes y partidos cercanos.',
+        'Jugadores: nombre, email, teléfono, foto de perfil, ciudad, nivel deportivo, historial de partidos, preferencias de juego, preferencias de notificaciones, clubes silenciados, noticias que publiques y, si lo autorizás, ubicación aproximada.',
         'Clubes: razón social, CUIT, datos de contacto del gerente, información de canchas, horarios, precios e identificadores de integración con Mercado Pago (tokens cifrados, nunca en texto plano).',
         'Datos técnicos: dirección IP, tipo de dispositivo, logs de uso y cookies estrictamente necesarias o analíticas según tu consentimiento.',
       ],
@@ -204,47 +230,56 @@ export const privacyPolicy: LegalDocument = {
       ],
     },
     {
-      title: '4. Base legal',
+      title: '4. Ubicación y avisos de clubes',
       paragraphs: [
-        'Ejecución del contrato (cuenta y uso de la app), interés legítimo (seguridad y mejora del servicio) y consentimiento cuando la ley lo exija (marketing, cookies no esenciales, geolocalización).',
+        'Usamos tu ubicación aproximada, si la autorizaste, o la ciudad de tu perfil para mostrarte clubes y partidos cercanos y para enviarte avisos de clubes adheridos dentro del radio que cada club define (por ejemplo, un turno libre o un partido abierto).',
+        'La selección de destinatarios la hace x4 match: no compartimos tu ubicación, nombre ni datos de contacto con el club por enviarte un aviso. El club solo ve métricas agregadas, como cuántos avisos se enviaron y cuántas reservas generaron.',
+        'Podés dejar de recibir estos avisos en cualquier momento desde Perfil → Notificaciones (desactivando los avisos de clubes o silenciando clubes en particular), revocando el permiso de ubicación o desactivando las notificaciones en tu teléfono. Desactivarlos no afecta el resto del servicio.',
       ],
     },
     {
-      title: '5. Compartición de datos',
+      title: '5. Base legal',
       paragraphs: [
-        'Compartimos datos con clubes donde reservás o jugás, para que puedan gestionar turnos y cobros.',
+        'Ejecución del contrato (cuenta y uso de la app), interés legítimo (seguridad y mejora del servicio) y consentimiento cuando la ley lo exija (marketing, avisos comerciales de clubes, cookies no esenciales, geolocalización). Podés retirar tu consentimiento en cualquier momento desde la app o la configuración de tu teléfono.',
+      ],
+    },
+    {
+      title: '6. Compartición de datos',
+      paragraphs: [
+        'Compartimos datos con clubes donde reservás o jugás, para que puedan gestionar turnos y cobros. Recibir un aviso de un club no implica que ese club acceda a tus datos.',
+        'Las noticias que publicás se muestran a los demás usuarios junto con tu nombre o el del club que las publica.',
         'Utilizamos proveedores de infraestructura (hosting, email, analítica) que actúan como encargados del tratamiento bajo contrato.',
         'Los pagos entre jugador y club los procesa Mercado Pago en la cuenta del club; x4 match solo recibe la información necesaria para confirmar la reserva y calcular su comisión, y no accede a datos completos de tarjetas.',
       ],
     },
     {
-      title: '6. Transferencias internacionales',
+      title: '7. Transferencias internacionales',
       paragraphs: [
         'Algunos proveedores pueden alojar datos fuera de Argentina (por ejemplo, Estados Unidos). Adoptamos cláusulas contractuales y medidas técnicas razonables para proteger tu información.',
       ],
     },
     {
-      title: '7. Conservación',
+      title: '8. Conservación',
       paragraphs: [
         'Conservamos los datos mientras tu cuenta esté activa y el tiempo adicional necesario para obligaciones legales, reclamos o auditoría.',
         'Podés solicitar la eliminación de tu cuenta; eliminaremos o anonimizaremos datos salvo retención legal obligatoria.',
       ],
     },
     {
-      title: '8. Tus derechos',
+      title: '9. Tus derechos',
       paragraphs: [
         'Tenés derecho de acceso, rectificación, actualización, supresión y oposición, conforme a la Ley 25.326 de Protección de Datos Personales.',
         'Para ejercerlos, escribinos a legal@x4match.com indicando tu email registrado. Responderemos en un plazo razonable.',
       ],
     },
     {
-      title: '9. Menores',
+      title: '10. Menores',
       paragraphs: [
         'No recopilamos intencionalmente datos de menores de 10 años. Los usuarios de entre 10 y 18 años deben contar con autorización de su madre, padre o tutor. Si detectamos una cuenta de menor sin autorización, podremos suspenderla y eliminar los datos.',
       ],
     },
     {
-      title: '10. Seguridad',
+      title: '11. Seguridad',
       paragraphs: [
         'Aplicamos medidas técnicas y organizativas acordes al riesgo: cifrado en tránsito (HTTPS), control de acceso, y almacenamiento seguro de credenciales de integración.',
         'Ningún sistema es 100% seguro; te recomendamos usar contraseñas fuertes y no compartir tu cuenta.',
@@ -309,7 +344,7 @@ export const accountDeletion: LegalDocument = {
       title: '2. Datos que se eliminan',
       paragraphs: [
         'Al eliminar tu cuenta, borramos o anonimizamos tu perfil (nombre, email, teléfono, foto, preferencias de juego, ubicación guardada y credenciales de acceso).',
-        'También eliminamos tus seguidores/seguidos, conversaciones privadas, notificaciones y tokens de sesión activos.',
+        'También eliminamos tus seguidores/seguidos, conversaciones privadas, notificaciones, preferencias de notificaciones, clubes silenciados, noticias publicadas y tokens de sesión activos.',
         'Si tenías una cuenta de club (gerente), se desvincula tu acceso; los datos operativos del club pueden conservarse según el contrato con la sede.',
       ],
     },

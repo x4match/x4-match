@@ -194,7 +194,7 @@ export default function ConversationScreen() {
           </TouchableOpacity>
         }
       />
-      <KeyboardAvoid style={{ flex: 1 }} keyboardVerticalOffset={88}>
+      <KeyboardAvoid style={{ flex: 1 }} keyboardVerticalOffset={88} safeAreaBottom>
         {isPending ? (
           <View style={{ flex: 1, padding: ui.spacing.lg, justifyContent: 'center' }}>
             <View style={{ alignItems: 'center', marginBottom: 24 }}>

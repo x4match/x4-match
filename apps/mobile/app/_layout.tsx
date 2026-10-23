@@ -128,10 +128,10 @@ export default function RootLayout() {
               <Stack.Screen name="(account)/change-password" options={{ headerShown: false }} />
               <Stack.Screen name="(account)/badges" options={{ headerShown: false }} />
               <Stack.Screen name="shop/index" options={{ headerShown: false }} />
-              <Stack.Screen name="marketplace/index" options={{ headerShown: false }} />
-              <Stack.Screen name="marketplace/[id]" options={{ headerShown: false }} />
-              <Stack.Screen name="marketplace/sell" options={{ headerShown: false }} />
-              <Stack.Screen name="marketplace/mine" options={{ headerShown: false }} />
+              <Stack.Screen name="news/index" options={{ headerShown: false }} />
+              <Stack.Screen name="news/create" options={{ headerShown: false }} />
+              <Stack.Screen name="news/mine" options={{ headerShown: false }} />
+              <Stack.Screen name="news/[id]" options={{ headerShown: false }} />
               <Stack.Screen name="(club-manager)/club-billing" options={{ headerShown: false }} />
               <Stack.Screen name="(club-manager)/club-payments" options={{ headerShown: false }} />
               <Stack.Screen name="(club-manager)/club-alerts" options={{ headerShown: false }} />
@@ -142,6 +142,7 @@ export default function RootLayout() {
               <Stack.Screen name="history/[id]" options={{ headerShown: false }} />
               <Stack.Screen name="(account)/delete-account" options={{ headerShown: false }} />
               <Stack.Screen name="(account)/blocked-users" options={{ headerShown: false }} />
+              <Stack.Screen name="(account)/notification-preferences" options={{ headerShown: false }} />
               <Stack.Screen name="challenge/create" options={{ headerShown: false }} />
               <Stack.Screen name="challenge/[id]" options={{ headerShown: false }} />
             </Stack>

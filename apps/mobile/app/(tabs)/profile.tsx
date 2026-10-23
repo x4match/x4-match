@@ -136,7 +136,7 @@ function MenuRow({
   onPress,
   muted,
 }: {
-  icon: ImageSourcePropType;
+  icon: ImageSourcePropType | ComponentProps<typeof Ionicons>['name'];
   title: string;
   subtitle: string;
   onPress: () => void;
@@ -170,7 +170,11 @@ function MenuRow({
                 backgroundColor: muted ? '#1A2025' : 'transparent',
               }}
             >
-              <Image source={icon} style={{ width: 22, height: 22 }} resizeMode="contain" />
+              {typeof icon === 'string' ? (
+                <Ionicons name={icon} size={22} color={muted ? MUTED : LIME} />
+              ) : (
+                <Image source={icon} style={{ width: 22, height: 22 }} resizeMode="contain" />
+              )}
             </View>
             <View style={{ flex: 1 }}>
               <Text
@@ -1308,6 +1312,12 @@ export default function ProfileScreen() {
               title="Ver tutoriales de nuevo"
               subtitle="Volvé a ver la explicación de cada pantalla"
               onPress={() => void handleReplayTours()}
+            />
+            <MenuRow
+              icon="notifications"
+              title="Notificaciones"
+              subtitle="Elegí qué avisos querés recibir"
+              onPress={() => router.push('/notification-preferences' as any)}
             />
             <MenuRow
               icon={ICON_PASSWORD}

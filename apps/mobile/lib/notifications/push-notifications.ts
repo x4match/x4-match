@@ -50,7 +50,8 @@ export async function registerForPushNotifications(): Promise<string | null> {
       // Expo Go en Android (SDK 53+) no soporta push remoto.
       return null;
     }
-    if (!Device.isDevice) {
+    // Los emuladores Android con Google Play Services reciben FCM; el simulador de iOS no.
+    if (!Device.isDevice && Platform.OS === 'ios') {
       return null;
     }
 

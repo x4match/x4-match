@@ -42,6 +42,10 @@ export function getNotificationRoute(type: string, data: NotificationData = {}):
     case 'CLUB_CHALLENGE':
       if (challengeId) return `/challenge/${challengeId}`;
       break;
+    case 'NEWS_APPROVED':
+      return asId(data.newsId) ? `/news/${asId(data.newsId)}` : '/news/mine';
+    case 'NEWS_REJECTED':
+      return '/news/mine';
   }
 
   if (matchId) return `/match/${matchId}`;

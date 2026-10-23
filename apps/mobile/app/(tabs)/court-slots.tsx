@@ -32,6 +32,7 @@ import {
   useMineClubs,
 } from '@/components/club/ClubPicker';
 import { ManagerQuickActions } from '@/components/club/ManagerQuickActions';
+import { DEFAULT_SLOT_OFFER_RADIUS_KM, OutreachStatsCard } from '@/components/club/OutreachStatsCard';
 import { TourTarget, useScreenTour, type TourStep } from '@/components/tour/ScreenTour';
 
 const GESTION_TOUR_STEPS: TourStep[] = [
@@ -311,10 +312,12 @@ export default function CourtSlotsScreen() {
         gap_fill_auto_create_match?: boolean;
         gapFillNotifyEnabled?: boolean;
         gap_fill_notify_enabled?: boolean;
+        slotOfferRadiusKm?: number;
       };
     },
     enabled: canManage && !!activeClubId,
   });
+  const slotOfferRadiusKm = clubDetail?.slotOfferRadiusKm ?? DEFAULT_SLOT_OFFER_RADIUS_KM;
 
   useEffect(() => {
     if (!clubDetail) return;
@@ -545,12 +548,21 @@ export default function CourtSlotsScreen() {
         Alert.alert('Listo', 'Horario actualizado');
         return;
       }
+      queryClient.invalidateQueries({ queryKey: ['club-outreach-stats', activeClubId] });
       const count = data.notifiedCount ?? 0;
+      const players = `${count} jugador${count === 1 ? '' : 'es'}`;
+      const scheduledFor = data.notifyScheduledFor ? new Date(data.notifyScheduledFor) : null;
+      const deferredToMorning = scheduledFor != null && scheduledFor.getTime() - Date.now() > 15 * 60_000;
       Alert.alert(
         'Horario publicado',
-        count > 0
-          ? `Se avisó a ${count} jugador${count === 1 ? '' : 'es'}.`
-          : 'Publicado. No había jugadores cercanos para notificar.',
+        count === 0
+          ? 'Publicado. No había jugadores cercanos para avisar, o ya recibieron el máximo de avisos de hoy.'
+          : deferredToMorning
+            ? `Vamos a avisar a ${players} a las ${scheduledFor!.toLocaleTimeString('es-AR', {
+                hour: '2-digit',
+                minute: '2-digit',
+              })}, para no molestar de noche.`
+            : `Vamos a avisar a ${players} en unos minutos. Si publicás más horarios, les llega un solo aviso.`,
       );
     },
     onError: (err: any) => {
@@ -910,16 +922,23 @@ export default function CourtSlotsScreen() {
                       }
                     />
                     {!editingSlotId && (
-                      <View
-                        style={{
-                          flexDirection: 'row',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          marginBottom: 16,
-                        }}
-                      >
-                        <Text style={{ fontWeight: '600', color: ui.colors.textPrimary }}>Avisar jugadores</Text>
-                        <Switch value={notifyPlayers} onValueChange={setNotifyPlayers} />
+                      <View style={{ marginBottom: 16 }}>
+                        <View
+                          style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                          }}
+                        >
+                          <Text style={{ fontWeight: '600', color: ui.colors.textPrimary }}>Avisar jugadores</Text>
+                          <Switch value={notifyPlayers} onValueChange={setNotifyPlayers} />
+                        </View>
+                        {notifyPlayers ? (
+                          <Text style={{ fontSize: 12, color: ui.colors.textMuted, marginTop: 6, lineHeight: 17 }}>
+                            A jugadores a menos de {slotOfferRadiusKm} km del club. El radio se cambia en
+                            Estadísticas → Avisos a jugadores.
+                          </Text>
+                        ) : null}
                       </View>
                     )}
                     <View style={{ flexDirection: 'row', gap: 8 }}>
@@ -1264,6 +1283,8 @@ export default function CourtSlotsScreen() {
                     </Text>
                   </AppCard>
                 )}
+
+                <OutreachStatsCard clubId={activeClubId} radiusKm={slotOfferRadiusKm} enabled={canManage} />
 
                 <SectionHeader
                   title="Horarios valle detectados"

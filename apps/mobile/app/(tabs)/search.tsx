@@ -16,7 +16,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '@/lib/api';
-import { resolveSkillScore, formatSkillScore } from '@/lib/skill';
+import { resolveSkillScore } from '@/lib/skill';
 import { ui } from '@/theme/tokens';
 import { tabScreenPadding } from '@/lib/layout';
 import {
@@ -36,7 +36,7 @@ const SEARCH_TOUR_STEPS: TourStep[] = [
     target: 'search.lookup',
     fixed: true,
     title: 'Buscar jugadores y clubes',
-    description: 'Encontrá a cualquier jugador por nombre o apodo, o un club por nombre o ciudad.',
+    description: 'Encontrá a cualquier jugador por nombre o nombre de usuario, o un club por nombre o ciudad.',
   },
   {
     target: 'search.mode',
@@ -73,6 +73,7 @@ type PlayerSearchHit = {
   id: string;
   userId: string;
   name: string;
+  nickname?: string;
   photo?: string;
   skillScore?: number;
   levelCategory?: string;
@@ -204,17 +205,19 @@ export default function SearchScreen() {
   });
 
   const searchPlayers = useCallback(async (q: string) => {
-    if (q.trim().length < 2) {
+    const term = q.trim().replace(/^@+/, '');
+    if (term.length < 2) {
       setPlayerResults([]);
       return;
     }
     setPlayerSearchLoading(true);
     try {
-      const res = await api.get('/players/search', { params: { q: q.trim() } });
+      const res = await api.get('/players/search', { params: { q: term } });
       const mapped: PlayerSearchHit[] = (res.data || []).map((row: Record<string, unknown>) => ({
         id: String(row.id),
         userId: String(row.userId),
         name: String(row.name || row.nickname || 'Jugador'),
+        nickname: row.nickname ? String(row.nickname) : undefined,
         photo: row.photo ? String(row.photo) : undefined,
         skillScore: resolveSkillScore(
           row.skillScore != null ? Number(row.skillScore) : undefined,
@@ -399,7 +402,7 @@ export default function SearchScreen() {
                   onChangeText={setQuery}
                   placeholder={
                     searchTab === 'players'
-                      ? 'Nombre o apodo (mín. 2 letras)'
+                      ? 'Nombre o @usuario (mín. 2 letras)'
                       : 'Nombre o ciudad (mín. 2 letras)'
                   }
                   placeholderTextColor={ui.colors.textMuted}
@@ -458,8 +461,8 @@ export default function SearchScreen() {
                     <View style={{ flex: 1 }}>
                       <Text style={{ fontWeight: '600', color: ui.colors.textPrimary }}>{item.name}</Text>
                       <Text style={{ fontSize: 12, color: ui.colors.textMuted, marginTop: 2 }}>
+                        {item.nickname ? `@${item.nickname} · ` : ''}
                         {item.levelCategory || 'Sin categoría'}
-                        {item.skillScore != null ? ` · ${formatSkillScore(item.skillScore)}` : ''}
                       </Text>
                     </View>
                   </Pressable>

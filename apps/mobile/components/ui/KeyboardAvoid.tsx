@@ -6,6 +6,7 @@ import {
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useKeyboardBottomInset } from '@/lib/use-keyboard-bottom-inset';
 
 type KeyboardAvoidProps = {
@@ -13,6 +14,11 @@ type KeyboardAvoidProps = {
   style?: StyleProp<ViewStyle>;
   /** Solo iOS; en Android el inset se calcula con el solapamiento real del teclado. */
   keyboardVerticalOffset?: number;
+  /**
+   * Reserva el inset inferior (barra de navegación de Android / home indicator de iOS)
+   * cuando el teclado está cerrado. Usar en pantallas con un input fijo abajo.
+   */
+  safeAreaBottom?: boolean;
 };
 
 /**
@@ -24,13 +30,16 @@ export function KeyboardAvoid({
   children,
   style,
   keyboardVerticalOffset = 0,
+  safeAreaBottom = false,
 }: KeyboardAvoidProps) {
-  const androidInset = useKeyboardBottomInset();
+  const keyboardInset = useKeyboardBottomInset();
+  const insets = useSafeAreaInsets();
+  const restingBottom = safeAreaBottom && keyboardInset === 0 ? insets.bottom : 0;
 
   if (Platform.OS === 'ios') {
     return (
       <KeyboardAvoidingView
-        style={style}
+        style={[style, restingBottom > 0 ? { paddingBottom: restingBottom } : null]}
         behavior="padding"
         keyboardVerticalOffset={keyboardVerticalOffset}
       >
@@ -39,7 +48,8 @@ export function KeyboardAvoid({
     );
   }
 
+  const bottom = keyboardInset > 0 ? keyboardInset : restingBottom;
   return (
-    <View style={[style, androidInset > 0 ? { paddingBottom: androidInset } : null]}>{children}</View>
+    <View style={[style, bottom > 0 ? { paddingBottom: bottom } : null]}>{children}</View>
   );
 }
