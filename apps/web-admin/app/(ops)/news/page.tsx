@@ -68,64 +68,129 @@ function statusBadge(post: NewsPost) {
   return { label: 'Eliminada', tone: 'neutral' };
 }
 
+type NewsSettings = {
+  defaultDurationDays: number;
+  maxLivePerClub: number;
+  maxPendingPerPlayer: number;
+};
+
+const NEWS_SETTING_FIELDS: {
+  name: keyof NewsSettings;
+  label: string;
+  hint: string;
+  max: number;
+}[] = [
+  {
+    name: 'defaultDurationDays',
+    label: 'Vigencia por defecto (días)',
+    hint: 'Desde que se publica (clubes) o se aprueba (jugadores). No cambia las ya publicadas.',
+    max: 365,
+  },
+  {
+    name: 'maxLivePerClub',
+    label: 'Máx. vigentes por club',
+    hint: 'Noticias publicadas y sin vencer que un club puede tener a la vez.',
+    max: 100,
+  },
+  {
+    name: 'maxPendingPerPlayer',
+    label: 'Máx. pendientes por jugador',
+    hint: 'Noticias esperando aprobación que un jugador puede tener a la vez.',
+    max: 50,
+  },
+];
+
 function NewsSettingsCard() {
   const queryClient = useQueryClient();
   const { data } = useQuery({
     queryKey: ['platform-news-settings'],
-    queryFn: async () =>
-      (await api.get('/platform/news/settings')).data as { defaultDurationDays: number },
+    queryFn: async () => (await api.get('/platform/news/settings')).data as NewsSettings,
   });
-  const [days, setDays] = useState('');
+  const [values, setValues] = useState<Record<keyof NewsSettings, string>>({
+    defaultDurationDays: '',
+    maxLivePerClub: '',
+    maxPendingPerPlayer: '',
+  });
 
   useEffect(() => {
-    if (data) setDays(String(data.defaultDurationDays));
+    if (!data) return;
+    setValues({
+      defaultDurationDays: String(data.defaultDurationDays),
+      maxLivePerClub: String(data.maxLivePerClub),
+      maxPendingPerPlayer: String(data.maxPendingPerPlayer),
+    });
   }, [data]);
 
   const save = useMutation({
-    mutationFn: async (value: number) =>
-      api.patch('/platform/news/settings', { defaultDurationDays: value }).then((r) => r.data),
-    meta: { successMessage: 'Vigencia por defecto actualizada.' },
+    mutationFn: async (changes: Partial<NewsSettings>) =>
+      api.patch('/platform/news/settings', changes).then((r) => r.data),
+    meta: { successMessage: 'Configuración de noticias actualizada.' },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['platform-news-settings'] }),
   });
 
-  const parsed = Number(days);
-  const valid = Number.isInteger(parsed) && parsed >= 1 && parsed <= 365;
+  const parsed = NEWS_SETTING_FIELDS.map((field) => {
+    const value = Number(values[field.name]);
+    return {
+      ...field,
+      value,
+      valid: Number.isInteger(value) && value >= 1 && value <= field.max,
+    };
+  });
+  const allValid = parsed.every((field) => field.valid);
+  const changes = Object.fromEntries(
+    parsed
+      .filter((field) => data && field.value !== data[field.name])
+      .map((field) => [field.name, field.value]),
+  ) as Partial<NewsSettings>;
+  const dirty = Object.keys(changes).length > 0;
 
   return (
     <div className="card" style={{ padding: 16, marginBottom: 16 }}>
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          if (valid) save.mutate(parsed);
+          if (allValid && dirty) save.mutate(changes);
         }}
-        style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', gap: 12 }}
+        style={{ display: 'grid', gap: 12 }}
       >
-        <div style={{ flex: '1 1 260px' }}>
-          <p style={{ margin: 0, fontWeight: 600 }}>Vigencia por defecto</p>
-          <p style={{ margin: '4px 0 0', color: 'var(--muted)', fontSize: 13 }}>
-            Días que una noticia queda visible desde que se publica (clubes) o se aprueba
-            (jugadores). No cambia las noticias ya publicadas.
-          </p>
-        </div>
-        <label style={{ display: 'grid', gap: 4, fontSize: 13 }}>
-          Días
-          <input
-            className="input"
-            type="number"
-            min={1}
-            max={365}
-            value={days}
-            onChange={(e) => setDays(e.target.value)}
-            style={{ width: 110 }}
-          />
-        </label>
-        <button
-          className="btn btn-primary"
-          type="submit"
-          disabled={!valid || save.isPending || parsed === data?.defaultDurationDays}
+        <p style={{ margin: 0, fontWeight: 600 }}>Configuración de noticias</p>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+            gap: 16,
+          }}
         >
-          {save.isPending ? 'Guardando…' : 'Guardar'}
-        </button>
+          {parsed.map((field) => (
+            <label key={field.name} style={{ display: 'grid', gap: 4, fontSize: 13 }}>
+              {field.label}
+              <input
+                className="input"
+                type="number"
+                min={1}
+                max={field.max}
+                value={values[field.name]}
+                onChange={(e) =>
+                  setValues((prev) => ({ ...prev, [field.name]: e.target.value }))
+                }
+                aria-invalid={!field.valid}
+                style={{ width: 120 }}
+              />
+              <span style={{ color: 'var(--muted)', fontSize: 12 }}>
+                {field.hint} (1 a {field.max})
+              </span>
+            </label>
+          ))}
+        </div>
+        <div>
+          <button
+            className="btn btn-primary"
+            type="submit"
+            disabled={!allValid || !dirty || save.isPending}
+          >
+            {save.isPending ? 'Guardando…' : 'Guardar'}
+          </button>
+        </div>
       </form>
     </div>
   );

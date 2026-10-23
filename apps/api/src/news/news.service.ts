@@ -9,12 +9,44 @@ import { DatabaseService } from '../database/database.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { ClubsService } from '../clubs/clubs.service';
 import { uploadImageBuffer } from '../common/cloudinary/cloudinary.util';
-import { CreateNewsPostDto, NEWS_MAX_DURATION_DAYS } from './dto/news.dto';
+import {
+  CreateNewsPostDto,
+  NEWS_MAX_DURATION_DAYS,
+  NEWS_MAX_LIVE_PER_CLUB,
+  NEWS_MAX_PENDING_PER_PLAYER,
+} from './dto/news.dto';
 
-const DEFAULT_DURATION_SETTING = 'news.default_duration_days';
-const FALLBACK_DURATION_DAYS = 7;
-const MAX_PENDING_PER_PLAYER = 3;
-const MAX_LIVE_PER_CLUB = 10;
+type NewsSettingKey = keyof NewsSettings;
+
+export interface NewsSettings {
+  defaultDurationDays: number;
+  maxLivePerClub: number;
+  maxPendingPerPlayer: number;
+}
+
+const NEWS_SETTINGS: Record<
+  NewsSettingKey,
+  { key: string; fallback: number; min: number; max: number }
+> = {
+  defaultDurationDays: {
+    key: 'news.default_duration_days',
+    fallback: 7,
+    min: 1,
+    max: NEWS_MAX_DURATION_DAYS,
+  },
+  maxLivePerClub: {
+    key: 'news.max_live_per_club',
+    fallback: 10,
+    min: 1,
+    max: NEWS_MAX_LIVE_PER_CLUB,
+  },
+  maxPendingPerPlayer: {
+    key: 'news.max_pending_per_player',
+    fallback: 3,
+    min: 1,
+    max: NEWS_MAX_PENDING_PER_PLAYER,
+  },
+};
 const FEATURED_FEED_LIMIT = 10;
 const LIVE_WHERE = `n.status = 'APPROVED' AND n.published_at <= NOW() AND n.expires_at > NOW()`;
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'];
@@ -89,31 +121,46 @@ export class NewsService {
   ) {}
 
   async getDefaultDurationDays(): Promise<number> {
-    const result = await this.db.query<{ value: unknown }>(
-      `SELECT value FROM platform_settings WHERE key = $1`,
-      [DEFAULT_DURATION_SETTING],
-    );
-    const days = Number(result.rows[0]?.value);
-    return Number.isInteger(days) && days >= 1 && days <= NEWS_MAX_DURATION_DAYS
-      ? days
-      : FALLBACK_DURATION_DAYS;
+    return (await this.getSettings()).defaultDurationDays;
   }
 
-  async getSettings() {
-    return { defaultDurationDays: await this.getDefaultDurationDays() };
+  async getSettings(): Promise<NewsSettings> {
+    const entries = Object.entries(NEWS_SETTINGS) as [
+      NewsSettingKey,
+      (typeof NEWS_SETTINGS)[NewsSettingKey],
+    ][];
+    const result = await this.db.query<{ key: string; value: unknown }>(
+      `SELECT key, value FROM platform_settings WHERE key = ANY($1::text[])`,
+      [entries.map(([, def]) => def.key)],
+    );
+    const stored = new Map(result.rows.map((row) => [row.key, Number(row.value)]));
+
+    const settings = {} as NewsSettings;
+    for (const [name, def] of entries) {
+      const value = stored.get(def.key);
+      settings[name] =
+        value !== undefined && Number.isInteger(value) && value >= def.min && value <= def.max
+          ? value
+          : def.fallback;
+    }
+    return settings;
   }
 
-  async updateSettings(defaultDurationDays: number, adminUserId: string) {
-    await this.db.query(
-      `INSERT INTO platform_settings (key, value, updated_by_user_id, updated_at)
-       VALUES ($1, $2::jsonb, $3, NOW())
-       ON CONFLICT (key) DO UPDATE
-         SET value = EXCLUDED.value,
-             updated_by_user_id = EXCLUDED.updated_by_user_id,
-             updated_at = NOW()`,
-      [DEFAULT_DURATION_SETTING, JSON.stringify(defaultDurationDays), adminUserId],
-    );
-    return { defaultDurationDays };
+  async updateSettings(changes: Partial<NewsSettings>, adminUserId: string) {
+    for (const name of Object.keys(NEWS_SETTINGS) as NewsSettingKey[]) {
+      const value = changes[name];
+      if (value === undefined) continue;
+      await this.db.query(
+        `INSERT INTO platform_settings (key, value, updated_by_user_id, updated_at)
+         VALUES ($1, $2::jsonb, $3, NOW())
+         ON CONFLICT (key) DO UPDATE
+           SET value = EXCLUDED.value,
+               updated_by_user_id = EXCLUDED.updated_by_user_id,
+               updated_at = NOW()`,
+        [NEWS_SETTINGS[name].key, JSON.stringify(value), adminUserId],
+      );
+    }
+    return this.getSettings();
   }
 
   /** Carrusel del home: solo las vigentes que el backoffice marcó como destacadas. */
@@ -213,14 +260,16 @@ export class NewsService {
        WHERE author_user_id = $1 AND source = 'PLAYER' AND status = 'PENDING'`,
       [userId],
     );
-    if (Number(pending.rows[0]?.count ?? 0) >= MAX_PENDING_PER_PLAYER) {
+    const { maxPendingPerPlayer, defaultDurationDays: durationDays } = await this.getSettings();
+    if (Number(pending.rows[0]?.count ?? 0) >= maxPendingPerPlayer) {
       throw new BadRequestException(
-        `Ya tenés ${MAX_PENDING_PER_PLAYER} noticias esperando aprobación. Esperá a que las revisemos.`,
+        maxPendingPerPlayer === 1
+          ? 'Ya tenés una noticia esperando aprobación. Esperá a que la revisemos.'
+          : `Ya tenés ${maxPendingPerPlayer} noticias esperando aprobación. Esperá a que las revisemos.`,
       );
     }
 
     const upload = await this.uploadImage(file, `users/${userId}`);
-    const durationDays = await this.getDefaultDurationDays();
     const result = await this.db.query<{ id: string }>(
       `INSERT INTO news_posts
          (author_user_id, source, title, body, link_url, image_url, cloudinary_public_id, status, duration_days)
@@ -297,14 +346,16 @@ export class NewsService {
        WHERE club_id = $1 AND status = 'APPROVED' AND expires_at > NOW()`,
       [clubId],
     );
-    if (Number(live.rows[0]?.count ?? 0) >= MAX_LIVE_PER_CLUB) {
+    const { maxLivePerClub, defaultDurationDays: durationDays } = await this.getSettings();
+    if (Number(live.rows[0]?.count ?? 0) >= maxLivePerClub) {
       throw new BadRequestException(
-        `Tu club ya tiene ${MAX_LIVE_PER_CLUB} noticias vigentes. Eliminá alguna para publicar otra.`,
+        maxLivePerClub === 1
+          ? 'Tu club ya tiene una noticia vigente. Eliminala para publicar otra.'
+          : `Tu club ya tiene ${maxLivePerClub} noticias vigentes. Eliminá alguna para publicar otra.`,
       );
     }
 
     const upload = await this.uploadImage(file, `clubs/${clubId}`);
-    const durationDays = await this.getDefaultDurationDays();
     const result = await this.db.query<{ id: string }>(
       `INSERT INTO news_posts
          (author_user_id, club_id, source, title, body, link_url, image_url, cloudinary_public_id,

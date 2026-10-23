@@ -19,6 +19,8 @@ const emptyToUndefined = ({ value }: { value: unknown }) => {
 };
 
 export const NEWS_MAX_DURATION_DAYS = 365;
+export const NEWS_MAX_LIVE_PER_CLUB = 100;
+export const NEWS_MAX_PENDING_PER_PLAYER = 50;
 
 /** Llega como multipart/form-data junto con la imagen: todos los campos son strings. */
 export class CreateNewsPostDto {
@@ -114,9 +116,24 @@ export class UpdateNewsExpiryDto {
 }
 
 export class UpdateNewsSettingsDto {
+  @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
   @Max(NEWS_MAX_DURATION_DAYS)
-  defaultDurationDays!: number;
+  defaultDurationDays?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(NEWS_MAX_LIVE_PER_CLUB)
+  maxLivePerClub?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(NEWS_MAX_PENDING_PER_PLAYER)
+  maxPendingPerPlayer?: number;
 }

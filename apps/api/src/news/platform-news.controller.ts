@@ -71,7 +71,7 @@ export class PlatformNewsController {
 
   @Patch('settings')
   updateSettings(@CurrentUser() user: { sub: string }, @Body() dto: UpdateNewsSettingsDto) {
-    return this.newsService.updateSettings(dto.defaultDurationDays, user.sub);
+    return this.newsService.updateSettings(dto, user.sub);
   }
 
   @Post(':id/approve')
