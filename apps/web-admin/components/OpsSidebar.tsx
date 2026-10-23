@@ -9,10 +9,15 @@ import { initials } from '@/lib/format';
 import { USER_ROLE_LABELS } from '@/lib/labels';
 import { NAV_GROUPS, isNavActive } from '@/lib/nav';
 import { usePendingClubRegistrations } from '@/lib/use-pending-club-registrations';
+import { usePendingNews } from '@/lib/use-pending-news';
 
 function SidebarNav({ pathname, onNavigate }: { pathname: string; onNavigate?: () => void }) {
   const { data: pendingClubs = 0 } = usePendingClubRegistrations();
-  const badges: Record<string, number> = { '/club-registrations': pendingClubs };
+  const { data: pendingNews = 0 } = usePendingNews();
+  const badges: Record<string, number> = {
+    '/club-registrations': pendingClubs,
+    '/news': pendingNews,
+  };
 
   return (
     <nav className="ops-nav" aria-label="Navegación principal">

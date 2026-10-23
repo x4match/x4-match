@@ -6,6 +6,7 @@ import {
   CreditCard,
   Handshake,
   LayoutDashboard,
+  Megaphone,
   Swords,
   Timer,
   Trophy,
@@ -34,6 +35,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: '/users', label: 'Usuarios', icon: Users },
       { href: '/matches', label: 'Partidos', icon: Swords },
       { href: '/tournaments', label: 'Torneos', icon: Trophy },
+      { href: '/news', label: 'Noticias', icon: Megaphone },
     ],
   },
   {

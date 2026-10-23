@@ -21,6 +21,26 @@ export const VERIFICATION_STATUSES = Object.entries(VERIFICATION_STATUS_LABELS).
 );
 export const TRIAL_MODES = optionsFromLabels(TRIAL_MODE_LABELS, 'Todos los modos');
 
+export const NEWS_STATUSES = [
+  { value: 'PENDING', label: 'Pendientes' },
+  { value: 'ACTIVE', label: 'Publicadas' },
+  { value: 'EXPIRED', label: 'Vencidas' },
+  { value: 'REJECTED', label: 'Rechazadas' },
+  { value: 'DELETED', label: 'Eliminadas' },
+  { value: '', label: 'Todas' },
+];
+
+export const NEWS_FEATURED = [
+  { value: '', label: 'Destacadas y no' },
+  { value: 'true', label: 'Solo destacadas' },
+];
+
+export const NEWS_SOURCES = [
+  { value: '', label: 'Clubes y jugadores' },
+  { value: 'CLUB', label: 'Clubes' },
+  { value: 'PLAYER', label: 'Jugadores' },
+];
+
 export const TRIAL_STATUSES = [
   { value: '', label: 'Todos los estados' },
   ...['NOT_STARTED', 'TRIAL', 'GRACE'].map((value) => ({

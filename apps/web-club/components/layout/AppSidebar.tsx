@@ -9,6 +9,7 @@ import {
   CreditCard,
   LayoutDashboard,
   LogOut,
+  Megaphone,
   Menu,
   Moon,
   Receipt,
@@ -59,6 +60,7 @@ const NAV_GROUPS = [
     label: 'Club',
     items: [
       { href: '/ranking', label: 'Ranking', icon: Trophy },
+      { href: '/noticias', label: 'Noticias', icon: Megaphone },
       { href: '/perfil', label: 'Perfil', icon: Settings },
     ],
   },
