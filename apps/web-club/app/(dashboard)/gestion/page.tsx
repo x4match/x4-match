@@ -8,6 +8,11 @@ import { api } from '@/lib/api';
 import { useClub } from '@/contexts/ClubContext';
 import { PageHeader } from '@/components/layout/AppSidebar';
 import { DashboardSkeleton, EmptyState } from '@/components/club/DashboardCards';
+import {
+  DEFAULT_SLOT_OFFER_RADIUS_KM,
+  OutreachStatsCard,
+  outreachPublishMessage,
+} from '@/components/club/OutreachStatsCard';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -150,10 +155,12 @@ function GestionInner() {
         gap_fill_auto_create_match?: boolean;
         gapFillNotifyEnabled?: boolean;
         gap_fill_notify_enabled?: boolean;
+        slotOfferRadiusKm?: number;
       };
     },
     enabled: !!activeClubId,
   });
+  const slotOfferRadiusKm = clubQuery.data?.slotOfferRadiusKm ?? DEFAULT_SLOT_OFFER_RADIUS_KM;
 
   const [hoursBefore, setHoursBefore] = useState('8');
   const [autoCreateMatch, setAutoCreateMatch] = useState(false);
@@ -313,14 +320,22 @@ function GestionInner() {
       };
       if (editingSlotId) {
         await api.patch(`/clubs/${activeClubId}/court-slots/${editingSlotId}`, payload);
-      } else {
-        await api.post(`/clubs/${activeClubId}/court-slots`, { ...payload, notifyPlayers });
+        return null;
       }
+      const res = await api.post(`/clubs/${activeClubId}/court-slots`, { ...payload, notifyPlayers });
+      return res.data as { notifiedCount?: number; notifyScheduledFor?: string | null };
     },
-    onSuccess: async () => {
+    onSuccess: async (created) => {
       setSlotOpen(false);
       await queryClient.invalidateQueries({ queryKey: ['court-slots', activeClubId] });
-      toast.success(editingSlotId ? 'Horario actualizado' : 'Horario publicado');
+      if (!created) {
+        toast.success('Horario actualizado');
+      } else if (notifyPlayers) {
+        await queryClient.invalidateQueries({ queryKey: ['club-outreach-stats', activeClubId] });
+        toast.success(outreachPublishMessage(created.notifiedCount ?? 0, created.notifyScheduledFor));
+      } else {
+        toast.success('Horario publicado');
+      }
     },
     onError: (err: { response?: { data?: { message?: string } }; message?: string }) => {
       toast.error(err.response?.data?.message || err.message || 'Error al guardar');
@@ -846,6 +861,7 @@ function GestionInner() {
         </TabsContent>
 
         <TabsContent value="stats" className="space-y-4 mt-4">
+          <OutreachStatsCard clubId={activeClubId} radiusKm={slotOfferRadiusKm} enabled={tab === 'stats'} />
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Dashboard operativo</CardTitle>
@@ -926,9 +942,18 @@ function GestionInner() {
               <Input value={slotPrice} onChange={(e) => setSlotPrice(e.target.value)} className="rounded-xl" />
             </div>
             {!editingSlotId ? (
-              <div className="flex items-center gap-2">
-                <Switch checked={notifyPlayers} onCheckedChange={setNotifyPlayers} />
-                <Label>Notificar jugadores</Label>
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <Switch checked={notifyPlayers} onCheckedChange={setNotifyPlayers} />
+                  <Label>Notificar jugadores</Label>
+                </div>
+                {notifyPlayers ? (
+                  <p className="text-xs text-muted-foreground">
+                    Avisamos a jugadores a menos de {slotOfferRadiusKm} km (máx. 3 avisos por día de tu club). Si
+                    publicás varios horarios seguidos les llega un solo aviso, y nunca entre las 23 y las 8 hs. El
+                    radio se cambia en Estadísticas → Avisos a jugadores.
+                  </p>
+                ) : null}
               </div>
             ) : null}
           </div>
