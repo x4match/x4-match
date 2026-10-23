@@ -528,6 +528,44 @@ export class NewsService {
     return this.findById(id);
   }
 
+  async adminUpdate(
+    id: string,
+    dto: { title?: string; body?: string; linkUrl?: string },
+    file?: Express.Multer.File,
+  ) {
+    const post = await this.requirePost(id);
+    if (post.status === 'DELETED') throw new BadRequestException('La noticia fue eliminada');
+
+    const linkUrl = dto.linkUrl?.trim();
+    if (linkUrl && !/^https?:\/\/\S+$/i.test(linkUrl)) {
+      throw new BadRequestException('El link debe empezar con http:// o https://');
+    }
+
+    const upload = file ? await this.uploadImage(file, post.club ? `clubs/${post.club.id}` : 'platform') : null;
+
+    await this.db.query(
+      `UPDATE news_posts
+       SET title = COALESCE($2, title),
+           body = CASE WHEN $3::boolean THEN NULLIF($4, '') ELSE body END,
+           link_url = CASE WHEN $5::boolean THEN NULLIF($6, '') ELSE link_url END,
+           image_url = COALESCE($7, image_url),
+           cloudinary_public_id = COALESCE($8, cloudinary_public_id),
+           updated_at = NOW()
+       WHERE id = $1`,
+      [
+        id,
+        dto.title ?? null,
+        dto.body !== undefined,
+        dto.body?.trim() ?? '',
+        dto.linkUrl !== undefined,
+        linkUrl ?? '',
+        upload?.secure_url ?? null,
+        upload?.public_id ?? null,
+      ],
+    );
+    return this.findById(id);
+  }
+
   async adminDelete(id: string) {
     await this.requirePost(id);
     await this.markDeleted(id);

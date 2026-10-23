@@ -22,12 +22,12 @@ export const VERIFICATION_STATUSES = Object.entries(VERIFICATION_STATUS_LABELS).
 export const TRIAL_MODES = optionsFromLabels(TRIAL_MODE_LABELS, 'Todos los modos');
 
 export const NEWS_STATUSES = [
+  { value: '', label: 'Todas' },
   { value: 'PENDING', label: 'Pendientes' },
   { value: 'ACTIVE', label: 'Publicadas' },
   { value: 'EXPIRED', label: 'Vencidas' },
   { value: 'REJECTED', label: 'Rechazadas' },
   { value: 'DELETED', label: 'Eliminadas' },
-  { value: '', label: 'Todas' },
 ];
 
 export const NEWS_FEATURED = [

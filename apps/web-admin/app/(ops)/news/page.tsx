@@ -9,8 +9,9 @@ import { TablePagination } from '@/components/TablePagination';
 import { api } from '@/lib/api';
 import { NEWS_FEATURED, NEWS_SOURCES, NEWS_STATUSES } from '@/lib/filter-options';
 import { usePaginatedPlatformList } from '@/lib/use-paginated-platform-list';
+import { usePendingNews } from '@/lib/use-pending-news';
 
-const DEFAULT_FILTERS = { q: '', status: 'PENDING', source: '', featured: '' };
+const DEFAULT_FILTERS = { q: '', status: '', source: '', featured: '' };
 
 type NewsPost = {
   id: string;
@@ -303,6 +304,133 @@ function CreateNewsModal({
   );
 }
 
+function EditNewsModal({
+  post,
+  onClose,
+  onSaved,
+}: {
+  post: NewsPost | null;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [title, setTitle] = useState('');
+  const [body, setBody] = useState('');
+  const [linkUrl, setLinkUrl] = useState('');
+  const [image, setImage] = useState<File | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!post) return;
+    setTitle(post.title);
+    setBody(post.body ?? '');
+    setLinkUrl(post.linkUrl ?? '');
+    setImage(null);
+    setPreview(null);
+  }, [post]);
+
+  useEffect(() => {
+    return () => {
+      if (preview) URL.revokeObjectURL(preview);
+    };
+  }, [preview]);
+
+  const save = useMutation({
+    mutationFn: async () => {
+      const form = new FormData();
+      form.append('title', title.trim());
+      form.append('body', body.trim());
+      form.append('linkUrl', linkUrl.trim());
+      if (image) form.append('image', image);
+      return api.patch(`/platform/news/${post!.id}`, form).then((r) => r.data);
+    },
+    meta: { successMessage: 'Noticia actualizada.' },
+    onSuccess: onSaved,
+  });
+
+  const canSubmit = title.trim().length >= 3;
+
+  return (
+    <Modal open={!!post} title="Editar noticia" onClose={onClose}>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (canSubmit) save.mutate();
+        }}
+        style={{ display: 'grid', gap: 12 }}
+      >
+        <label style={{ display: 'grid', gap: 6, fontSize: 13 }}>
+          Imagen del banner (tocá para reemplazarla)
+          <div
+            style={{
+              width: '100%',
+              aspectRatio: '16 / 7',
+              borderRadius: 12,
+              overflow: 'hidden',
+              cursor: 'pointer',
+              background: 'var(--surface, #111)',
+            }}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={preview ?? post?.imageUrl}
+              alt=""
+              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+            />
+          </div>
+          <input
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            className="sr-only"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              setImage(file);
+              setPreview(URL.createObjectURL(file));
+            }}
+          />
+        </label>
+        <label style={{ display: 'grid', gap: 4, fontSize: 13 }}>
+          Título
+          <input
+            className="input"
+            value={title}
+            maxLength={80}
+            onChange={(e) => setTitle(e.target.value)}
+          />
+        </label>
+        <label style={{ display: 'grid', gap: 4, fontSize: 13 }}>
+          Descripción
+          <textarea
+            className="input"
+            value={body}
+            maxLength={1000}
+            rows={4}
+            onChange={(e) => setBody(e.target.value)}
+          />
+        </label>
+        <label style={{ display: 'grid', gap: 4, fontSize: 13 }}>
+          Link
+          <input
+            className="input"
+            type="url"
+            value={linkUrl}
+            onChange={(e) => setLinkUrl(e.target.value)}
+            placeholder="https://…"
+          />
+        </label>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
+          <button className="btn btn-outline" type="button" onClick={onClose}>
+            Cancelar
+          </button>
+          <button className="btn btn-primary" type="submit" disabled={!canSubmit || save.isPending}>
+            {save.isPending ? 'Guardando…' : 'Guardar cambios'}
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
 export default function NewsPage() {
   const queryClient = useQueryClient();
   const [creating, setCreating] = useState(false);
@@ -337,6 +465,8 @@ export default function NewsPage() {
   const [editingExpiry, setEditingExpiry] = useState<NewsPost | null>(null);
   const [expiryValue, setExpiryValue] = useState('');
   const [preview, setPreview] = useState<NewsPost | null>(null);
+  const [editing, setEditing] = useState<NewsPost | null>(null);
+  const { data: pendingCount = 0 } = usePendingNews();
 
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: ['platform-news'] });
@@ -447,7 +577,43 @@ export default function NewsPage() {
         }}
       />
 
+      <EditNewsModal
+        post={editing}
+        onClose={() => setEditing(null)}
+        onSaved={() => {
+          setEditing(null);
+          refresh();
+        }}
+      />
+
       <NewsSettingsCard />
+
+      {pendingCount > 0 && filters.status !== 'PENDING' ? (
+        <div
+          className="card"
+          style={{
+            padding: '12px 16px',
+            marginBottom: 16,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
+            flexWrap: 'wrap',
+          }}
+        >
+          <span>
+            <span className="badge badge-warning" style={{ marginRight: 8 }}>
+              {pendingCount}
+            </span>
+            {pendingCount === 1
+              ? 'noticia de jugador espera aprobación.'
+              : 'noticias de jugadores esperan aprobación.'}
+          </span>
+          <button className="btn btn-outline" type="button" onClick={() => setFilter('status', 'PENDING')}>
+            Ver pendientes
+          </button>
+        </div>
+      ) : null}
 
       <TableFilters
         fields={[
@@ -736,6 +902,15 @@ export default function NewsPage() {
                                 }}
                               >
                                 Vigencia
+                              </button>
+                            ) : null}
+                            {post.status !== 'DELETED' ? (
+                              <button
+                                className="btn btn-outline"
+                                type="button"
+                                onClick={() => setEditing(post)}
+                              >
+                                Editar
                               </button>
                             ) : null}
                             {post.status !== 'DELETED' ? (

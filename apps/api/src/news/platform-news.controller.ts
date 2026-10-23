@@ -22,6 +22,7 @@ import {
   RejectNewsPostDto,
   SetNewsFeaturedDto,
   UpdateNewsExpiryDto,
+  UpdateNewsPostDto,
   UpdateNewsSettingsDto,
 } from './dto/news.dto';
 import { NewsService } from './news.service';
@@ -97,6 +98,16 @@ export class PlatformNewsController {
     @Body() dto: RejectNewsPostDto,
   ) {
     return this.newsService.reject(id, user.sub, dto.notes);
+  }
+
+  @Patch(':id')
+  @UseInterceptors(newsImageUpload)
+  update(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: UpdateNewsPostDto,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
+    return this.newsService.adminUpdate(id, dto, file?.buffer?.length ? file : undefined);
   }
 
   @Patch(':id/expiry')

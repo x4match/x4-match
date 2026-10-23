@@ -41,6 +41,26 @@ export class CreateNewsPostDto {
   linkUrl?: string;
 }
 
+/** Multipart: la imagen es opcional; un campo vacío en body/linkUrl los borra. */
+export class UpdateNewsPostDto {
+  @IsOptional()
+  @Transform(emptyToUndefined)
+  @IsString()
+  @MinLength(3)
+  @MaxLength(80)
+  title?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  body?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  linkUrl?: string;
+}
+
 export class CreatePlatformNewsDto extends CreateNewsPostDto {
   @IsOptional()
   @Type(() => Number)
