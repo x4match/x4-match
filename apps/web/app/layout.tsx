@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { Anton, DM_Sans, IBM_Plex_Mono } from 'next/font/google';
+import { Anton, Bebas_Neue, DM_Sans, IBM_Plex_Mono } from 'next/font/google';
 import { AppHeader } from '@/components/AppHeader';
 import { CookieBanner } from '@/components/CookieBanner';
 import { SiteFooter } from '@/components/SiteFooter';
@@ -10,6 +10,13 @@ const anton = Anton({
   weight: '400',
   subsets: ['latin'],
   variable: '--font-anton',
+  display: 'swap',
+});
+
+const bebasNeue = Bebas_Neue({
+  weight: '400',
+  subsets: ['latin'],
+  variable: '--font-bebas',
   display: 'swap',
 });
 
@@ -45,7 +52,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="es-AR" suppressHydrationWarning className={`${anton.variable} ${dmSans.variable} ${ibmPlexMono.variable}`}>
+    <html lang="es-AR" suppressHydrationWarning className={`${anton.variable} ${bebasNeue.variable} ${dmSans.variable} ${ibmPlexMono.variable}`}>
       <body suppressHydrationWarning>
         <AppHeader />
         <main>{children}</main>

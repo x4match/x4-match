@@ -1,8 +1,7 @@
 import Image from 'next/image';
 import cancha from '@/assets/cancha.png';
 import pelota from '@/assets/pelota.png';
-import wordmark from '@/assets/x4match-wordmark-olive.svg';
-import { SITE } from '@/content/site';
+import { HeroWordmark } from '@/components/HeroWordmark';
 
 const FEATURES = [
   {
@@ -26,22 +25,8 @@ const FEATURES = [
 export function PlayersSection() {
   return (
     <section id="jugadores" className="players">
-      <div className="container players-inner">
+      <div className="players-stage">
         <div className="players-banner">
-          <div className="players-banner-copy">
-            <Image
-              className="players-wordmark"
-              src={wordmark}
-              alt="X4MATCH"
-              width={174}
-              height={21}
-            />
-            <h2 className="players-title">Para jugadores</h2>
-            <p className="players-subtitle">
-              Encontrá partido, medí tu nivel y competí sin fricción
-            </p>
-          </div>
-
           <div className="players-banner-media" aria-hidden>
             <Image
               className="players-cancha"
@@ -49,8 +34,17 @@ export function PlayersSection() {
               alt=""
               width={891}
               height={376}
-              sizes="(max-width: 960px) 100vw, 58vw"
+              sizes="(max-width: 960px) 100vw, 640px"
             />
+          </div>
+          <div className="players-banner-copy">
+            <HeroWordmark className="players-wordmark" gradientId="playersMatchStroke" />
+            <h2 className="players-title">Para jugadores</h2>
+            <p className="players-subtitle">
+              Encontrá partido, medí tu nivel
+              <br />
+              y competí sin fricción
+            </p>
           </div>
         </div>
 
@@ -62,16 +56,16 @@ export function PlayersSection() {
             </article>
           ))}
         </div>
-      </div>
 
-      <Image
-        className="players-ball"
-        src={pelota}
-        alt=""
-        width={297}
-        height={198}
-        aria-hidden
-      />
+        <Image
+          className="players-ball"
+          src={pelota}
+          alt=""
+          width={297}
+          height={198}
+          aria-hidden
+        />
+      </div>
     </section>
   );
 }

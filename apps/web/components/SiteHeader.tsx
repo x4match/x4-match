@@ -6,7 +6,8 @@ import { SITE } from '@/content/site';
 const NAV = [
   { href: '/#jugadores', label: 'Jugadores' },
   { href: '/#clubes', label: 'Clubes' },
-  { href: '/#registro', label: 'Registrate' },
+  { href: '/#registro', label: 'Planes' },
+  { href: '/#contacto', label: 'Contacto' },
 ];
 
 export function SiteHeader() {

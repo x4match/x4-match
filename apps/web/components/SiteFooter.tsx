@@ -12,8 +12,10 @@ const LEGAL = [
 
 export function SiteFooter() {
   return (
-    <footer className="site-footer">
+    <footer id="contacto" className="site-footer">
+
       <div className="container site-footer-inner">
+        <div className="site-footer-line" aria-hidden />
         <div className="site-footer-cols">
           <p className="site-footer-tagline">Padel competitivo en Argentina</p>
 

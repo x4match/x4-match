@@ -26,20 +26,16 @@ const HERO_CARDS = [
 export function Hero() {
   return (
     <section className="hero">
-      <div className="hero-glow" aria-hidden />
+      <div className="hero-floor" aria-hidden />
       <SiteHeader />
       <div className="hero-stage">
+        <div className="hero-glow" aria-hidden />
+
         <div className="hero-visual">
-          <div className="hero-brand" aria-hidden>
-            <span className="hero-brand-line hero-brand-line--top" />
+          <div className="hero-band" aria-hidden>
             <HeroWordmark className="hero-wordmark" />
-            <span className="hero-brand-line hero-brand-line--bottom" />
-            <p className="hero-caption">
-              Conectá con jugadores.
-              <br />
-              Encontrá partidos
-            </p>
           </div>
+          <p className="hero-caption">Conectá con jugadores. Encontrá partidos</p>
           <Image
             className="hero-player"
             src={jugadorHero}
@@ -47,40 +43,37 @@ export function Hero() {
             width={424}
             height={636}
             priority
-            sizes="(max-width: 960px) 340px, 460px"
+            sizes="(max-width: 960px) 300px, 420px"
           />
         </div>
 
-        <div className="container hero-foreground">
-          <div className="hero-copy">
-            <p className="hero-eyebrow">Padel competitivo en Argentina</p>
-            <h1 className="hero-title">
-              Jugá más,
-              <br />
-              gestioná mejor.
-            </h1>
-            <div className="hero-actions">
-              <Link className="btn btn-primary" href="#registro">
-                Quiero jugar
-              </Link>
-              <a className="btn btn-outline" href={SITE.links.clubRegister}>
-                Tengo un Club
-              </a>
-            </div>
-            <p className="hero-login">
-              ¿Ya tenés cuenta?{' '}
-              <Link href={SITE.links.clubPanel}>Ingresá</Link>
-            </p>
+        <div className="hero-copy">
+          <p className="hero-eyebrow">Padel competitivo en Argentina</p>
+          <h1 className="hero-title">
+            Jugá más,
+            <br />
+            gestioná mejor.
+          </h1>
+          <div className="hero-actions">
+            <Link className="btn btn-primary" href="#registro">
+              Quiero jugar
+            </Link>
+            <a className="btn btn-outline" href={SITE.links.clubRegister}>
+              Tengo un Club
+            </a>
           </div>
+          <p className="hero-login">
+            ¿Ya tenés cuenta? <Link href={SITE.links.clubPanel}>Ingresá</Link>
+          </p>
+        </div>
 
-          <div className="hero-cards">
-            {HERO_CARDS.map((card) => (
-              <article key={card.title} className={`hero-card hero-card--${card.variant}`}>
-                <h3>{card.title}</h3>
-                <p>{card.text}</p>
-              </article>
-            ))}
-          </div>
+        <div className="hero-cards">
+          {HERO_CARDS.map((card) => (
+            <article key={card.title} className={`hero-card hero-card--${card.variant}`}>
+              <h3>{card.title}</h3>
+              <p>{card.text}</p>
+            </article>
+          ))}
         </div>
       </div>
     </section>

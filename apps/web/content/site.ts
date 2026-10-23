@@ -18,7 +18,7 @@ export const SITE = {
   links: {
     clubPanel: 'https://club.x4match.com',
     clubRegister: 'https://club.x4match.com/register',
-    appStore: '#',
+    appStore: 'https://apps.apple.com/ar/app/x4-match/id6809213341',
     playStore: '#',
   },
 } as const;
