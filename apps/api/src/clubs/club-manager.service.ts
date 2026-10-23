@@ -382,6 +382,7 @@ export class ClubManagerService {
         month: 'short',
         hour: '2-digit',
         minute: '2-digit',
+        timeZone: COURT_TIMEZONE,
       })}`,
       hero: {
         title: 'Facturación del día',

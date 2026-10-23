@@ -10,6 +10,7 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { randomBytes } from 'crypto';
+import { COURT_TIMEZONE } from '../common/utils/court-schedule.util';
 import { PoolClient } from 'pg';
 import { CircuitsService } from '../circuits/circuits.service';
 import { CircuitAccessService } from '../circuits/circuit-access.service';
@@ -1381,7 +1382,7 @@ export class TournamentsService {
         : dto.action === 'REOPEN'
           ? 'reabrió la inscripción'
           : updated.registration_closes_at
-            ? `programó el cierre de inscripción para el ${new Date(updated.registration_closes_at).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`
+            ? `programó el cierre de inscripción para el ${new Date(updated.registration_closes_at).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: COURT_TIMEZONE })}`
             : 'quitó la fecha de cierre de inscripción';
     await this.circuitAudit.logForTournament(tournamentId, userId, {
       action: 'registration.window',

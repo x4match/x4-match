@@ -4,6 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { COURT_TIMEZONE } from '../../common/utils/court-schedule.util';
 import { DatabaseService } from '../../database/database.service';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { RealtimeGateway } from '../../realtime/realtime.gateway';
@@ -458,7 +459,7 @@ export class FixtureSchedulerService {
       action: 'schedule.match',
       entityType: 'tournament_match',
       entityId: matchId,
-      summary: `Reprogramó un partido de ${event.name}: ${payload.courtLabel} · ${new Date(payload.scheduledAt).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`,
+      summary: `Reprogramó un partido de ${event.name}: ${payload.courtLabel} · ${new Date(payload.scheduledAt).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: COURT_TIMEZONE })}`,
     });
 
     this.realtime.emitCircuitEventUpdated({
@@ -890,6 +891,7 @@ export class FixtureSchedulerService {
             month: '2-digit',
             hour: '2-digit',
             minute: '2-digit',
+            timeZone: COURT_TIMEZONE,
           })
         : '';
       const body = `${row.club_name || 'Sede'} · ${row.court_label || 'Cancha'} · ${when}`;

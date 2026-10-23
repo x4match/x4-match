@@ -6,6 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import type { PoolClient } from 'pg';
+import { COURT_TIMEZONE } from '../../common/utils/court-schedule.util';
 import { DatabaseService } from '../../database/database.service';
 import { NotificationsService } from '../../notifications/notifications.service';
 import {
@@ -417,6 +418,7 @@ export class BracketService {
               month: '2-digit',
               hour: '2-digit',
               minute: '2-digit',
+              timeZone: COURT_TIMEZONE,
             })}`
           : ' · Horario a definir';
       for (const [regId, rival] of [

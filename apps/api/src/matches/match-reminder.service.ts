@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
+import { COURT_TIMEZONE } from '../common/utils/court-schedule.util';
 import { DatabaseService } from '../database/database.service';
 import { NotificationsService } from '../notifications/notifications.service';
 
@@ -117,6 +118,7 @@ export class MatchReminderService {
       month: 'short',
       hour: '2-digit',
       minute: '2-digit',
+      timeZone: COURT_TIMEZONE,
     });
   }
 }
