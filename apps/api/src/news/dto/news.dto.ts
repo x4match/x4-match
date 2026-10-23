@@ -41,6 +41,20 @@ export class CreateNewsPostDto {
   linkUrl?: string;
 }
 
+export class CreatePlatformNewsDto extends CreateNewsPostDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(NEWS_MAX_DURATION_DAYS)
+  durationDays?: number;
+
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === 'true')
+  @IsBoolean()
+  featured?: boolean;
+}
+
 export class ApproveNewsPostDto {
   @IsOptional()
   @Type(() => Number)

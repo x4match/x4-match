@@ -36,9 +36,10 @@ export const NEWS_FEATURED = [
 ];
 
 export const NEWS_SOURCES = [
-  { value: '', label: 'Clubes y jugadores' },
+  { value: '', label: 'Todos los orígenes' },
   { value: 'CLUB', label: 'Clubes' },
   { value: 'PLAYER', label: 'Jugadores' },
+  { value: 'PLATFORM', label: 'Oficiales' },
 ];
 
 export const TRIAL_STATUSES = [

@@ -14,7 +14,7 @@ const DEFAULT_FILTERS = { q: '', status: 'PENDING', source: '', featured: '' };
 
 type NewsPost = {
   id: string;
-  source: 'CLUB' | 'PLAYER';
+  source: 'CLUB' | 'PLAYER' | 'PLATFORM';
   title: string;
   body: string | null;
   linkUrl: string | null;
@@ -31,6 +31,12 @@ type NewsPost = {
   reviewedByName: string | null;
   author: { id: string; name: string };
   club: { id: string; name: string } | null;
+};
+
+const NEWS_SOURCE_LABELS: Record<NewsPost['source'], string> = {
+  CLUB: 'Club',
+  PLAYER: 'Jugador',
+  PLATFORM: 'Oficial x4 Match',
 };
 
 function formatDateTime(value?: string | null) {
@@ -124,8 +130,182 @@ function NewsSettingsCard() {
   );
 }
 
+function CreateNewsModal({
+  open,
+  defaultDays,
+  onClose,
+  onCreated,
+}: {
+  open: boolean;
+  defaultDays: number;
+  onClose: () => void;
+  onCreated: () => void;
+}) {
+  const [image, setImage] = useState<File | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [title, setTitle] = useState('');
+  const [body, setBody] = useState('');
+  const [linkUrl, setLinkUrl] = useState('');
+  const [days, setDays] = useState(String(defaultDays));
+  const [featured, setFeatured] = useState(true);
+
+  useEffect(() => {
+    if (open) setDays(String(defaultDays));
+  }, [open, defaultDays]);
+
+  useEffect(() => {
+    return () => {
+      if (preview) URL.revokeObjectURL(preview);
+    };
+  }, [preview]);
+
+  function reset() {
+    setImage(null);
+    setPreview(null);
+    setTitle('');
+    setBody('');
+    setLinkUrl('');
+    setFeatured(true);
+  }
+
+  const create = useMutation({
+    mutationFn: async () => {
+      const form = new FormData();
+      form.append('image', image!);
+      form.append('title', title.trim());
+      if (body.trim()) form.append('body', body.trim());
+      if (linkUrl.trim()) form.append('linkUrl', linkUrl.trim());
+      form.append('durationDays', days);
+      form.append('featured', String(featured));
+      return api.post('/platform/news', form).then((r) => r.data);
+    },
+    meta: { successMessage: 'Noticia publicada.' },
+    onSuccess: () => {
+      reset();
+      onCreated();
+    },
+  });
+
+  const parsedDays = Number(days);
+  const canSubmit =
+    !!image &&
+    title.trim().length >= 3 &&
+    Number.isInteger(parsedDays) &&
+    parsedDays >= 1 &&
+    parsedDays <= 365;
+
+  return (
+    <Modal open={open} title="Nueva noticia oficial" onClose={onClose}>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (canSubmit) create.mutate();
+        }}
+        style={{ display: 'grid', gap: 12 }}
+      >
+        <label style={{ display: 'grid', gap: 6, fontSize: 13 }}>
+          Imagen del banner (se recorta a 1200×525)
+          <div
+            style={{
+              width: '100%',
+              aspectRatio: '16 / 7',
+              borderRadius: 12,
+              border: '1px dashed var(--border, #333)',
+              overflow: 'hidden',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'var(--muted)',
+              cursor: 'pointer',
+            }}
+          >
+            {preview ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={preview} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            ) : (
+              'Elegir imagen'
+            )}
+          </div>
+          <input
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            className="sr-only"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              setImage(file);
+              setPreview(URL.createObjectURL(file));
+            }}
+          />
+        </label>
+        <label style={{ display: 'grid', gap: 4, fontSize: 13 }}>
+          Título
+          <input
+            className="input"
+            value={title}
+            maxLength={80}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Ej: Llega el Circuito x4 de verano"
+          />
+        </label>
+        <label style={{ display: 'grid', gap: 4, fontSize: 13 }}>
+          Descripción (opcional)
+          <textarea
+            className="input"
+            value={body}
+            maxLength={1000}
+            rows={4}
+            onChange={(e) => setBody(e.target.value)}
+          />
+        </label>
+        <label style={{ display: 'grid', gap: 4, fontSize: 13 }}>
+          Link (opcional)
+          <input
+            className="input"
+            type="url"
+            value={linkUrl}
+            onChange={(e) => setLinkUrl(e.target.value)}
+            placeholder="https://…"
+          />
+        </label>
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', gap: 16 }}>
+          <label style={{ display: 'grid', gap: 4, fontSize: 13 }}>
+            Días de vigencia
+            <input
+              className="input"
+              type="number"
+              min={1}
+              max={365}
+              value={days}
+              onChange={(e) => setDays(e.target.value)}
+              style={{ width: 110 }}
+            />
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, paddingBottom: 8 }}>
+            <input
+              type="checkbox"
+              checked={featured}
+              onChange={(e) => setFeatured(e.target.checked)}
+            />
+            Destacar en el carrusel del inicio
+          </label>
+        </div>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
+          <button className="btn btn-outline" type="button" onClick={onClose}>
+            Cancelar
+          </button>
+          <button className="btn btn-primary" type="submit" disabled={!canSubmit || create.isPending}>
+            {create.isPending ? 'Publicando…' : 'Publicar'}
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
 export default function NewsPage() {
   const queryClient = useQueryClient();
+  const [creating, setCreating] = useState(false);
   const {
     filters,
     setFilter,
@@ -252,7 +432,20 @@ export default function NewsPage() {
             publican directo.
           </p>
         </div>
+        <button className="btn btn-primary" type="button" onClick={() => setCreating(true)}>
+          Nueva noticia
+        </button>
       </div>
+
+      <CreateNewsModal
+        open={creating}
+        defaultDays={settings?.defaultDurationDays ?? 7}
+        onClose={() => setCreating(false)}
+        onCreated={() => {
+          setCreating(false);
+          refresh();
+        }}
+      />
 
       <NewsSettingsCard />
 
@@ -468,7 +661,7 @@ export default function NewsPage() {
                             </Link>
                           )}
                           <div style={{ color: 'var(--muted)', fontSize: 12 }}>
-                            {post.source === 'CLUB' ? 'Club' : 'Jugador'}
+                            {NEWS_SOURCE_LABELS[post.source]}
                           </div>
                         </td>
                         <td>{formatDateTime(post.createdAt)}</td>

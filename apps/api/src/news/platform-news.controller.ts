@@ -8,13 +8,17 @@ import {
   Patch,
   Post,
   Query,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { newsImageUpload, requireNewsImage } from './news-upload';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { PlatformAdminGuard } from '../platform-admin/platform-admin.guard';
 import {
   ApproveNewsPostDto,
+  CreatePlatformNewsDto,
   RejectNewsPostDto,
   SetNewsFeaturedDto,
   UpdateNewsExpiryDto,
@@ -43,6 +47,19 @@ export class PlatformNewsController {
       featured: featured === 'true',
       limit: limit ? parseInt(limit, 10) : undefined,
       offset: offset ? parseInt(offset, 10) : undefined,
+    });
+  }
+
+  @Post()
+  @UseInterceptors(newsImageUpload)
+  create(
+    @CurrentUser() user: { sub: string },
+    @Body() dto: CreatePlatformNewsDto,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
+    return this.newsService.createPlatformPost(user.sub, dto, requireNewsImage(file), {
+      durationDays: dto.durationDays,
+      featured: dto.featured,
     });
   }
 

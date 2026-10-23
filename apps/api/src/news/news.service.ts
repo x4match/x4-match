@@ -33,12 +33,19 @@ const NEWS_SELECT = `
   LEFT JOIN clubs c ON c.id = n.club_id
   LEFT JOIN users rv ON rv.id = n.reviewed_by_user_id`;
 
+const NEWS_SOURCES = ['CLUB', 'PLAYER', 'PLATFORM'] as const;
+type NewsSource = (typeof NEWS_SOURCES)[number];
+
+function isNewsSource(value?: string): value is NewsSource {
+  return !!value && (NEWS_SOURCES as readonly string[]).includes(value);
+}
+
 export type NewsAdminStatusFilter = 'PENDING' | 'ACTIVE' | 'EXPIRED' | 'REJECTED' | 'DELETED';
 
 function mapNews(row: any) {
   return {
     id: row.id as string,
-    source: row.source as 'CLUB' | 'PLAYER',
+    source: row.source as NewsSource,
     title: row.title as string,
     body: (row.body as string | null) ?? null,
     linkUrl: (row.link_url as string | null) ?? null,
@@ -135,7 +142,7 @@ export class NewsService {
     const values: unknown[] = [];
     const filters: string[] = [LIVE_WHERE];
 
-    if (params.source === 'CLUB' || params.source === 'PLAYER') {
+    if (isNewsSource(params.source)) {
       values.push(params.source);
       filters.push(`n.source = $${values.length}`);
     }
@@ -227,6 +234,39 @@ export class NewsService {
         upload.secure_url,
         upload.public_id ?? null,
         durationDays,
+      ],
+    );
+    return this.findById(result.rows[0].id);
+  }
+
+  /** Noticia oficial del backoffice: se publica al instante, sin moderación. */
+  async createPlatformPost(
+    adminUserId: string,
+    dto: CreateNewsPostDto,
+    file: Express.Multer.File,
+    options: { durationDays?: number; featured?: boolean },
+  ) {
+    const upload = await this.uploadImage(file, 'platform');
+    const durationDays = options.durationDays ?? (await this.getDefaultDurationDays());
+    const featured = options.featured ?? false;
+    const result = await this.db.query<{ id: string }>(
+      `INSERT INTO news_posts
+         (author_user_id, source, title, body, link_url, image_url, cloudinary_public_id,
+          status, duration_days, published_at, expires_at, is_featured, featured_at,
+          reviewed_by_user_id, reviewed_at)
+       VALUES ($1, 'PLATFORM', $2, $3, $4, $5, $6,
+               'APPROVED', $7, NOW(), NOW() + make_interval(days => $7), $8,
+               CASE WHEN $8 THEN NOW() ELSE NULL END, $1, NOW())
+       RETURNING id`,
+      [
+        adminUserId,
+        dto.title,
+        dto.body ?? null,
+        dto.linkUrl ?? null,
+        upload.secure_url,
+        upload.public_id ?? null,
+        durationDays,
+        featured,
       ],
     );
     return this.findById(result.rows[0].id);
@@ -326,7 +366,7 @@ export class NewsService {
         filters.push(`n.status <> 'DELETED'`);
     }
 
-    if (params.source === 'CLUB' || params.source === 'PLAYER') {
+    if (isNewsSource(params.source)) {
       values.push(params.source);
       filters.push(`n.source = $${values.length}`);
     }

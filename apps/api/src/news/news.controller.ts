@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -12,30 +11,12 @@ import {
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
-import { memoryStorage } from 'multer';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { OptionalJwtAuthGuard } from '../common/guards/optional-jwt-auth.guard';
 import { CreateNewsPostDto } from './dto/news.dto';
+import { newsImageUpload, requireNewsImage } from './news-upload';
 import { NewsService } from './news.service';
-
-const imageUpload = FileInterceptor('image', {
-  storage: memoryStorage(),
-  limits: { fileSize: 6 * 1024 * 1024 },
-  fileFilter: (_req, file, cb) => {
-    if (!file.mimetype?.startsWith('image/')) {
-      cb(new BadRequestException('Solo se permiten imágenes'), false);
-      return;
-    }
-    cb(null, true);
-  },
-});
-
-function requireFile(file?: Express.Multer.File): Express.Multer.File {
-  if (!file?.buffer?.length) throw new BadRequestException('La imagen del banner es obligatoria');
-  return file;
-}
 
 @Controller('news')
 export class NewsController {
@@ -78,13 +59,13 @@ export class NewsController {
 
   @Post()
   @UseGuards(JwtAuthGuard)
-  @UseInterceptors(imageUpload)
+  @UseInterceptors(newsImageUpload)
   createPlayerPost(
     @CurrentUser() user: { sub: string },
     @Body() dto: CreateNewsPostDto,
     @UploadedFile() file?: Express.Multer.File,
   ) {
-    return this.newsService.createPlayerPost(user.sub, dto, requireFile(file));
+    return this.newsService.createPlayerPost(user.sub, dto, requireNewsImage(file));
   }
 
   @Get('club/:clubId')
@@ -98,14 +79,14 @@ export class NewsController {
 
   @Post('club/:clubId')
   @UseGuards(JwtAuthGuard)
-  @UseInterceptors(imageUpload)
+  @UseInterceptors(newsImageUpload)
   createClubPost(
     @Param('clubId', new ParseUUIDPipe()) clubId: string,
     @CurrentUser() user: { sub: string },
     @Body() dto: CreateNewsPostDto,
     @UploadedFile() file?: Express.Multer.File,
   ) {
-    return this.newsService.createClubPost(clubId, user.sub, dto, requireFile(file));
+    return this.newsService.createClubPost(clubId, user.sub, dto, requireNewsImage(file));
   }
 
   @Get(':id')
