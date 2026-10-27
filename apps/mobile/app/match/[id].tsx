@@ -911,15 +911,23 @@ export default function MatchDetailScreen() {
             {match.courtBooking === 'in_app' && isParticipant && deposit?.required && !deposit?.paid && (
               <AppCard style={{ marginBottom: ui.spacing.sm, backgroundColor: 'rgba(245,158,11,0.08)' }}>
                 <Text style={{ fontWeight: '700', color: ui.colors.accent, marginBottom: 6 }}>
-                  Pagá tu parte del turno
+                  {(deposit.depositPercent ?? 100) < 100
+                    ? `Seña ${deposit.depositPercent}% para confirmar`
+                    : 'Pagá tu parte del turno'}
                 </Text>
                 <Text style={{ fontSize: 13, color: ui.colors.textSecondary, marginBottom: 12, lineHeight: 19 }}>
-                  La cancha queda reservada al pagar el turno completo
-                  {deposit.clubName ? ` en ${deposit.clubName}` : ''}. Hasta entonces el turno sigue
-                  disponible.
+                  {(deposit.depositPercent ?? 100) < 100
+                    ? `Con la seña confirmás tu lugar. La cancha se reserva cuando todos pagan su %${
+                        deposit.clubName ? ` en ${deposit.clubName}` : ''
+                      }, o si alguien paga el turno completo.`
+                    : `La cancha queda reservada al pagar el turno completo${
+                        deposit.clubName ? ` en ${deposit.clubName}` : ''
+                      }. Hasta entonces el turno sigue disponible.`}
                 </Text>
                 <PrimaryButton
-                  label={`Pagar mi parte${deposit.amount ? ` (${formatCurrency(deposit.amount, deposit.currency)})` : ''}`}
+                  label={`${
+                    (deposit.depositPercent ?? 100) < 100 ? 'Pagar seña' : 'Pagar mi parte'
+                  }${deposit.amount ? ` (${formatCurrency(deposit.amount, deposit.currency)})` : ''}`}
                   onPress={() => depositCheckoutMutation.mutate({})}
                   loading={depositCheckoutMutation.isPending && !depositCheckoutMutation.variables?.fullCourt}
                   disabled={depositCheckoutMutation.isPending}

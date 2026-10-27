@@ -147,13 +147,21 @@ export function MatchOrganizedSummary({ match }: MatchOrganizedSummaryProps) {
         {showPricing ? (
           <View style={{ alignItems: 'flex-end', gap: 4 }}>
             {pricePerPlayer > 0 ? (
-              <Text style={{ fontSize: 15, fontWeight: '800', color: ui.colors.textPrimary }}>
-                {formatCurrency(pricePerPlayer, pricing?.currency || 'ARS')}
-                <Text style={{ fontSize: 11, fontWeight: '600', color: ui.colors.textMuted }}>
-                  {' '}
-                  /jug.
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text style={{ fontSize: 15, fontWeight: '800', color: ui.colors.textPrimary }}>
+                  {formatCurrency(pricePerPlayer, pricing?.currency || 'ARS')}
+                  <Text style={{ fontSize: 11, fontWeight: '600', color: ui.colors.textMuted }}>
+                    {' '}
+                    /jug.
+                  </Text>
                 </Text>
-              </Text>
+                {(pricing?.depositPercent ?? 100) < 100 && (pricing?.depositAmount ?? 0) > 0 ? (
+                  <Text style={{ fontSize: 11, fontWeight: '600', color: ui.colors.textMuted }}>
+                    Seña {pricing!.depositPercent}% ·{' '}
+                    {formatCurrency(pricing!.depositAmount, pricing?.currency || 'ARS')}
+                  </Text>
+                ) : null}
+              </View>
             ) : null}
             {(pricing?.bonusPoints ?? 0) > 0 ? (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>

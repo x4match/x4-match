@@ -30,9 +30,17 @@ export type MineClub = {
   currency?: string;
   courtPricePerHour?: number;
   court_price_per_hour?: number;
+  depositPercent?: number;
+  deposit_percent?: number;
   autoFillGapsEnabled?: boolean;
   auto_fill_gaps_enabled?: boolean;
 };
+
+export function clubDepositPercent(club?: MineClub | null): number {
+  const raw = Number(club?.depositPercent ?? club?.deposit_percent ?? 100);
+  if (!Number.isFinite(raw)) return 100;
+  return Math.min(100, Math.max(0, Math.round(raw)));
+}
 
 export type ClubDetail = MineClub & {
   courtsCount?: number;

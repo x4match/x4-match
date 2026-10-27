@@ -122,6 +122,8 @@ interface ClubRow {
   cover_url?: string;
   court_price_per_hour?: number;
   courtPricePerHour?: number;
+  deposit_percent?: number;
+  depositPercent?: number;
 }
 
 interface ClubRevenue {
@@ -287,6 +289,7 @@ export function ClubProfilePanel({ onLogout }: ClubProfilePanelProps) {
   const [clubEmail, setClubEmail] = useState('');
   const [clubDescription, setClubDescription] = useState('');
   const [courtPricePerHour, setCourtPricePerHour] = useState('');
+  const [depositPercent, setDepositPercent] = useState(100);
   const [localLogoUri, setLocalLogoUri] = useState<string | null>(null);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [showLogoViewer, setShowLogoViewer] = useState(false);
@@ -431,6 +434,8 @@ export function ClubProfilePanel({ onLogout }: ClubProfilePanelProps) {
     setClubDescription(club.description || '');
     const hourly = Number(club.courtPricePerHour ?? club.court_price_per_hour ?? 0);
     setCourtPricePerHour(hourly > 0 ? String(Math.round(hourly)) : '');
+    const pct = Number(club.depositPercent ?? club.deposit_percent ?? 100);
+    setDepositPercent(Number.isFinite(pct) ? Math.min(100, Math.max(0, Math.round(pct))) : 100);
   };
 
   useEffect(() => {
@@ -986,8 +991,21 @@ export function ClubProfilePanel({ onLogout }: ClubProfilePanelProps) {
               onChangeText={setCourtPricePerHour}
               placeholder="30000"
             />
+            <Text style={{ fontSize: 13, color: MUTED, marginTop: 14, marginBottom: 8 }}>
+              Para confirmar/reservar la cancha, cada jugador paga
+            </Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
+              {[25, 50, 100].map((pct) => (
+                <SelectionChip
+                  key={pct}
+                  label={pct === 100 ? '100% (completo)' : `${pct}% seña`}
+                  selected={depositPercent === pct}
+                  onPress={() => setDepositPercent(pct)}
+                />
+              ))}
+            </View>
             <LimeCta
-              label="Guardar tarifa"
+              label="Guardar tarifa y cobro"
               loading={updateClub.isPending}
               onPress={() => {
                 const price = parseMoneyInput(courtPricePerHour);
@@ -995,7 +1013,7 @@ export function ClubProfilePanel({ onLogout }: ClubProfilePanelProps) {
                   Alert.alert('Precio inválido', 'Ingresá un precio por hora válido.');
                   return;
                 }
-                updateClub.mutate({ courtPricePerHour: price });
+                updateClub.mutate({ courtPricePerHour: price, depositPercent });
               }}
             />
           </AppCard>
