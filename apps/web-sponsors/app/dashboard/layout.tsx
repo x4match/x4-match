@@ -41,6 +41,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const { user, token, loading, logout } = useAuth();
   const router = useRouter();
 
+  // Dialogs, selects and menus render in a portal on <body>, outside the .dark wrapper.
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.add('dark');
+    return () => root.classList.remove('dark');
+  }, []);
+
   useEffect(() => {
     if (loading) return;
     if (!token || !user) {

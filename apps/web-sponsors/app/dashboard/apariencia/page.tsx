@@ -1,7 +1,6 @@
 'use client';
 
-import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { Upload } from 'lucide-react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { useSponsor } from '@/contexts/SponsorContext';
@@ -12,6 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PageShell } from '@/components/layout/PageShell';
 import { FormSection } from '@/components/layout/FormSection';
+import { ImageField } from '@/components/dashboard/ImageField';
 import {
   DEFAULT_THEME,
   FONT_OPTIONS,
@@ -147,91 +147,6 @@ const emptyForm = (): FormState => ({
   homeIntro: '',
   storeTheme: { ...DEFAULT_THEME },
 });
-
-function ImageField({
-  id,
-  label,
-  kind,
-  sponsorId,
-  value,
-  onChange,
-}: {
-  id: string;
-  label: string;
-  kind: 'logo' | 'banner' | 'favicon';
-  sponsorId: string | null;
-  value: string;
-  onChange: (v: string) => void;
-}) {
-  const fileRef = useRef<HTMLInputElement>(null);
-  const upload = useMutation({
-    mutationFn: async (file: File) => {
-      const body = new FormData();
-      body.append('image', file);
-      const res = await api.post(`/sponsors/me/${sponsorId}/images/${kind}`, body);
-      return res.data as { url: string };
-    },
-    onSuccess: (data) => {
-      onChange(data.url);
-      toast.success('Imagen subida. Guardá los cambios para publicarla.');
-    },
-    onError: (err: any) => {
-      toast.error(err?.response?.data?.message || 'No se pudo subir la imagen');
-    },
-  });
-
-  return (
-    <div className="space-y-2">
-      <Label htmlFor={id}>{label}</Label>
-      <div className="flex items-center gap-2">
-        {value ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={value}
-            alt=""
-            className={cn(
-              'size-11 shrink-0 rounded-lg border border-border bg-surface-2',
-              kind === 'banner' ? 'object-cover' : 'object-contain',
-            )}
-          />
-        ) : null}
-        <Input
-          id={id}
-          className="min-h-11"
-          placeholder="https://… o subí una imagen"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-        />
-        <input
-          ref={fileRef}
-          type="file"
-          accept="image/*"
-          className="hidden"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            e.target.value = '';
-            if (!file) return;
-            if (file.size > 5 * 1024 * 1024) {
-              toast.error('La imagen supera 5 MB');
-              return;
-            }
-            upload.mutate(file);
-          }}
-        />
-        <Button
-          type="button"
-          variant="outline"
-          className="min-h-11 shrink-0 gap-2"
-          disabled={!sponsorId || upload.isPending}
-          onClick={() => fileRef.current?.click()}
-        >
-          <Upload className="size-4" aria-hidden />
-          {upload.isPending ? 'Subiendo…' : 'Subir imagen'}
-        </Button>
-      </div>
-    </div>
-  );
-}
 
 function ColorField({
   id,

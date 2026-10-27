@@ -1,6 +1,7 @@
 'use client';
 
 import { Suspense, FormEvent, useState } from 'react';
+import Image from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
@@ -54,12 +55,7 @@ function LoginForm() {
             }}
           />
           <div className="relative">
-            <div className="flex items-center gap-3">
-              <div className="flex size-11 items-center justify-center rounded-xl bg-primary text-sm font-extrabold text-primary-foreground">
-                x4
-              </div>
-              <p className="text-xs font-bold uppercase tracking-[0.2em] text-primary">x4 match</p>
-            </div>
+            <Image src="/x4match-logo.svg" alt="x4 match" width={174} height={21} priority className="h-auto w-48" />
             <h1 className="mt-16 max-w-md text-4xl font-extrabold tracking-tight text-white xl:text-5xl">
               Commerce OS para partners
             </h1>

@@ -737,10 +737,11 @@ export class PlatformShopService {
       logo: { width: 512, crop: 'limit' as const },
       banner: { width: 1920, crop: 'limit' as const },
       favicon: { width: 256, height: 256, crop: 'fill' as const },
+      product: { width: 1200, crop: 'limit' as const },
     };
     const preset = presets[kind as keyof typeof presets];
     if (!preset) {
-      throw new BadRequestException('Tipo de imagen inválido (logo, banner o favicon)');
+      throw new BadRequestException('Tipo de imagen inválido (logo, banner, favicon o product)');
     }
     const upload = await uploadImageBuffer(file, `x4match/sponsors/${sponsorId}/${kind}`, preset);
     return { url: upload.secure_url };
@@ -1131,7 +1132,16 @@ export class PlatformShopService {
     return result.rows[0];
   }
 
-  async updateProduct(productId: string, dto: UpdatePlatformProductDto) {
+  private async assertProductOfSponsor(productId: string, sponsorId: string) {
+    const result = await this.db.query(
+      `SELECT 1 FROM platform_products WHERE id = $1 AND sponsor_id = $2`,
+      [productId, sponsorId],
+    );
+    if (!result.rows[0]) throw new NotFoundException('Producto no encontrado');
+  }
+
+  async updateProduct(productId: string, dto: UpdatePlatformProductDto, ownerSponsorId?: string) {
+    if (ownerSponsorId) await this.assertProductOfSponsor(productId, ownerSponsorId);
     const result = await this.db.query(
       `UPDATE platform_products
        SET sponsor_id = COALESCE($2, sponsor_id),
@@ -1171,7 +1181,8 @@ export class PlatformShopService {
     return result.rows[0];
   }
 
-  async deleteProduct(productId: string) {
+  async deleteProduct(productId: string, ownerSponsorId?: string) {
+    if (ownerSponsorId) await this.assertProductOfSponsor(productId, ownerSponsorId);
     await this.db.query(`DELETE FROM platform_products WHERE id = $1`, [productId]);
     return { ok: true };
   }

@@ -39,7 +39,6 @@ const PAGE_HINTS: Array<{ href: string; label: string; keywords: string }> = [
   { href: '/dashboard/envios', label: 'Envíos', keywords: 'shipping entrega' },
   { href: '/dashboard/dominio', label: 'Dominio', keywords: 'dns url' },
   { href: '/dashboard/contacto', label: 'Contacto', keywords: 'email whatsapp' },
-  { href: '/dashboard/ajustes', label: 'Ajustes', keywords: 'cuenta settings' },
 ];
 
 export function DashboardTopBar() {
@@ -123,7 +122,7 @@ export function DashboardTopBar() {
       </div>
 
       <div className="ml-auto flex items-center gap-2">
-        {sponsors.length > 0 ? (
+        {/* {sponsors.length > 0 ? (
           <Select
             value={activeSponsorId || undefined}
             onValueChange={(v) => setSelectedSponsorId(v)}
@@ -139,7 +138,7 @@ export function DashboardTopBar() {
               ))}
             </SelectContent>
           </Select>
-        ) : null}
+        ) : null} */}
 
         {activeSponsor?.slug ? (
           <Button variant="outline" className="h-10 gap-2 font-semibold" asChild>
@@ -169,9 +168,6 @@ export function DashboardTopBar() {
               <p className="text-xs font-normal text-muted-foreground">{user?.email}</p>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => router.push('/dashboard/ajustes')}>
-              Ajustes
-            </DropdownMenuItem>
             <DropdownMenuItem
               className="text-destructive focus:text-destructive"
               onClick={() => {

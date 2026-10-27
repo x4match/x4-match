@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -11,7 +12,6 @@ import {
   Package,
   Palette,
   Percent,
-  Settings,
   ShoppingBag,
   Truck,
 } from 'lucide-react';
@@ -41,7 +41,6 @@ export const NAV_GROUPS = [
     items: [
       { href: '/dashboard/dominio', label: 'Dominio', icon: Globe },
       { href: '/dashboard/contacto', label: 'Contacto', icon: Contact },
-      { href: '/dashboard/ajustes', label: 'Ajustes', icon: Settings },
     ],
   },
 ];
@@ -102,18 +101,13 @@ export function SidebarNav({
 export function AppSidebar({ pendingOrders }: { pendingOrders?: number }) {
   return (
     <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-sidebar-border bg-sidebar/90 backdrop-blur-md lg:flex">
-      <div className="flex h-14 items-center gap-3 border-b border-sidebar-border px-4">
-        <div
-          className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary text-xs font-extrabold text-primary-foreground"
-          aria-hidden
-        >
-          x4
-        </div>
-        <div className="min-w-0">
-          <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-primary">x4 match</p>
-          <p className="truncate text-sm font-extrabold tracking-tight">Commerce OS</p>
-        </div>
-      </div>
+      <Link
+        href="/dashboard/resumen"
+        className="flex h-14 items-center border-b border-sidebar-border px-4 m-auto"
+        aria-label="x4 match Commerce OS"
+      >
+        <Image src="/x4match-logo.svg" alt="x4 match" width={174} height={21} priority className="h-auto w-36" />
+      </Link>
       <div className="flex-1 overflow-y-auto p-3">
         <SidebarNav pendingOrders={pendingOrders} />
       </div>

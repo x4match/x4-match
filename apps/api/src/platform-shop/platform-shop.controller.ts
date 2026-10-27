@@ -197,7 +197,8 @@ export class SponsorsPartnerController {
       },
     }),
   )
-  uploadImage(
+  async uploadImage(
+    @CurrentUser() user: { sub: string },
     @Param('sponsorId') sponsorId: string,
     @Param('kind') kind: string,
     @UploadedFile() file: Express.Multer.File,
@@ -205,6 +206,7 @@ export class SponsorsPartnerController {
     if (!file?.buffer?.length) {
       throw new BadRequestException('Archivo requerido');
     }
+    await this.shop.assertMember(user.sub, sponsorId);
     return this.shop.uploadSponsorImage(sponsorId, kind, file);
   }
 
@@ -243,7 +245,7 @@ export class SponsorsPartnerController {
     @Body() dto: UpdatePlatformProductDto,
   ) {
     return this.shop.assertMember(user.sub, sponsorId).then(() =>
-      this.shop.updateProduct(productId, { ...dto, sponsorId }),
+      this.shop.updateProduct(productId, { ...dto, sponsorId }, sponsorId),
     );
   }
 
@@ -254,7 +256,7 @@ export class SponsorsPartnerController {
     @Param('productId') productId: string,
   ) {
     return this.shop.assertMember(user.sub, sponsorId).then(() =>
-      this.shop.deleteProduct(productId),
+      this.shop.deleteProduct(productId, sponsorId),
     );
   }
 
