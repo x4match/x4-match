@@ -6,6 +6,7 @@ import { ExternalLink, LogOut, Menu, Search } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSponsor } from '@/contexts/SponsorContext';
+import { sponsorStoreHref } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -142,7 +143,7 @@ export function DashboardTopBar() {
 
         {activeSponsor?.slug ? (
           <Button variant="outline" className="h-10 gap-2 font-semibold" asChild>
-            <Link href={`/${activeSponsor.slug}`} target="_blank">
+            <Link href={sponsorStoreHref(activeSponsor).href} target="_blank" rel="noreferrer">
               <ExternalLink className="size-4" aria-hidden />
               <span className="hidden sm:inline">Ver tienda</span>
             </Link>

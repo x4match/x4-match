@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useSponsor } from '@/contexts/SponsorContext';
+import { sponsorStoreHref } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { PageShell, PanelCard, StatusPill } from '@/components/layout/PageShell';
@@ -64,7 +65,7 @@ export default function ResumenPage() {
       actions={
         activeSponsor?.slug ? (
           <Button asChild className="min-h-11 gap-2 font-bold">
-            <Link href={`/${activeSponsor.slug}`} target="_blank">
+            <Link href={sponsorStoreHref(activeSponsor).href} target="_blank" rel="noreferrer">
               Ver tienda
               <ExternalLink className="size-4" aria-hidden />
             </Link>

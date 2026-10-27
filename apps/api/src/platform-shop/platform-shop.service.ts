@@ -714,7 +714,17 @@ export class PlatformShopService {
        ORDER BY s.name ASC`,
       [userId],
     );
-    return result.rows;
+    return result.rows.map((row) => this.toPartnerSponsor(row));
+  }
+
+  private toPartnerSponsor(row: Record<string, any>): { slug: string; [key: string]: any } {
+    const { tienda_nube_access_token_encrypted, slug, ...rest } = row;
+    return {
+      ...rest,
+      slug,
+      tienda_nube_connected: Boolean(tienda_nube_access_token_encrypted),
+      store_url: this.storeUrl(row as Parameters<PlatformShopService['storeUrl']>[0]),
+    };
   }
 
   async getMySponsor(userId: string, sponsorId: string) {
@@ -724,8 +734,7 @@ export class PlatformShopService {
     ]);
     if (!result.rows[0]) throw new NotFoundException('Partner no encontrado');
     return {
-      ...result.rows[0],
-      store_url: this.storeUrl(result.rows[0]),
+      ...this.toPartnerSponsor(result.rows[0]),
       platform_host: this.sponsorsHost(),
     };
   }

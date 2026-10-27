@@ -25,7 +25,17 @@ export type MineSponsor = {
   website_url?: string | null;
   customDomain?: string | null;
   custom_domain?: string | null;
+  catalog_mode?: 'NATIVE' | 'EXTERNAL_LINK' | null;
+  store_url?: string | null;
 };
+
+/** Tienda pública del partner: su propio sitio si usa catálogo externo, si no la de x4. */
+export function sponsorStoreHref(sponsor: Pick<MineSponsor, 'slug' | 'catalog_mode' | 'store_url'>) {
+  if (sponsor.catalog_mode === 'EXTERNAL_LINK' && sponsor.store_url) {
+    return { href: sponsor.store_url, external: true };
+  }
+  return { href: `/${sponsor.slug}`, external: false };
+}
 
 export type StorefrontSponsor = {
   id: string;
