@@ -766,6 +766,13 @@ select optgroup {
   align-items: center;
   gap: 12px;
   border-radius: 12px;
+  margin: 0 auto
+}
+
+.ops-brand-logo {
+  display: block;
+  width: 150px;
+  height: auto;
 }
 
 .ops-brand>span:last-child {

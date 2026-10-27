@@ -191,14 +191,9 @@ export default function AppVersionPage() {
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
                 placeholder="Ej.: Sumamos noticias de clubes y mejoras en los torneos."
+                style={{ marginTop: 12, padding: 8 }}
               />
             </label>
-          </div>
-
-          <div>
-            <button className="btn btn-primary" type="submit" disabled={blocking || save.isPending}>
-              {save.isPending ? 'Guardando…' : 'Guardar'}
-            </button>
           </div>
         </form>
       )}

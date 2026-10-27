@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { LogOut, X } from 'lucide-react';
@@ -82,14 +83,15 @@ export function OpsSidebar({ open, onClose }: { open: boolean; onClose: () => vo
 
       <aside className={`ops-sidebar${open ? ' ops-sidebar--open' : ''}`}>
         <div className="ops-sidebar-header">
-          <Link href="/monitor" className="ops-brand" onClick={onClose}>
-            <span className="ops-brand-mark" aria-hidden>
-              x4
-            </span>
-            <span>
-              <span className="ops-brand-kicker">X4 MATCH</span>
-              <span className="ops-brand-title">Ops Console</span>
-            </span>
+          <Link href="/monitor" className="ops-brand" onClick={onClose} aria-label="x4 match Ops Console">
+            <Image
+              src="/x4match-logo.svg"
+              alt="x4 match"
+              width={174}
+              height={21}
+              priority
+              className="ops-brand-logo"
+            />
           </Link>
           <button
             type="button"

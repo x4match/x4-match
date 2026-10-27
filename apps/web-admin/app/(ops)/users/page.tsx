@@ -13,6 +13,26 @@ import { usePaginatedPlatformList } from '@/lib/use-paginated-platform-list';
 
 const DEFAULT_FILTERS = { q: '', role: '' };
 
+type AssignableRole = 'PLAYER' | 'PARTNER' | 'SUPER_ADMIN';
+
+const ROLE_OPTIONS: { value: AssignableRole; label: string; warning: string }[] = [
+  {
+    value: 'SUPER_ADMIN',
+    label: 'Ops (Super admin)',
+    warning: 'Va a tener acceso completo al backoffice.',
+  },
+  {
+    value: 'PARTNER',
+    label: 'Partner',
+    warning: 'Podrá entrar a web-sponsors si está asignado a un partner.',
+  },
+  {
+    value: 'PLAYER',
+    label: 'Jugador',
+    warning: 'Pierde los accesos de ops o partner que tuviera.',
+  },
+];
+
 export default function UsersPage() {
   const queryClient = useQueryClient();
   const {
@@ -66,28 +86,33 @@ export default function UsersPage() {
     },
   });
 
-  const promote = useMutation({
-    mutationFn: async (userId: string) =>
-      api.patch(`/platform/users/${userId}/role`, { role: 'SUPER_ADMIN' }).then((r) => r.data),
+  const changeRole = useMutation({
+    mutationFn: async ({ userId, role }: { userId: string; role: AssignableRole }) =>
+      api.patch(`/platform/users/${userId}/role`, { role }).then((r) => r.data),
     meta: {
-      successMessage: 'Usuario promovido a SUPER_ADMIN.',
+      successMessage: 'Rol actualizado.',
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['platform-users'] });
       queryClient.invalidateQueries({ queryKey: ['platform-ops-users'] });
+      setPendingRole(null);
     },
   });
 
-  const makePartner = useMutation({
-    mutationFn: async (userId: string) =>
-      api.patch(`/platform/users/${userId}/role`, { role: 'PARTNER' }).then((r) => r.data),
-    meta: {
-      successMessage: 'Usuario promovido a PARTNER.',
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['platform-users'] });
-    },
-  });
+  const [pendingRole, setPendingRole] = useState<{
+    user: { id: string; name: string; email: string; role: string };
+    option: (typeof ROLE_OPTIONS)[number];
+  } | null>(null);
+
+  function onRoleSelect(user: { id: string; name: string; email: string; role: string }, role: string) {
+    const option = ROLE_OPTIONS.find((o) => o.value === role);
+    if (!option || role === user.role) return;
+    setPendingRole({ user, option });
+  }
+
+  function closeRoleModal() {
+    if (!changeRole.isPending) setPendingRole(null);
+  }
 
   function onCreateOps(e: FormEvent) {
     e.preventDefault();
@@ -158,6 +183,51 @@ export default function UsersPage() {
         </form>
       </Modal>
 
+      <Modal open={pendingRole !== null} title="Confirmar cambio de rol" onClose={closeRoleModal}>
+        {pendingRole ? (
+          <div style={{ display: 'grid', gap: 12 }}>
+            <p style={{ margin: 0 }}>
+              <strong>{pendingRole.user.name}</strong>
+              <br />
+              <span style={{ color: 'var(--muted)', fontSize: 14 }}>{pendingRole.user.email}</span>
+            </p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <StatusBadge value={pendingRole.user.role} category="userRole" />
+              <span aria-hidden>→</span>
+              <StatusBadge value={pendingRole.option.value} category="userRole" />
+            </div>
+            <p style={{ margin: 0, color: 'var(--warning)', fontSize: 14 }}>
+              {pendingRole.option.warning}
+            </p>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
+              <button
+                className="btn btn-outline"
+                type="button"
+                onClick={closeRoleModal}
+                disabled={changeRole.isPending}
+              >
+                Cancelar
+              </button>
+              <button
+                className="btn btn-primary"
+                type="button"
+                disabled={changeRole.isPending}
+                onClick={() =>
+                  changeRole.mutate({
+                    userId: pendingRole.user.id,
+                    role: pendingRole.option.value,
+                  })
+                }
+              >
+                {changeRole.isPending
+                  ? 'Cambiando…'
+                  : `Confirmar: ${pendingRole.option.label}`}
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </Modal>
+
       <div className="card card-table">
         {isLoading ? (
           <p style={{ padding: 16, margin: 0 }}>Cargando usuarios…</p>
@@ -170,13 +240,14 @@ export default function UsersPage() {
                   <th>Email</th>
                   <th>Rol</th>
                   <th>Alta</th>
+                  <th>Cambiar rol</th>
                   <th></th>
                 </tr>
               </thead>
               <tbody>
                 {items.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="table-empty">
+                    <td colSpan={6} className="table-empty">
                       No hay usuarios con esos filtros.
                     </td>
                   </tr>
@@ -192,35 +263,30 @@ export default function UsersPage() {
                       <td><StatusBadge value={u.role} category="userRole" /></td>
                       <td>{new Date(u.created_at).toLocaleDateString('es-AR')}</td>
                       <td>
-                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-                          <Link href={`/users/${u.id}`} style={{ color: 'var(--primary)', fontWeight: 700 }}>
-                            Ver
-                          </Link>
-                          {u.role !== 'SUPER_ADMIN' ? (
-                            <>
-                              <button
-                                className="btn btn-outline"
-                                type="button"
-                                disabled={promote.isPending}
-                                onClick={() => promote.mutate(u.id)}
-                              >
-                                Hacer ops
-                              </button>
-                              {u.role !== 'PARTNER' ? (
-                                <button
-                                  className="btn btn-outline"
-                                  type="button"
-                                  disabled={makePartner.isPending}
-                                  onClick={() => makePartner.mutate(u.id)}
-                                >
-                                  Hacer partner
-                                </button>
-                              ) : null}
-                            </>
-                          ) : (
-                            <span className="badge badge-success">Operador</span>
-                          )}
-                        </div>
+                        {u.role === 'SUPER_ADMIN' ? (
+                          <span className="badge badge-success">Operador</span>
+                        ) : (
+                          <select
+                            className="input"
+                            style={{ width: 'auto', minWidth: 170, minHeight: 36 }}
+                            aria-label={`Cambiar rol de ${u.name}`}
+                            value=""
+                            disabled={changeRole.isPending}
+                            onChange={(e) => onRoleSelect(u, e.target.value)}
+                          >
+                            <option value="">Cambiar rol…</option>
+                            {ROLE_OPTIONS.filter((o) => o.value !== u.role).map((o) => (
+                              <option key={o.value} value={o.value}>
+                                {o.label}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                      </td>
+                      <td style={{ textAlign: 'right' }}>
+                        <Link href={`/users/${u.id}`} style={{ color: 'var(--primary)', fontWeight: 700 }}>
+                          Ver
+                        </Link>
                       </td>
                     </tr>
                   ))
