@@ -318,7 +318,11 @@ export class PlatformShopService {
       [slug],
     );
     if (!result.rows[0]) throw new NotFoundException('Tienda no encontrada');
-    const sponsor = result.rows[0];
+    const {
+      tienda_nube_access_token_encrypted: _token,
+      custom_domain_verify_token: _verifyToken,
+      ...sponsor
+    } = result.rows[0];
     const pay = await this.payments.getPublicPaymentOptions(sponsor.id);
     return {
       ...sponsor,
@@ -446,6 +450,11 @@ export class PlatformShopService {
 
   async checkout(slug: string, dto: SponsorCheckoutDto, customerId?: string) {
     const sponsor = await this.getSponsorBySlug(slug);
+    if (sponsor.catalog_mode === 'EXTERNAL_LINK') {
+      throw new BadRequestException(
+        'Esta tienda vende en su propio sitio. Comprá desde el enlace de la tienda del partner.',
+      );
+    }
     const pay = await this.payments.getPublicPaymentOptions(sponsor.id);
     if (dto.paymentMethod === 'MERCADOPAGO' && !pay.mpEnabled) {
       throw new BadRequestException('Mercado Pago no está habilitado en esta tienda');
@@ -471,6 +480,11 @@ export class PlatformShopService {
     for (const item of dto.items) {
       const product = byId.get(item.productId);
       if (!product) throw new BadRequestException('Producto inválido');
+      if (product.external_source || product.external_url) {
+        throw new BadRequestException(
+          `"${product.name}" se compra en la tienda del partner. Abrí el enlace del producto.`,
+        );
+      }
       if (product.stock_quantity != null && Number(product.stock_quantity) < item.quantity) {
         throw new BadRequestException(`Sin stock suficiente: ${product.name}`);
       }

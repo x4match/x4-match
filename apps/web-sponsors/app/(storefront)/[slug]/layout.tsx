@@ -1,8 +1,10 @@
 'use client';
 
+import { useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { fetchSponsorBySlug } from '@/lib/storefront-api';
+import { sponsorStoreHref } from '@/lib/types';
 import { StorefrontHeader } from '@/components/storefront/StorefrontHeader';
 import { StoreThemeScope, useResolvedTheme } from '@/components/storefront/StoreThemeScope';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -19,6 +21,23 @@ export default function StorefrontLayout({ children }: { children: React.ReactNo
 
   const sponsor = storeQuery.data;
   const theme = useResolvedTheme(sponsor);
+  const storeLink = sponsor ? sponsorStoreHref(sponsor) : null;
+  const externalHref = storeLink?.external ? storeLink.href : null;
+
+  useEffect(() => {
+    if (externalHref) window.location.replace(externalHref);
+  }, [externalHref]);
+
+  if (externalHref) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3 px-6 text-center">
+        <p className="text-lg font-semibold">Te llevamos a la tienda de {sponsor?.name}…</p>
+        <a href={externalHref} className="text-sm font-semibold underline">
+          Si no se abre, tocá acá
+        </a>
+      </div>
+    );
+  }
 
   return (
     <StoreThemeScope sponsor={sponsor} className="min-h-screen">
