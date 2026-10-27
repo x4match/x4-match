@@ -1194,10 +1194,22 @@ export class PlatformShopService {
     return result.rows[0];
   }
 
+  /** Con pedidos asociados (FK RESTRICT) se archiva para conservar el historial. */
   async deleteProduct(productId: string, ownerSponsorId?: string) {
     if (ownerSponsorId) await this.assertProductOfSponsor(productId, ownerSponsorId);
+    const ordered = await this.db.query(
+      `SELECT 1 FROM platform_order_items WHERE product_id = $1 LIMIT 1`,
+      [productId],
+    );
+    if (ordered.rows[0]) {
+      await this.db.query(
+        `UPDATE platform_products SET status = 'ARCHIVED', updated_at = NOW() WHERE id = $1`,
+        [productId],
+      );
+      return { ok: true, archived: true };
+    }
     await this.db.query(`DELETE FROM platform_products WHERE id = $1`, [productId]);
-    return { ok: true };
+    return { ok: true, archived: false };
   }
 
   async listSponsorProducts(sponsorId: string) {
@@ -1247,10 +1259,11 @@ export class PlatformShopService {
   }
 
   async deleteCategory(sponsorId: string, categoryId: string) {
-    await this.db.query(
-      `DELETE FROM platform_sponsor_categories WHERE id = $1 AND sponsor_id = $2`,
+    const result = await this.db.query(
+      `DELETE FROM platform_sponsor_categories WHERE id = $1 AND sponsor_id = $2 RETURNING id`,
       [categoryId, sponsorId],
     );
+    if (!result.rows[0]) throw new NotFoundException('Categoría no encontrada');
     return { ok: true };
   }
 

@@ -2,7 +2,7 @@
 
 import { FormEvent, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Pencil, Plus } from 'lucide-react';
+import { Pencil, Plus, Trash2 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useSponsor } from '@/contexts/SponsorContext';
 import { toast } from 'sonner';
@@ -20,6 +20,7 @@ import {
 import { PageShell, StatusPill } from '@/components/layout/PageShell';
 import { DataTable, type DataTableColumn } from '@/components/layout/DataTable';
 import { ImageField } from '@/components/dashboard/ImageField';
+import { ConfirmDialog } from '@/components/dashboard/ConfirmDialog';
 
 type ProductStatus = 'ACTIVE' | 'DRAFT' | 'ARCHIVED';
 
@@ -66,6 +67,11 @@ const PRODUCT_STATUS_LABELS: Record<ProductStatus, string> = {
   DRAFT: 'Borrador',
   ARCHIVED: 'Archivado',
 };
+
+function apiErrorMessage(err: unknown): string | undefined {
+  const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
+  return Array.isArray(msg) ? msg[0] : msg;
+}
 
 function toForm(p: Product): FormState {
   return {
@@ -126,10 +132,9 @@ export default function ProductosPage() {
       setForm(EMPTY_FORM);
       qc.invalidateQueries({ queryKey: ['partner-products', activeSponsorId] });
     },
-    onError: (err: any) => {
-      const msg = err?.response?.data?.message;
+    onError: (err) => {
       toast.error(
-        (Array.isArray(msg) ? msg[0] : msg) ||
+        apiErrorMessage(err) ||
           (editing ? 'No se pudo actualizar el producto' : 'No se pudo crear el producto'),
       );
     },
@@ -139,6 +144,32 @@ export default function ProductosPage() {
     e.preventDefault();
     save.mutate();
   }
+
+  const [toDelete, setToDelete] = useState<Product | null>(null);
+  const remove = useMutation({
+    mutationFn: async (id: string) =>
+      (await api.delete(`/sponsors/me/${activeSponsorId}/products/${id}`)).data as {
+        archived?: boolean;
+      },
+    onSuccess: (data, id) => {
+      toast.success(
+        data?.archived
+          ? 'El producto tiene pedidos: lo archivamos y ya no se muestra en tu tienda'
+          : 'Producto eliminado',
+      );
+      setToDelete(null);
+      if (editing?.id === id) {
+        setOpen(false);
+        setEditing(null);
+        setForm(EMPTY_FORM);
+      }
+      qc.invalidateQueries({ queryKey: ['partner-products', activeSponsorId] });
+      qc.invalidateQueries({ queryKey: ['partner-cats', activeSponsorId] });
+    },
+    onError: (err) => {
+      toast.error(apiErrorMessage(err) || 'No se pudo eliminar el producto');
+    },
+  });
 
   const products = useMemo(() => {
     const all = (listQ.data || []) as Product[];
@@ -184,21 +215,37 @@ export default function ProductosPage() {
     {
       key: 'actions',
       header: '',
-      className: 'w-24 text-right',
+      className: 'w-52 text-right',
       cell: (p) => (
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          className="gap-1.5"
-          onClick={(e) => {
-            e.stopPropagation();
-            openEdit(p);
-          }}
-        >
-          <Pencil className="size-3.5" aria-hidden />
-          Editar
-        </Button>
+        <div className="flex justify-end gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="gap-1.5"
+            onClick={(e) => {
+              e.stopPropagation();
+              openEdit(p);
+            }}
+          >
+            <Pencil className="size-3.5" aria-hidden />
+            Editar
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="destructive"
+            className="gap-1.5"
+            aria-label={`Eliminar ${p.name}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              setToDelete(p);
+            }}
+          >
+            <Trash2 className="size-3.5" aria-hidden />
+            Eliminar
+          </Button>
+        </div>
       ),
     },
   ];
@@ -346,6 +393,17 @@ export default function ProductosPage() {
             </div>
 
             <DialogFooter className="gap-2">
+              {editing ? (
+                <Button
+                  type="button"
+                  variant="destructive"
+                  className="min-h-11 gap-1.5 sm:mr-auto"
+                  onClick={() => setToDelete(editing)}
+                >
+                  <Trash2 className="size-4" aria-hidden />
+                  Eliminar
+                </Button>
+              ) : null}
               <Button type="button" variant="outline" className="min-h-11" onClick={() => setOpen(false)}>
                 Cancelar
               </Button>
@@ -356,6 +414,19 @@ export default function ProductosPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={!!toDelete}
+        onOpenChange={(o) => !o && setToDelete(null)}
+        title={`¿Eliminar "${toDelete?.name ?? ''}"?`}
+        description={
+          toDelete?.external_source
+            ? 'Se quita de tu tienda. Si sigue en tu tienda externa, puede volver a aparecer en la próxima sincronización.'
+            : 'Se quita de tu tienda. Si ya tiene pedidos, lo archivamos para conservar el historial.'
+        }
+        pending={remove.isPending}
+        onConfirm={() => toDelete && remove.mutate(toDelete.id)}
+      />
     </PageShell>
   );
 }

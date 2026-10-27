@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Trash2 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useSponsor } from '@/contexts/SponsorContext';
 import { toast } from 'sonner';
@@ -10,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import { PageShell } from '@/components/layout/PageShell';
 import { FormSection } from '@/components/layout/FormSection';
 import { DataTable, type DataTableColumn } from '@/components/layout/DataTable';
+import { ConfirmDialog } from '@/components/dashboard/ConfirmDialog';
 
 type Category = { id: string; name: string; slug: string; product_count?: number };
 
@@ -31,6 +33,17 @@ export default function CategoriasPage() {
     },
     onError: () => toast.error('No se pudo crear'),
   });
+  const [toDelete, setToDelete] = useState<Category | null>(null);
+  const remove = useMutation({
+    mutationFn: async (id: string) => api.delete(`/sponsors/me/${activeSponsorId}/categories/${id}`),
+    onSuccess: () => {
+      toast.success('Categoría eliminada');
+      setToDelete(null);
+      qc.invalidateQueries({ queryKey: ['partner-cats', activeSponsorId] });
+      qc.invalidateQueries({ queryKey: ['partner-products', activeSponsorId] });
+    },
+    onError: () => toast.error('No se pudo eliminar la categoría'),
+  });
 
   function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -47,7 +60,26 @@ export default function CategoriasPage() {
       className: 'w-28 text-right',
       cell: (c) => (c.product_count != null ? c.product_count : '—'),
     },
+    {
+      key: 'actions',
+      header: '',
+      className: 'w-28 text-right',
+      cell: (c) => (
+        <Button
+          type="button"
+          size="sm"
+          variant="destructive"
+          className="gap-1.5"
+          aria-label={`Eliminar categoría ${c.name}`}
+          onClick={() => setToDelete(c)}
+        >
+          <Trash2 className="size-3.5" aria-hidden />
+          Eliminar
+        </Button>
+      ),
+    },
   ];
+  const affected = toDelete?.product_count ?? 0;
 
   return (
     <PageShell
@@ -75,6 +107,20 @@ export default function CategoriasPage() {
         rows={items}
         loading={listQ.isLoading}
         empty={listQ.isError ? 'No se pudieron cargar las categorías.' : 'Sin categorías todavía.'}
+      />
+      <ConfirmDialog
+        open={!!toDelete}
+        onOpenChange={(open) => !open && setToDelete(null)}
+        title={`¿Eliminar "${toDelete?.name ?? ''}"?`}
+        description={
+          affected === 1
+            ? 'El producto de esta categoría no se borra: queda sin categoría y sigue en tu catálogo.'
+            : affected > 1
+              ? `Los ${affected} productos de esta categoría no se borran: quedan sin categoría y siguen en tu catálogo.`
+              : 'La categoría se quita de la navegación de tu tienda.'
+        }
+        pending={remove.isPending}
+        onConfirm={() => toDelete && remove.mutate(toDelete.id)}
       />
     </PageShell>
   );
