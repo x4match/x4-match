@@ -1,6 +1,9 @@
 import {
+  categorySlugFromUrl,
   collectProductUrlsFromSitemap,
+  detectListingNextPage,
   detectProductListingNextPage,
+  extractStorefrontCategories,
   extractProductHandle,
   mapTiendaNubeApiProduct,
   normalizeStoreBaseUrl,
@@ -78,6 +81,46 @@ describe('tienda-nube-catalog.util', () => {
     expect(collectProductUrlsFromSitemap(xml)).toEqual(['https://t.com/productos/grip-x3/']);
   });
 
+  it('extrae categorías del filtro del listado', () => {
+    const html = `
+      <ul class="list-unstyled pills-container">
+        <li data-item="1" class="pill"><a href="https://t.com/accesorios/" title="Accesorios" class="pill-link">Accesorios</a></li>
+        <li data-item="2" class="pill"><a href="https://t.com/indumentaria/remeras/" title="Remeras &amp; Musculosas">R</a></li>
+        <li data-item="3" class="pill"><a href="https://otra.com/pelotas/" title="Pelotas">P</a></li>
+        <li data-item="4" class="pill"><a href="https://t.com/productos/" title="Productos">P</a></li>
+      </ul>`;
+    expect(extractStorefrontCategories(html, 'https://t.com')).toEqual([
+      { slug: 'accesorios', name: 'Accesorios', url: 'https://t.com/accesorios/' },
+      {
+        slug: 'indumentaria-remeras',
+        name: 'Remeras & Musculosas',
+        url: 'https://t.com/indumentaria/remeras/',
+      },
+    ]);
+  });
+
+  it('usa el menú si no hay filtro de categorías', () => {
+    const html = `
+      <li data-component="menu.item">
+        <a class="nav-list-link" href="https://t.com/pelotas/">Pelotas</a>
+      </li>`;
+    expect(extractStorefrontCategories(html, 'https://t.com')).toEqual([
+      { slug: 'pelotas', name: 'Pelotas', url: 'https://t.com/pelotas/' },
+    ]);
+  });
+
+  it('detecta paginado de una categoría', () => {
+    const html = 'href="https://t.com/accesorios/page/2/"';
+    expect(detectListingNextPage(html, 'https://t.com/accesorios/', 1)).toBe(2);
+    expect(detectListingNextPage(html, 'https://t.com/pelotas/', 1)).toBeNull();
+  });
+
+  it('slug de categoría ignora rutas que no son categorías', () => {
+    expect(categorySlugFromUrl('https://t.com/Pelotas/', 'https://t.com')).toBe('pelotas');
+    expect(categorySlugFromUrl('https://t.com/account/login/', 'https://t.com')).toBeNull();
+    expect(categorySlugFromUrl('https://t.com/accesorios/page/2/', 'https://t.com')).toBeNull();
+  });
+
   it('mapea producto de la API oficial', () => {
     const mapped = mapTiendaNubeApiProduct(
       {
@@ -101,6 +144,7 @@ describe('tienda-nube-catalog.util', () => {
       photoUrl: 'https://cdn.example/remera.jpg',
       stockQuantity: 12,
       category: 'Indumentaria',
+      categorySlug: 'indumentaria',
       externalUrl: 'https://partner.mitiendanube.com/productos/remera-tecnica/',
     });
   });

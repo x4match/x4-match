@@ -4,10 +4,12 @@ import { DatabaseService } from '../database/database.service';
 import { decryptSecret, encryptSecret } from '../common/utils/token-crypto';
 import {
   collectProductUrlsFromSitemap,
-  detectProductListingNextPage,
+  detectListingNextPage,
+  extractStorefrontCategories,
   mapTiendaNubeApiProduct,
   normalizeStoreBaseUrl,
   parseJsonLdProductsFromHtml,
+  type ExternalCategory,
   type NormalizedExternalProduct,
   withX4AffiliateParams,
 } from './tienda-nube-catalog.util';
@@ -15,6 +17,8 @@ import {
 const EXTERNAL_SOURCE = 'tienda_nube';
 const DEFAULT_USER_AGENT = 'x4match-catalog-sync/1.0 (api@x4match.com)';
 const MAX_LISTING_PAGES = 40;
+const MAX_CATEGORIES = 40;
+const MAX_CATEGORY_PAGES = 10;
 const MAX_PRODUCTS_DEFAULT = 300;
 
 type SponsorCatalogRow = {
@@ -158,17 +162,20 @@ export class TiendaNubeCatalogService {
       }
 
       let products: NormalizedExternalProduct[];
+      let categories: ExternalCategory[];
       let method: 'api' | 'storefront';
       if (sponsor.tienda_nube_store_id && sponsor.tienda_nube_access_token_encrypted) {
         products = await this.fetchViaApi(sponsor, storeBase);
+        categories = this.categoriesFromProducts(products);
         method = 'api';
       } else {
-        products = await this.fetchViaStorefront(storeBase);
+        ({ products, categories } = await this.fetchViaStorefront(storeBase));
         method = 'storefront';
       }
 
       const published = products.filter((p) => p.published && p.price >= 0);
-      const upserted = await this.upsertProducts(sponsorId, published);
+      const categoryIds = await this.upsertCategories(sponsorId, categories);
+      const upserted = await this.upsertProducts(sponsorId, published, categoryIds);
 
       await this.db.query(
         `UPDATE platform_sponsors
@@ -184,7 +191,7 @@ export class TiendaNubeCatalogService {
       );
 
       this.logger.log(
-        `Sync Tienda Nube ${sponsor.name}: ${upserted} productos vía ${method}`,
+        `Sync Tienda Nube ${sponsor.name}: ${upserted} productos y ${categoryIds.size} categorías vía ${method}`,
       );
       return {
         ok: true,
@@ -192,6 +199,7 @@ export class TiendaNubeCatalogService {
         store_url: storeBase,
         fetched: products.length,
         upserted,
+        categories: categoryIds.size,
         archived: Math.max(0, products.length - published.length),
       };
     } catch (err) {
@@ -280,22 +288,36 @@ export class TiendaNubeCatalogService {
     return products;
   }
 
-  private async fetchViaStorefront(storeBase: string): Promise<NormalizedExternalProduct[]> {
+  private categoriesFromProducts(products: NormalizedExternalProduct[]): ExternalCategory[] {
+    const bySlug = new Map<string, ExternalCategory>();
+    for (const p of products) {
+      if (p.categorySlug && !bySlug.has(p.categorySlug)) {
+        bySlug.set(p.categorySlug, { slug: p.categorySlug, name: p.category, url: '' });
+      }
+    }
+    return Array.from(bySlug.values());
+  }
+
+  private async fetchViaStorefront(
+    storeBase: string,
+  ): Promise<{ products: NormalizedExternalProduct[]; categories: ExternalCategory[] }> {
     const max = Number(process.env.TIENDA_NUBE_SYNC_MAX_PRODUCTS || MAX_PRODUCTS_DEFAULT);
     const byId = new Map<string, NormalizedExternalProduct>();
+    let firstListingHtml = '';
 
     // 1) Listados /productos/ (JSON-LD Product embebido por página)
+    const listingBase = `${storeBase}/productos/`;
     let page = 1;
     while (page <= MAX_LISTING_PAGES && byId.size < max) {
-      const listUrl =
-        page === 1 ? `${storeBase}/productos/` : `${storeBase}/productos/page/${page}/`;
+      const listUrl = page === 1 ? listingBase : `${storeBase}/productos/page/${page}/`;
       const html = await this.fetchText(listUrl);
+      if (page === 1) firstListingHtml = html;
       const parsed = parseJsonLdProductsFromHtml(html, storeBase);
       for (const p of parsed) {
         byId.set(p.externalId, p);
         if (byId.size >= max) break;
       }
-      const next = detectProductListingNextPage(html, page);
+      const next = detectListingNextPage(html, listingBase, page);
       if (!next || parsed.length === 0) break;
       page = next;
     }
@@ -321,7 +343,64 @@ export class TiendaNubeCatalogService {
         'No se encontraron productos públicos. Pedile al partner un access token de Tienda Nube (lectura de productos) o verificá que /productos/ esté publicado.',
       );
     }
-    return Array.from(byId.values());
+
+    // 3) Categorías: recorrer cada listado de categoría y asignar sus productos
+    const categories = extractStorefrontCategories(firstListingHtml, storeBase).slice(
+      0,
+      MAX_CATEGORIES,
+    );
+    const found: ExternalCategory[] = [];
+    for (const category of categories) {
+      let matched = 0;
+      let catPage = 1;
+      try {
+        while (catPage <= MAX_CATEGORY_PAGES) {
+          const base = category.url.replace(/\/?$/, '/');
+          const url = catPage === 1 ? base : `${base}page/${catPage}/`;
+          const html = await this.fetchText(url);
+          const parsed = parseJsonLdProductsFromHtml(html, storeBase);
+          for (const p of parsed) {
+            const product = byId.get(p.externalId);
+            if (product && !product.categorySlug) {
+              product.categorySlug = category.slug;
+              product.category = category.name.slice(0, 40);
+              matched += 1;
+            }
+          }
+          const next = detectListingNextPage(html, base, catPage);
+          if (!next || parsed.length === 0) break;
+          catPage = next;
+        }
+      } catch (err) {
+        this.logger.warn(
+          `No se pudo leer la categoría ${category.url}: ${err instanceof Error ? err.message : err}`,
+        );
+      }
+      if (matched > 0) found.push(category);
+    }
+
+    return { products: Array.from(byId.values()), categories: found };
+  }
+
+  /** Crea/actualiza las categorías del partner y devuelve slug → id. */
+  private async upsertCategories(
+    sponsorId: string,
+    categories: ExternalCategory[],
+  ): Promise<Map<string, string>> {
+    const ids = new Map<string, string>();
+    for (const [index, category] of categories.entries()) {
+      const result = await this.db.query(
+        `INSERT INTO platform_sponsor_categories (sponsor_id, name, slug, sort_order, active)
+         VALUES ($1, $2, $3, $4, TRUE)
+         ON CONFLICT (sponsor_id, slug)
+         DO UPDATE SET name = EXCLUDED.name, sort_order = EXCLUDED.sort_order,
+                       active = TRUE, updated_at = NOW()
+         RETURNING id`,
+        [sponsorId, category.name, category.slug, index],
+      );
+      ids.set(category.slug, result.rows[0].id);
+    }
+    return ids;
   }
 
   private async fetchText(url: string): Promise<string> {
@@ -338,12 +417,17 @@ export class TiendaNubeCatalogService {
     return res.text();
   }
 
-  private async upsertProducts(sponsorId: string, products: NormalizedExternalProduct[]) {
+  private async upsertProducts(
+    sponsorId: string,
+    products: NormalizedExternalProduct[],
+    categoryIds: Map<string, string>,
+  ) {
     const seenExternalIds: string[] = [];
     let upserted = 0;
 
     for (const [index, product] of products.entries()) {
       seenExternalIds.push(product.externalId);
+      const categoryId = product.categorySlug ? categoryIds.get(product.categorySlug) ?? null : null;
       const existing = await this.db.query(
         `SELECT id FROM platform_products
          WHERE sponsor_id = $1 AND external_source = $2 AND external_id = $3
@@ -365,6 +449,7 @@ export class TiendaNubeCatalogService {
                status = 'ACTIVE'::platform_product_status,
                sort_order = $10,
                external_url = $11,
+               category_id = COALESCE($12, category_id),
                updated_at = NOW()
            WHERE id = $1`,
           [
@@ -379,6 +464,7 @@ export class TiendaNubeCatalogService {
             product.category.slice(0, 40),
             index,
             product.externalUrl,
+            categoryId,
           ],
         );
       } else {
@@ -386,9 +472,9 @@ export class TiendaNubeCatalogService {
           `INSERT INTO platform_products
              (sponsor_id, name, description, price, compare_at_price, currency, photo_url,
               stock_quantity, category, status, sort_order, external_source, external_id,
-              external_url, is_new, featured)
+              external_url, category_id, is_new, featured)
            VALUES
-             ($1,$2,$3,$4,$5,$6,$7,$8,$9,'ACTIVE'::platform_product_status,$10,$11,$12,$13,FALSE,FALSE)`,
+             ($1,$2,$3,$4,$5,$6,$7,$8,$9,'ACTIVE'::platform_product_status,$10,$11,$12,$13,$14,FALSE,FALSE)`,
           [
             sponsorId,
             product.name.slice(0, 200),
@@ -403,6 +489,7 @@ export class TiendaNubeCatalogService {
             EXTERNAL_SOURCE,
             product.externalId,
             product.externalUrl,
+            categoryId,
           ],
         );
       }

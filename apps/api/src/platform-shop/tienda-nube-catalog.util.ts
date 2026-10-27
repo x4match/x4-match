@@ -8,12 +8,30 @@ export type NormalizedExternalProduct = {
   photoUrl: string | null;
   stockQuantity: number | null;
   category: string;
+  categorySlug: string | null;
   externalUrl: string;
   published: boolean;
 };
 
+export type ExternalCategory = {
+  slug: string;
+  name: string;
+  url: string;
+};
+
 const PRODUCT_PATH_RE = /\/productos\/([^/?#]+)\/?/i;
 const PAGE_PATH_RE = /\/productos\/page\/(\d+)\/?/i;
+const NON_CATEGORY_SEGMENTS = new Set([
+  'productos',
+  'produtos',
+  'account',
+  'contacto',
+  'search',
+  'cart',
+  'checkout',
+  'comprar',
+  'carrito',
+]);
 
 export function normalizeStoreBaseUrl(input: string): string {
   const trimmed = input.trim();
@@ -62,6 +80,93 @@ export function extractProductHandle(productUrl: string): string | null {
   } catch {
     return null;
   }
+}
+
+function decodeEntities(input: string): string {
+  return input
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)));
+}
+
+export function slugifyCategory(input: string): string {
+  return input
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60);
+}
+
+/** Slug estable a partir de la URL de categoría (`/indumentaria/remeras/` → `indumentaria-remeras`). */
+export function categorySlugFromUrl(categoryUrl: string, storeBaseUrl: string): string | null {
+  try {
+    const url = new URL(categoryUrl, storeBaseUrl);
+    const base = new URL(storeBaseUrl);
+    if (url.host !== base.host) return null;
+    const basePath = base.pathname.replace(/\/+$/, '');
+    const path = url.pathname.startsWith(basePath) ? url.pathname.slice(basePath.length) : url.pathname;
+    const segments = path.split('/').filter(Boolean);
+    if (!segments.length || NON_CATEGORY_SEGMENTS.has(segments[0].toLowerCase())) return null;
+    if (segments.includes('page')) return null;
+    return slugifyCategory(segments.join('-')) || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Detecta las categorías publicadas en el storefront de Tienda Nube.
+ * Usa el filtro "Categorías" del listado (`<a href title>`) y, si no está, los ítems del menú.
+ */
+export function extractStorefrontCategories(html: string, storeBaseUrl: string): ExternalCategory[] {
+  const bySlug = new Map<string, ExternalCategory>();
+  const add = (href: string, rawName: string) => {
+    const name = decodeEntities(rawName).replace(/\s+/g, ' ').trim();
+    if (!name || /^ver (toda|todos)/i.test(name)) return;
+    const slug = categorySlugFromUrl(href, storeBaseUrl);
+    if (!slug || bySlug.has(slug)) return;
+    const url = new URL(href, storeBaseUrl);
+    url.search = '';
+    url.hash = '';
+    bySlug.set(slug, { slug, name: name.slice(0, 60), url: url.toString() });
+  };
+
+  for (const m of html.matchAll(
+    /<li[^>]*data-item="\d+"[^>]*>\s*<a[^>]*href="([^"]+)"[^>]*title="([^"]+)"/gi,
+  )) {
+    add(m[1], m[2]);
+  }
+
+  if (!bySlug.size) {
+    for (const m of html.matchAll(
+      /<li[^>]*data-component="menu\.item"[^>]*>\s*<a[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi,
+    )) {
+      add(m[1], m[2].replace(/<[^>]+>/g, ' '));
+    }
+  }
+
+  return Array.from(bySlug.values());
+}
+
+/** Detecta si hay más páginas en un listado (`/productos/` o una categoría). */
+export function detectListingNextPage(html: string, listingUrl: string, currentPage: number): number | null {
+  let path: string;
+  try {
+    path = new URL(listingUrl).pathname.replace(/\/+$/, '');
+  } catch {
+    return null;
+  }
+  const escaped = path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp(`${escaped}/page/(\\d+)/?`, 'gi');
+  const pages = Array.from(html.matchAll(re)).map((m) => Number(m[1]));
+  const maxPage = pages.length ? Math.max(...pages) : currentPage;
+  return maxPage > currentPage ? currentPage + 1 : null;
 }
 
 function stripHtml(input: string | null | undefined): string | null {
@@ -202,6 +307,7 @@ function normalizeJsonLdProduct(item: unknown, storeBaseUrl: string): Normalized
     photoUrl: image,
     stockQuantity: availabilityToStock(offer.availability, offer.inventoryLevel),
     category: 'MERCH',
+    categorySlug: null,
     externalUrl: absoluteUrl.replace(/\/?$/, '/'),
     // Incluimos agotados para que la app los muestre como sin stock.
     published: true,
@@ -238,7 +344,10 @@ type TiendaNubeApiProduct = {
   handle?: string | Record<string, string>;
   published?: boolean;
   images?: Array<{ src?: string; url?: string } | string>;
-  categories?: Array<{ name?: string | Record<string, string> }>;
+  categories?: Array<{
+    name?: string | Record<string, string>;
+    handle?: string | Record<string, string>;
+  }>;
   variants?: Array<{
     price?: string | number;
     promotional_price?: string | number | null;
@@ -270,7 +379,12 @@ export function mapTiendaNubeApiProduct(
     product.url ||
     `${storeBaseUrl}/productos/${pathHandle}/`;
 
-  const categoryName = pickLocalized(product.categories?.[0]?.name) || 'MERCH';
+  const firstCategory = product.categories?.[0];
+  const realCategoryName = pickLocalized(firstCategory?.name);
+  const categoryName = realCategoryName || 'MERCH';
+  const categorySlug = realCategoryName
+    ? slugifyCategory(pickLocalized(firstCategory?.handle) || realCategoryName) || null
+    : null;
   const stock =
     variant?.stock_management === false
       ? null
@@ -288,6 +402,7 @@ export function mapTiendaNubeApiProduct(
     photoUrl: firstImageUrl(product.images),
     stockQuantity: stock,
     category: categoryName.slice(0, 40),
+    categorySlug,
     externalUrl: externalUrl.replace(/\/?$/, '/'),
     published: product.published !== false,
   };
