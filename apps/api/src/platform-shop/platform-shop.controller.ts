@@ -262,10 +262,9 @@ export class SponsorsPartnerController {
 
   @Get(':sponsorId/categories')
   categories(@CurrentUser() user: { sub: string }, @Param('sponsorId') sponsorId: string) {
-    return this.shop.assertMember(user.sub, sponsorId).then(async () => {
-      const sponsor = await this.shop.getMySponsor(user.sub, sponsorId);
-      return this.shop.listCategories(sponsor.slug, false);
-    });
+    return this.shop.assertMember(user.sub, sponsorId).then(() =>
+      this.shop.listSponsorCategories(sponsorId),
+    );
   }
 
   @Post(':sponsorId/categories')

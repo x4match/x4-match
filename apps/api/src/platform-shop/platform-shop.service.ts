@@ -343,6 +343,19 @@ export class PlatformShopService {
     return result.rows;
   }
 
+  async listSponsorCategories(sponsorId: string) {
+    const result = await this.db.query(
+      `SELECT c.*,
+              (SELECT COUNT(*)::int FROM platform_products p
+                WHERE p.category_id = c.id AND p.status <> 'ARCHIVED') AS product_count
+       FROM platform_sponsor_categories c
+       WHERE c.sponsor_id = $1
+       ORDER BY c.sort_order ASC, c.name ASC`,
+      [sponsorId],
+    );
+    return result.rows;
+  }
+
   async listStoreProducts(
     slug: string,
     opts: { category?: string; offers?: boolean } = {},
