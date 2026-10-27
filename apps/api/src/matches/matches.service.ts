@@ -992,9 +992,36 @@ export class MatchesService {
   }
 
   async updateMatchStatus(matchId: string, dto: UpdateMatchStatusDto) {
+    // Anti-farm: no se puede forzar CONFIRMED / IN_PROGRESS / FINISHED por PATCH.
+    // Flujos válidos: confirmMatch, marcador en vivo, submitResult, cancel.
     if (dto.status === 'CANCELLED') {
       throw new BadRequestException('Usá POST /matches/:id/cancel para cancelar el partido');
     }
+    if (['CONFIRMED', 'IN_PROGRESS', 'FINISHED', 'DISPUTED'].includes(dto.status)) {
+      throw new BadRequestException(
+        'No se puede forzar ese estado. Confirmá el partido, usá el marcador en vivo o cargá el resultado.',
+      );
+    }
+    if (!['OPEN', 'FULL'].includes(dto.status)) {
+      throw new BadRequestException('Estado no permitido');
+    }
+
+    const current = await this.matchesRepository.getById(matchId);
+    if (!current) throw new NotFoundException('Partido no encontrado');
+
+    // Solo permitir OPEN ↔ FULL cuando el cupo real lo justifica (sin saltear pagos).
+    const joinedCount = await this.matchesRepository.countJoinedPlayers(matchId);
+    const needed = Number(current.needed_players) || 4;
+    if (dto.status === 'FULL' && joinedCount < needed) {
+      throw new BadRequestException('Todavía faltan jugadores para marcar el partido como completo');
+    }
+    if (dto.status === 'OPEN' && joinedCount >= needed) {
+      throw new BadRequestException('El partido ya está completo');
+    }
+    if (!['OPEN', 'FULL'].includes(current.status)) {
+      throw new BadRequestException('El partido ya no admite ese cambio de estado');
+    }
+
     const result = await this.matchesRepository.updateStatus(matchId, dto.status);
     const match = await this.matchesRepository.getDetail(matchId);
     this.realtimeGateway.emitMatchUpdated(match ?? result.rows[0]);

@@ -27,7 +27,8 @@ import {
 import { LiveScoreRow, MatchLiveScoreRepository } from './match-live-score.repository';
 import { StartLiveScoreDto } from './dto/start-live-score.dto';
 
-const STARTABLE_MATCH_STATUSES = ['FULL', 'CONFIRMED', 'IN_PROGRESS'];
+/** Anti-farm: no arrancar marcador desde FULL (sin pago/confirmación). */
+const STARTABLE_MATCH_STATUSES = ['CONFIRMED', 'IN_PROGRESS'];
 
 type MatchDetail = NonNullable<Awaited<ReturnType<MatchesRepository['getDetail']>>>;
 
@@ -59,7 +60,9 @@ export class MatchLiveScoreService {
     this.assertParticipant(match, userId);
 
     if (!STARTABLE_MATCH_STATUSES.includes(match.status)) {
-      throw new BadRequestException('El partido tiene que estar completo para llevar el marcador');
+      throw new BadRequestException(
+        'El partido tiene que estar confirmado (cancha/pago) para llevar el marcador',
+      );
     }
     if (match.result) {
       throw new BadRequestException(
