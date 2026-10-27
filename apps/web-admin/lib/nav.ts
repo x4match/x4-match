@@ -7,6 +7,7 @@ import {
   Handshake,
   LayoutDashboard,
   Megaphone,
+  Smartphone,
   Swords,
   Timer,
   Trophy,
@@ -25,6 +26,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: '/trials', label: 'Trials', icon: Timer },
       { href: '/activity', label: 'Actividad', icon: Activity },
       { href: '/calendar', label: 'Agenda', icon: CalendarRange },
+      { href: '/app-version', label: 'Versión de la app', icon: Smartphone },
     ],
   },
   {

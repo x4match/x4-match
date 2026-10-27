@@ -102,6 +102,7 @@ a,
 }
 
 @media (prefers-reduced-motion: reduce) {
+
   *,
   *::before,
   *::after {
@@ -388,6 +389,7 @@ select optgroup {
   padding: 14px;
   display: grid;
   gap: 12px;
+  margin: 12px 0
 }
 
 .filter-grid {
@@ -766,7 +768,7 @@ select optgroup {
   border-radius: 12px;
 }
 
-.ops-brand > span:last-child {
+.ops-brand>span:last-child {
   display: flex;
   flex-direction: column;
 }
@@ -1259,15 +1261,15 @@ select optgroup {
   gap: 12px;
 }
 
-.bento > * {
+.bento>* {
   grid-column: span 12;
   min-width: 0;
 }
 
-.bento > .span-4 > .bento-tile,
-.bento > .span-5 > .bento-tile,
-.bento > .span-6 > .bento-tile,
-.bento > .span-7 > .bento-tile {
+.bento>.span-4>.bento-tile,
+.bento>.span-5>.bento-tile,
+.bento>.span-6>.bento-tile,
+.bento>.span-7>.bento-tile {
   height: 100%;
 }
 
@@ -2172,7 +2174,7 @@ a.kpi-tile:hover::after {
     pointer-events: none;
   }
 
-  .login-showcase > * {
+  .login-showcase>* {
     position: relative;
     z-index: 1;
   }
@@ -2183,7 +2185,7 @@ a.kpi-tile:hover::after {
     gap: 12px;
   }
 
-  .login-showcase-brand > span:last-child {
+  .login-showcase-brand>span:last-child {
     display: flex;
     flex-direction: column;
   }
@@ -2216,7 +2218,7 @@ a.kpi-tile:hover::after {
     gap: 14px;
   }
 
-  .login-features li > span:last-child {
+  .login-features li>span:last-child {
     display: flex;
     flex-direction: column;
     font-size: 14px;
@@ -2295,6 +2297,7 @@ a.kpi-tile:hover::after {
     opacity: 0;
     transform: translateY(-8px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -2305,6 +2308,7 @@ a.kpi-tile:hover::after {
   from {
     opacity: 0;
   }
+
   to {
     opacity: 1;
   }
@@ -2315,6 +2319,7 @@ a.kpi-tile:hover::after {
     opacity: 0;
     transform: translateY(8px) scale(0.98);
   }
+
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
@@ -2326,6 +2331,7 @@ a.kpi-tile:hover::after {
     opacity: 0;
     transform: translateY(12px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -2345,11 +2351,13 @@ a.kpi-tile:hover::after {
 }
 
 @keyframes pulse {
+
   0%,
   100% {
     opacity: 1;
     transform: scale(1);
   }
+
   50% {
     opacity: 0.7;
     transform: scale(0.94);
@@ -2361,6 +2369,7 @@ a.kpi-tile:hover::after {
     opacity: 0.8;
     transform: scale(0.6);
   }
+
   100% {
     opacity: 0;
     transform: scale(1.6);
@@ -2369,9 +2378,10 @@ a.kpi-tile:hover::after {
 
 /* --- Responsive --- */
 @media (max-width: 639px) {
+
   .ops-topbar-pill-label,
   .ops-breadcrumb-group,
-  .ops-breadcrumb-group + .ops-breadcrumb-sep {
+  .ops-breadcrumb-group+.ops-breadcrumb-sep {
     display: none;
   }
 
@@ -2387,7 +2397,7 @@ a.kpi-tile:hover::after {
     justify-content: space-between;
   }
 
-  .bento > .kpi-tile {
+  .bento>.kpi-tile {
     grid-column: span 6;
   }
 
@@ -2403,6 +2413,7 @@ a.kpi-tile:hover::after {
 }
 
 @media (min-width: 1024px) {
+
   .ops-sidebar-backdrop,
   .ops-sidebar-close,
   .ops-menu-btn {
@@ -2432,27 +2443,27 @@ a.kpi-tile:hover::after {
     grid-template-columns: repeat(4, 1fr);
   }
 
-  .bento > .kpi-tile {
+  .bento>.kpi-tile {
     grid-column: span 3;
   }
 
-  .bento > .span-4 {
+  .bento>.span-4 {
     grid-column: span 4;
   }
 
-  .bento > .span-5 {
+  .bento>.span-5 {
     grid-column: span 5;
   }
 
-  .bento > .span-6 {
+  .bento>.span-6 {
     grid-column: span 6;
   }
 
-  .bento > .span-7 {
+  .bento>.span-7 {
     grid-column: span 7;
   }
 
-  .bento > .span-8 {
+  .bento>.span-8 {
     grid-column: span 8;
   }
 }
@@ -2470,10 +2481,11 @@ a.kpi-tile:hover::after {
 }
 
 @media (min-width: 640px) and (max-width: 1023px) {
-  .bento > .span-4,
-  .bento > .span-5,
-  .bento > .span-6,
-  .bento > .span-7 {
+
+  .bento>.span-4,
+  .bento>.span-5,
+  .bento>.span-6,
+  .bento>.span-7 {
     grid-column: span 6;
   }
 }

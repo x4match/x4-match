@@ -30,6 +30,7 @@ import { PlatformAdminModule } from './platform-admin/platform-admin.module';
 import { PlatformShopModule } from './platform-shop/platform-shop.module';
 import { PlayerMarketplaceModule } from './player-marketplace/player-marketplace.module';
 import { NewsModule } from './news/news.module';
+import { AppVersionModule } from './app-version/app-version.module';
 import { HealthController } from './health/health.controller';
 import { ShareController } from './share/share.controller';
 
@@ -65,6 +66,7 @@ import { ShareController } from './share/share.controller';
     PlatformShopModule,
     PlayerMarketplaceModule,
     NewsModule,
+    AppVersionModule,
     PaymentsModule,
     CompetitiveScoringModule,
     BadgesModule,

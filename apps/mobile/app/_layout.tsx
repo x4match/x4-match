@@ -9,6 +9,7 @@ import { AuthProvider } from '@/contexts/AuthContext';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import { ToastProvider } from '@/components/ui/Toast';
 import { TourProvider } from '@/components/tour/ScreenTour';
+import { AppUpdatePrompt } from '@/components/AppUpdatePrompt';
 import { applyUtendoTextDefaults } from '@/lib/apply-utendo';
 import { configureGoogleSignIn } from '@/lib/auth/google-auth';
 import { PushNotificationNavigator } from '@/lib/notifications/PushNotificationNavigator';
@@ -74,6 +75,7 @@ export default function RootLayout() {
             <ToastProvider>
               <TourProvider>
               <PushNotificationNavigator />
+              <AppUpdatePrompt />
               <Stack
                 screenOptions={{
                   headerShown: false,

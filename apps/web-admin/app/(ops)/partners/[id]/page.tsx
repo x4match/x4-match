@@ -151,7 +151,7 @@ export default function PartnerDetailPage() {
             e.preventDefault();
             patch.mutate();
           }}
-          style={{ display: 'flex', gap: 8 }}
+          style={{ display: 'flex', gap: 8, marginTop: 12 }}
         >
           <input
             className="input"
@@ -173,7 +173,7 @@ export default function PartnerDetailPage() {
             ? 'La tienda está visible: sus productos aparecen en la app y en web-sponsors.'
             : 'La tienda está pausada: sus productos no se muestran, no recibe pedidos y no se sincroniza el catálogo. Podés reactivarla cuando quieras.'}
         </p>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
           {isActive ? (
             <button
               className="btn btn-outline"
@@ -417,7 +417,7 @@ export default function PartnerDetailPage() {
             e.preventDefault();
             if (deleteConfirm.trim() === sponsor.slug) deleteSponsor.mutate();
           }}
-          style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}
+          style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginTop: 12 }}
         >
           <input
             className="input"
