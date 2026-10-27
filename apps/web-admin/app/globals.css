@@ -533,10 +533,10 @@ select optgroup {
 
 .toast {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 14px 16px;
+  padding: 10px 10px 10px 16px;
   border-radius: 14px;
   border: 1px solid var(--border);
   background: rgba(18, 18, 18, 0.92);
@@ -558,25 +558,34 @@ select optgroup {
 }
 
 .toast-message {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 0;
   font-size: 14px;
   line-height: 1.45;
   color: var(--text);
 }
 
 .toast-close {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
   border: none;
+  border-radius: 8px;
   background: transparent;
   color: var(--muted);
   font-size: 20px;
   line-height: 1;
   cursor: pointer;
   padding: 0;
-  min-width: 32px;
-  min-height: 32px;
 }
 
 .toast-close:hover {
   color: var(--text);
+  background: var(--surface2);
 }
 
 /* --- Ops shell --- */

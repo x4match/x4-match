@@ -11,7 +11,7 @@ import { PageShell } from '@/components/layout/PageShell';
 import { FormSection } from '@/components/layout/FormSection';
 import { DataTable, type DataTableColumn } from '@/components/layout/DataTable';
 
-type Category = { id: string; name: string; slug: string };
+type Category = { id: string; name: string; slug: string; product_count?: number };
 
 export default function CategoriasPage() {
   const { activeSponsorId } = useSponsor();
@@ -41,6 +41,12 @@ export default function CategoriasPage() {
   const columns: DataTableColumn<Category>[] = [
     { key: 'name', header: 'Nombre', cell: (c) => <span className="font-semibold">{c.name}</span> },
     { key: 'slug', header: 'Slug', cell: (c) => <span className="font-mono text-xs">/{c.slug}</span> },
+    {
+      key: 'products',
+      header: 'Productos',
+      className: 'w-28 text-right',
+      cell: (c) => (c.product_count != null ? c.product_count : '—'),
+    },
   ];
 
   return (
@@ -68,7 +74,7 @@ export default function CategoriasPage() {
         columns={columns}
         rows={items}
         loading={listQ.isLoading}
-        empty="Sin categorías todavía."
+        empty={listQ.isError ? 'No se pudieron cargar las categorías.' : 'Sin categorías todavía.'}
       />
     </PageShell>
   );
