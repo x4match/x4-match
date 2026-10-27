@@ -5,6 +5,7 @@ export {
   getPromotionMultiplier,
   applyPointsMultiplier,
   PROMOTION_MULTIPLIER_BY_PLAN,
+  MAX_PROMOTION_MULTIPLIER,
   type ClubSubscriptionPlan,
 } from './club-plan.util';
 export { getLevelCategory, getCategoryRatingRange, ALL_CATEGORIES } from './level-category.util';

@@ -51,7 +51,7 @@ describe('ClubPointsService', () => {
     expect(result.promoBonusPoints).toBe(0);
   });
 
-  it('aplica x2 en promo con plan PRO y lee bonus flat', async () => {
+  it('aplica x3 en promo con plan PRO y lee bonus flat', async () => {
     query
       .mockResolvedValueOnce({ rows: [{ bonus_points: 20 }] })
       .mockResolvedValueOnce({ rows: [{ subscription_plan: 'PRO' }] });
@@ -62,8 +62,8 @@ describe('ClubPointsService', () => {
       POINTS_MATCH_PLAYED,
     );
 
-    expect(result.multiplier).toBe(2);
-    expect(result.totalPoints).toBe(20);
+    expect(result.multiplier).toBe(3);
+    expect(result.totalPoints).toBe(30);
     expect(result.promoBonusPoints).toBe(20);
   });
 
