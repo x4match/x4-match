@@ -1784,7 +1784,8 @@ export class ClubsService {
   async listPromotions(clubId: string, userId: string) {
     await this.assertClubRole(userId, clubId);
     const result = await this.db.query(
-      `SELECT id, club_id, label, day_of_week, start_hour, end_hour, bonus_points, active, created_at
+      `SELECT id, club_id, label, day_of_week, start_hour, end_hour, bonus_points,
+              points_multiplier, active, created_at
        FROM club_promotions
        WHERE club_id = $1
        ORDER BY start_hour ASC`,
@@ -1799,9 +1800,12 @@ export class ClubsService {
       throw new BadRequestException('La hora de fin debe ser posterior a la de inicio');
     }
 
+    const pointsMultiplier = Math.min(Math.max(Number(dto.pointsMultiplier ?? 2), 1), 3);
+
     const result = await this.db.query(
-      `INSERT INTO club_promotions (club_id, label, day_of_week, start_hour, end_hour, bonus_points, active)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO club_promotions
+         (club_id, label, day_of_week, start_hour, end_hour, bonus_points, points_multiplier, active)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING *`,
       [
         clubId,
@@ -1810,6 +1814,7 @@ export class ClubsService {
         dto.startHour,
         dto.endHour,
         dto.bonusPoints ?? 0,
+        pointsMultiplier,
         dto.active ?? true,
       ],
     );

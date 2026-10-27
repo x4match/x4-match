@@ -2,8 +2,9 @@ import { Injectable } from '@nestjs/common';
 import { PoolClient } from 'pg';
 import {
   applyPointsMultiplier,
+  clampPromotionMultiplier,
+  DEFAULT_PROMOTION_MULTIPLIER,
   getMatchScheduleContext,
-  getPromotionMultiplier,
 } from '../common/utils';
 import { DatabaseService } from '../database/database.service';
 import { userTeamFromRank } from '../common/utils/match-result.util';
@@ -141,15 +142,9 @@ export class ClubPointsService {
   ): Promise<MatchPointsBreakdown> {
     const schedule = getMatchScheduleContext(matchDate);
     const promotion = await this.getActivePromotion(clubId, schedule.dayOfWeek, schedule.hour);
-    let multiplier = 1;
-
-    if (promotion) {
-      const planResult = await this.db.query(
-        `SELECT subscription_plan FROM clubs WHERE id = $1`,
-        [clubId],
-      );
-      multiplier = getPromotionMultiplier(planResult.rows[0]?.subscription_plan);
-    }
+    const multiplier = promotion
+      ? clampPromotionMultiplier(promotion.points_multiplier ?? DEFAULT_PROMOTION_MULTIPLIER)
+      : 1;
 
     return {
       basePoints,
@@ -170,13 +165,13 @@ export class ClubPointsService {
     clubId: string,
     dayOfWeek: number,
     hour: number,
-  ): Promise<{ bonus_points: number } | null> {
-    const result = await this.db.query<{ bonus_points: number }>(
-      `SELECT bonus_points FROM club_promotions
+  ): Promise<{ bonus_points: number; points_multiplier: number } | null> {
+    const result = await this.db.query<{ bonus_points: number; points_multiplier: number }>(
+      `SELECT bonus_points, points_multiplier FROM club_promotions
        WHERE club_id = $1 AND active = TRUE
          AND start_hour <= $2 AND end_hour > $2
          AND (day_of_week IS NULL OR day_of_week = $3)
-       ORDER BY bonus_points DESC
+       ORDER BY points_multiplier DESC, bonus_points DESC
        LIMIT 1`,
       [clubId, hour, dayOfWeek],
     );

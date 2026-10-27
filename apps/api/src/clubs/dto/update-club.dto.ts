@@ -33,7 +33,7 @@ export class UpdateClubDto {
   @IsString()
   logoUrl?: string;
 
-  /** Plan del club: define multiplicador en horarios promocionales (GROWTH x1.5, PRO x3 máx.). */
+  /** Plan del club (reservado; el multiplicador de puntos valle ya no depende del plan). */
   @IsOptional()
   @IsEnum(CLUB_PLANS)
   subscriptionPlan?: ClubSubscriptionPlan;

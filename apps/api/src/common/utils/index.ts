@@ -4,7 +4,9 @@ export { getMatchScheduleContext } from './match-schedule.util';
 export {
   getPromotionMultiplier,
   applyPointsMultiplier,
+  clampPromotionMultiplier,
   PROMOTION_MULTIPLIER_BY_PLAN,
+  DEFAULT_PROMOTION_MULTIPLIER,
   MAX_PROMOTION_MULTIPLIER,
   type ClubSubscriptionPlan,
 } from './club-plan.util';
