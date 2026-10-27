@@ -208,6 +208,7 @@ export function mapMatch(raw: any): Match {
       ? {
           pricePerPlayer: Number(raw.pricing.pricePerPlayer ?? raw.pricing.price_per_player ?? 0),
           depositAmount: Number(raw.pricing.depositAmount ?? raw.pricing.deposit_amount ?? 0),
+          depositPercent: Number(raw.pricing.depositPercent ?? raw.pricing.deposit_percent ?? 100) || 100,
           currency: raw.pricing.currency ?? 'ARS',
           bonusPoints: Number(raw.pricing.bonusPoints ?? raw.pricing.bonus_points ?? 0) || undefined,
         }

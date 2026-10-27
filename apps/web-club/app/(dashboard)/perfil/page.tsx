@@ -7,6 +7,7 @@ import { api } from '@/lib/api';
 import { formatCurrency } from '@/lib/currency';
 import {
   clubCoverUrl,
+  clubDepositPercent,
   clubHourlyPrice,
   clubLogoUrl,
   type ClubDetail,
@@ -78,6 +79,7 @@ export default function PerfilPage() {
   const [email, setEmail] = useState('');
   const [description, setDescription] = useState('');
   const [courtPricePerHour, setCourtPricePerHour] = useState('');
+  const [depositPercent, setDepositPercent] = useState('100');
   const [newClubName, setNewClubName] = useState('');
   const [newClubLocation, setNewClubLocation] = useState<ClubLocationValue>(emptyClubLocation);
 
@@ -98,6 +100,7 @@ export default function PerfilPage() {
     setDescription(c.description || '');
     const hourly = clubHourlyPrice(c);
     setCourtPricePerHour(hourly ? String(hourly) : '');
+    setDepositPercent(String(clubDepositPercent(c)));
   }, [clubQuery.data]);
 
   const saveClub = useMutation({
@@ -131,11 +134,18 @@ export default function PerfilPage() {
     mutationFn: async () => {
       const price = Number(String(courtPricePerHour).replace(',', '.'));
       if (!Number.isFinite(price) || price < 0) throw new Error('Tarifa inválida');
-      await api.patch(`/clubs/${activeClubId}`, { courtPricePerHour: price });
+      const percent = Number(depositPercent);
+      if (!Number.isFinite(percent) || percent < 0 || percent > 100) {
+        throw new Error('El porcentaje de confirmación debe estar entre 0 y 100');
+      }
+      await api.patch(`/clubs/${activeClubId}`, {
+        courtPricePerHour: price,
+        depositPercent: Math.round(percent),
+      });
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['club-detail', activeClubId] });
-      toast.success('Tarifa actualizada');
+      toast.success('Tarifa y cobro actualizados');
     },
     onError: (err: { response?: { data?: { message?: string } }; message?: string }) => {
       toast.error(err.response?.data?.message || err.message || 'Error al guardar tarifa');
@@ -358,13 +368,29 @@ export default function PerfilPage() {
                 className="rounded-xl"
               />
             </div>
+            <div className="space-y-1 sm:col-span-2">
+              <Label>Para confirmar la cancha, cada jugador paga</Label>
+              <select
+                className="flex h-10 w-full rounded-xl border border-input bg-background px-3 text-sm"
+                value={depositPercent}
+                onChange={(e) => setDepositPercent(e.target.value)}
+              >
+                <option value="25">25% seña</option>
+                <option value="50">50% seña</option>
+                <option value="100">100% (pago completo)</option>
+              </select>
+              <p className="text-xs text-muted-foreground">
+                Con seña, la cancha se reserva cuando todos pagan su %. Un jugador puede pagar el
+                turno completo (100%) y reservarla al instante.
+              </p>
+            </div>
             <Button
               className="rounded-xl sm:col-span-2"
               variant="secondary"
               onClick={() => savePricing.mutate()}
               disabled={savePricing.isPending}
             >
-              Guardar tarifa
+              Guardar tarifa y cobro
             </Button>
           </CardContent>
         </Card>

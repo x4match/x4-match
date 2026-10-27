@@ -11,6 +11,7 @@ import { MatchesRepository } from '../matches/matches.repository';
 import { MatchesService } from '../matches/matches.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { ClubPaymentConfigService } from '../clubs/club-payment-config.service';
+import { applyDepositPercent, normalizeDepositPercent } from './deposit-percent.util';
 
 type MatchRow = {
   id: string;
@@ -76,14 +77,20 @@ export class PaymentsService {
     return Math.round((totalCourt / players) * 100) / 100;
   }
 
-  async resolveDepositAmount(match: MatchRow): Promise<{ amount: number; required: boolean; currency: string }> {
+  async resolveDepositAmount(match: MatchRow): Promise<{
+    amount: number;
+    fullShareAmount: number;
+    depositPercent: number;
+    required: boolean;
+    currency: string;
+  }> {
     if (!match.club_id) {
-      return { amount: 0, required: false, currency: 'ARS' };
+      return { amount: 0, fullShareAmount: 0, depositPercent: 100, required: false, currency: 'ARS' };
     }
 
     const club = await this.paymentsRepo.getClubPricing(match.club_id);
     if (!club) {
-      return { amount: 0, required: false, currency: 'ARS' };
+      return { amount: 0, fullShareAmount: 0, depositPercent: 100, required: false, currency: 'ARS' };
     }
 
     let pricePerHour = Number(club.court_price_per_hour ?? 0);
@@ -97,14 +104,18 @@ export class PaymentsService {
       }
     }
 
-    const amount = this.calculateCourtShareAmount(
+    const fullShareAmount = this.calculateCourtShareAmount(
       pricePerHour,
       durationHours,
       match.needed_players,
     );
+    const depositPercent = normalizeDepositPercent(club.deposit_percent, 100);
+    const amount = applyDepositPercent(fullShareAmount, depositPercent);
 
     return {
       amount,
+      fullShareAmount,
+      depositPercent,
       required: amount > 0,
       currency: 'ARS',
     };
@@ -133,7 +144,8 @@ export class PaymentsService {
   async getDepositStatusForUser(matchId: string, userId: string) {
     const match = await this.getMatchOrThrow(matchId);
     const playerId = await this.matchesRepo.getPlayerIdByUserId(userId);
-    const { amount, required, currency } = await this.resolveDepositAmount(match);
+    const { amount, required, currency, fullShareAmount, depositPercent } =
+      await this.resolveDepositAmount(match);
     const allDeposits = await this.paymentsRepo.listDepositsForMatch(matchId);
     const fullCourtDeposit = await this.paymentsRepo.getApprovedFullCourtDeposit(matchId);
     const fullCourtPaidBy = fullCourtDeposit
@@ -154,6 +166,8 @@ export class PaymentsService {
         matchId,
         required,
         amount,
+        fullShareAmount,
+        depositPercent,
         currency,
         clubName,
         provider: mockMode ? 'MOCK' : canMp ? 'MERCADOPAGO' : 'MANUAL',
@@ -194,9 +208,10 @@ export class PaymentsService {
     const totalAmount =
       deposit?.status === 'APPROVED' ? Number(deposit.amount) : shareTotal;
     const ownPaid = deposit?.status === 'APPROVED';
+    // Turno completo siempre cubre el 100% del valor de cancha (no solo la seña).
     const fullCourtAmount =
       required && !ownPaid && !fullCourtPaidBy
-        ? await this.resolveFullCourtRemaining(match, playerId, amount)
+        ? await this.resolveFullCourtRemaining(match, playerId, fullShareAmount)
         : null;
 
     let clubName: string | undefined;
@@ -209,6 +224,8 @@ export class PaymentsService {
       matchId,
       required,
       amount: Math.round(totalAmount * 100) / 100,
+      fullShareAmount,
+      depositPercent,
       currency,
       clubName,
       provider: mockMode ? 'MOCK' : canMp ? 'MERCADOPAGO' : 'MANUAL',
@@ -257,7 +274,8 @@ export class PaymentsService {
       throw new BadRequestException('Este partido ya no acepta confirmación con pago');
     }
 
-    const { amount, required, currency } = await this.resolveDepositAmount(match);
+    const { amount, required, currency, fullShareAmount, depositPercent } =
+      await this.resolveDepositAmount(match);
     const coveredGuestSlots = (await this.matchesRepo.listGuestInvites(matchId)).filter(
       (guest: any) => guest.sponsor_user_id === userId,
     ).length;
@@ -267,11 +285,12 @@ export class PaymentsService {
         required: true,
         paid: true,
         amount: 0,
+        depositPercent,
         message: 'El turno ya está pago. Tu asistencia quedó confirmada.',
       };
     }
     const totalAmount = fullCourt
-      ? await this.resolveFullCourtRemaining(match, playerId, amount)
+      ? await this.resolveFullCourtRemaining(match, playerId, fullShareAmount)
       : Math.round(amount * Math.max(1, coveredGuestSlots + 1) * 100) / 100;
     if (fullCourt && required && totalAmount <= 0) {
       throw new BadRequestException('El turno ya está cubierto por los pagos de los demás jugadores');

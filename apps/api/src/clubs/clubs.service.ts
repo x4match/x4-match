@@ -237,7 +237,7 @@ export class ClubsService {
       card_photo_url: cardPhotoUrl,
       autoFillGapsEnabled: Boolean(club.auto_fill_gaps_enabled),
       courtPricePerHour: Number(club.court_price_per_hour ?? 0),
-      depositPercent: Number(club.deposit_percent ?? 0),
+      depositPercent: Number(club.deposit_percent ?? 100),
       gapFillHoursBefore: Number(club.gap_fill_hours_before ?? 8),
       gapFillAutoCreateMatch: Boolean(club.gap_fill_auto_create_match),
       gapFillNotifyEnabled: club.gap_fill_notify_enabled !== false,
@@ -335,7 +335,7 @@ export class ClubsService {
       ...club,
       autoFillGapsEnabled: Boolean(club.auto_fill_gaps_enabled),
       courtPricePerHour: Number(club.court_price_per_hour ?? 0),
-      depositPercent: Number(club.deposit_percent ?? 0),
+      depositPercent: Number(club.deposit_percent ?? 100),
     };
   }
 

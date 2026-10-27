@@ -101,6 +101,10 @@ export type PlayerMatchRating = {
 export type MatchDepositInfo = {
   required: boolean;
   amount: number;
+  /** Parte completa del jugador (antes de aplicar % de seña). */
+  fullShareAmount?: number;
+  /** % configurado por el club para confirmar cancha (25/50/100). */
+  depositPercent?: number;
   currency: string;
   clubName?: string;
   provider?: string;
@@ -147,6 +151,7 @@ export type MatchCourtInfo = {
 export type MatchPricing = {
   pricePerPlayer: number;
   depositAmount: number;
+  depositPercent?: number;
   currency: string;
   bonusPoints?: number;
 };

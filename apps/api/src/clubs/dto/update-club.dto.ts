@@ -59,7 +59,10 @@ export class UpdateClubDto {
   @Min(0)
   courtPricePerHour?: number;
 
-  /** Sin uso: el turno se cobra completo. Se acepta por compatibilidad con versiones viejas de la app. */
+  /**
+   * % del valor del turno que cada jugador paga para confirmar/reservar la cancha.
+   * 100 = cobro completo · 25/50 = seña. El pago “turno completo” sigue cubriendo el 100%.
+   */
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
