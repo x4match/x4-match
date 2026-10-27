@@ -1,5 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ClubPointsService, POINTS_MATCH_PLAYED } from './club-points.service';
+import {
+  ClubPointsService,
+  MAX_CLUB_POINT_MATCHES_PER_DAY,
+  MIN_REAL_PLAYERS_FOR_CLUB_POINTS,
+  POINTS_MATCH_PLAYED,
+} from './club-points.service';
 import { DatabaseService } from '../database/database.service';
 
 describe('ClubPointsService', () => {
@@ -67,8 +72,93 @@ describe('ClubPointsService', () => {
     expect(result.promoBonusPoints).toBe(20);
   });
 
+  describe('anti-farm eligibility', () => {
+    it('rechaza partidos sin cancha BOOKED', async () => {
+      query.mockResolvedValueOnce({
+        rows: [
+          {
+            id: 'm1',
+            club_id: 'club-1',
+            date: new Date(Date.now() - 3600_000),
+            needed_players: 4,
+            court_slot_id: null,
+            court_booking: 'none',
+            slot_status: null,
+          },
+        ],
+      });
+
+      const result = await service.awardForFinishedMatch('m1', 'A');
+      expect(result).toEqual({ awarded: false, reason: 'NO_BOOKED_COURT' });
+    });
+
+    it('rechaza si hay menos de 4 jugadores reales', async () => {
+      query
+        .mockResolvedValueOnce({
+          rows: [
+            {
+              id: 'm1',
+              club_id: 'club-1',
+              date: new Date(Date.now() - 3600_000),
+              needed_players: 4,
+              court_slot_id: 'slot-1',
+              court_booking: 'in_app',
+              slot_status: 'BOOKED',
+            },
+          ],
+        })
+        .mockResolvedValueOnce({
+          rows: [
+            { user_id: 'u1', rnk: 1 },
+            { user_id: 'u2', rnk: 2 },
+          ],
+        });
+
+      const result = await service.awardForFinishedMatch('m1', 'A');
+      expect(result).toEqual({ awarded: false, reason: 'TOO_FEW_REAL_PLAYERS' });
+      expect(MIN_REAL_PLAYERS_FOR_CLUB_POINTS).toBe(4);
+    });
+
+    it('rechaza partidos con fecha futura', async () => {
+      query.mockResolvedValueOnce({
+        rows: [
+          {
+            id: 'm1',
+            club_id: 'club-1',
+            date: new Date(Date.now() + 3 * 3600_000),
+            needed_players: 4,
+            court_slot_id: 'slot-1',
+            court_booking: 'in_app',
+            slot_status: 'BOOKED',
+          },
+        ],
+      });
+
+      const result = await service.awardForFinishedMatch('m1', 'A');
+      expect(result).toEqual({ awarded: false, reason: 'MATCH_NOT_STARTED' });
+    });
+  });
+
+  it('addPoints es idempotente: si el ledger ya existe no suma wallet', async () => {
+    query.mockResolvedValueOnce({ rows: [] }); // ON CONFLICT DO NOTHING → sin row
+
+    const result = await service.addPoints('club-1', 'user-1', 10, 'MATCH_PLAYED', 'match-1', {
+      monthKey: '2026-09',
+      baseAmount: 10,
+      multiplier: 1,
+      countMatch: true,
+      affectMonthly: true,
+    });
+
+    expect(result).toEqual({ inserted: false });
+    expect(query).toHaveBeenCalledTimes(1);
+    expect(query.mock.calls[0][0]).toContain('ON CONFLICT');
+  });
+
   it('addPoints con affectMonthly=false no escribe ranking mensual', async () => {
-    query.mockResolvedValue({ rows: [] });
+    query
+      .mockResolvedValueOnce({ rows: [{ id: 'ledger-1' }] })
+      .mockResolvedValue({ rows: [] });
 
     await service.addPoints('club-1', 'user-1', 50, 'COUPON_CLAIM', 'coupon-1', {
       monthKey: '2026-09',
@@ -78,16 +168,15 @@ describe('ClubPointsService', () => {
       affectMonthly: false,
     });
 
-    expect(query).toHaveBeenCalledTimes(2);
-    expect(query.mock.calls[0][0]).toContain('club_points_ledger');
-    expect(query.mock.calls[1][0]).toContain('club_member_points');
-    expect(query.mock.calls.some((c: unknown[]) => String(c[0]).includes('club_member_monthly_points'))).toBe(
-      false,
-    );
+    const sqlCalls = query.mock.calls.map((c: unknown[]) => String(c[0]));
+    expect(sqlCalls.some((s) => s.includes('club_member_points'))).toBe(true);
+    expect(sqlCalls.some((s) => s.includes('club_member_monthly_points'))).toBe(false);
   });
 
   it('addPoints con affectMonthly=true escribe ranking mensual', async () => {
-    query.mockResolvedValue({ rows: [] });
+    query
+      .mockResolvedValueOnce({ rows: [{ id: 'ledger-1' }] })
+      .mockResolvedValue({ rows: [] });
 
     await service.addPoints('club-1', 'user-1', 10, 'MATCH_PLAYED', 'match-1', {
       monthKey: '2026-09',
@@ -97,7 +186,11 @@ describe('ClubPointsService', () => {
       affectMonthly: true,
     });
 
-    expect(query).toHaveBeenCalledTimes(3);
-    expect(query.mock.calls[2][0]).toContain('club_member_monthly_points');
+    const sqlCalls = query.mock.calls.map((c: unknown[]) => String(c[0]));
+    expect(sqlCalls.some((s) => s.includes('club_member_monthly_points'))).toBe(true);
+  });
+
+  it('expone tope diario de partidos con puntos', () => {
+    expect(MAX_CLUB_POINT_MATCHES_PER_DAY).toBe(4);
   });
 });

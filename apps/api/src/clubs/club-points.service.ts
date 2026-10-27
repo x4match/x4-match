@@ -1,15 +1,22 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PoolClient } from 'pg';
 import {
   applyPointsMultiplier,
   getMatchScheduleContext,
   getPromotionMultiplier,
 } from '../common/utils';
+import { COURT_TIMEZONE } from '../common/utils/court-schedule.util';
 import { DatabaseService } from '../database/database.service';
 import { userTeamFromRank } from '../common/utils/match-result.util';
 
 export const POINTS_MATCH_PLAYED = 10;
 export const POINTS_MATCH_WON = 15;
+
+/** Mínimo de jugadores con cuenta real (sin guests) para acreditar puntos de club. */
+export const MIN_REAL_PLAYERS_FOR_CLUB_POINTS = 4;
+
+/** Tope de partidos que suman puntos canjeables por usuario y día (AR). */
+export const MAX_CLUB_POINT_MATCHES_PER_DAY = 4;
 
 export interface MatchPointsBreakdown {
   basePoints: number;
@@ -21,71 +28,62 @@ export interface MatchPointsBreakdown {
   monthKey: string;
 }
 
+type EligibilitySkipReason =
+  | 'NO_CLUB'
+  | 'NO_BOOKED_COURT'
+  | 'MATCH_NOT_STARTED'
+  | 'TOO_FEW_REAL_PLAYERS';
+
 @Injectable()
 export class ClubPointsService {
+  private readonly logger = new Logger(ClubPointsService.name);
+
   constructor(private readonly db: DatabaseService) {}
 
   async awardForFinishedMatch(matchId: string, winnerTeam?: string) {
-    const matchResult = await this.db.query(
-      `SELECT m.id, m.club_id, m.date FROM matches m WHERE m.id = $1 AND m.club_id IS NOT NULL`,
-      [matchId],
-    );
-    const match = matchResult.rows[0];
-    if (!match) return;
+    const eligibility = await this.evaluateMatchEligibility(matchId);
+    if (eligibility.ok === false) {
+      this.logger.log(`Sin puntos de club para match ${matchId}: ${eligibility.reason}`);
+      return { awarded: false, reason: eligibility.reason };
+    }
 
-    const matchDate = new Date(match.date);
-    const breakdown = await this.resolveMatchPoints(match.club_id, matchDate, POINTS_MATCH_PLAYED);
+    const { clubId, matchDate, neededPlayers, players } = eligibility;
+    const breakdown = await this.resolveMatchPoints(clubId, matchDate, POINTS_MATCH_PLAYED);
 
-    const matchMeta = await this.db.query(
-      `SELECT needed_players FROM matches WHERE id = $1`,
-      [matchId],
-    );
-    const neededPlayers = Number(matchMeta.rows[0]?.needed_players) || 4;
+    for (const row of players) {
+      if (await this.hasReachedDailyMatchCap(row.user_id)) {
+        this.logger.log(
+          `Tope diario de puntos alcanzado para user ${row.user_id} (match ${matchId})`,
+        );
+        continue;
+      }
 
-    const players = await this.db.query(
-      `SELECT p.user_id,
-              ROW_NUMBER() OVER (ORDER BY mp.created_at) AS rnk
-       FROM match_players mp
-       INNER JOIN players p ON p.id = mp.player_id
-       WHERE mp.match_id = $1 AND mp.status IN ('JOINED', 'CONFIRMED')`,
-      [matchId],
-    );
-
-    for (const row of players.rows) {
-      await this.awardMatchReason(
-        match.club_id,
-        row.user_id,
-        matchId,
-        'MATCH_PLAYED',
-        breakdown,
-        { countMatch: true },
-      );
+      await this.awardMatchReason(clubId, row.user_id, matchId, 'MATCH_PLAYED', breakdown, {
+        countMatch: true,
+        promoReason: 'PROMO_MULT_PLAYED',
+      });
     }
 
     const normalizedWinner = String(winnerTeam || '')
       .toUpperCase()
       .trim();
     if (normalizedWinner === 'A' || normalizedWinner === 'B') {
-      const winBreakdown = await this.resolveMatchPoints(match.club_id, matchDate, POINTS_MATCH_WON);
-      for (const row of players.rows) {
+      const winBreakdown = await this.resolveMatchPoints(clubId, matchDate, POINTS_MATCH_WON);
+      for (const row of players) {
         const team = userTeamFromRank(Number(row.rnk), neededPlayers);
         if (team !== normalizedWinner) continue;
-        await this.awardMatchReason(
-          match.club_id,
-          row.user_id,
-          matchId,
-          'MATCH_WON',
-          winBreakdown,
-          { countMatch: false },
-        );
+        await this.awardMatchReason(clubId, row.user_id, matchId, 'MATCH_WON', winBreakdown, {
+          countMatch: false,
+          promoReason: 'PROMO_MULT_WON',
+        });
       }
     }
 
     // Bonus flat de promo: solo wallet canjeable (nunca ranking ni competitivos).
     if (breakdown.promoBonusPoints > 0) {
-      for (const row of players.rows) {
+      for (const row of players) {
         await this.addPoints(
-          match.club_id,
+          clubId,
           row.user_id,
           breakdown.promoBonusPoints,
           'PROMO_BONUS',
@@ -100,6 +98,78 @@ export class ClubPointsService {
         );
       }
     }
+
+    return { awarded: true as const };
+  }
+
+  /**
+   * Gates anti-farm:
+   * - cancha in-app BOOKED
+   * - horario del partido ya iniciado (AR)
+   * - ≥4 jugadores reales (guests no cuentan)
+   */
+  async evaluateMatchEligibility(matchId: string): Promise<
+    | {
+        ok: true;
+        clubId: string;
+        matchDate: Date;
+        neededPlayers: number;
+        players: Array<{ user_id: string; rnk: number }>;
+      }
+    | { ok: false; reason: EligibilitySkipReason }
+  > {
+    const matchResult = await this.db.query<{
+      id: string;
+      club_id: string | null;
+      date: Date | string;
+      needed_players: number | null;
+      court_slot_id: string | null;
+      court_booking: string | null;
+      slot_status: string | null;
+    }>(
+      `SELECT m.id, m.club_id, m.date, m.needed_players, m.court_slot_id, m.court_booking,
+              cas.status AS slot_status
+       FROM matches m
+       LEFT JOIN court_availability_slots cas ON cas.id = m.court_slot_id
+       WHERE m.id = $1`,
+      [matchId],
+    );
+    const match = matchResult.rows[0];
+    if (!match?.club_id) return { ok: false, reason: 'NO_CLUB' };
+
+    const bookedInApp =
+      match.court_booking === 'in_app' &&
+      Boolean(match.court_slot_id) &&
+      match.slot_status === 'BOOKED';
+    if (!bookedInApp) return { ok: false, reason: 'NO_BOOKED_COURT' };
+
+    const matchDate = new Date(match.date);
+    // No acreditar partidos futuros (margeno de turnos valle “de mentira”).
+    if (matchDate.getTime() > Date.now() + 15 * 60 * 1000) {
+      return { ok: false, reason: 'MATCH_NOT_STARTED' };
+    }
+
+    const neededPlayers = Number(match.needed_players) || 4;
+    const playersResult = await this.db.query<{ user_id: string; rnk: number }>(
+      `SELECT p.user_id,
+              ROW_NUMBER() OVER (ORDER BY mp.created_at) AS rnk
+       FROM match_players mp
+       INNER JOIN players p ON p.id = mp.player_id
+       WHERE mp.match_id = $1 AND mp.status IN ('JOINED', 'CONFIRMED')`,
+      [matchId],
+    );
+    const players = playersResult.rows;
+    if (players.length < MIN_REAL_PLAYERS_FOR_CLUB_POINTS) {
+      return { ok: false, reason: 'TOO_FEW_REAL_PLAYERS' };
+    }
+
+    return {
+      ok: true,
+      clubId: match.club_id,
+      matchDate,
+      neededPlayers,
+      players,
+    };
   }
 
   /**
@@ -112,7 +182,7 @@ export class ClubPointsService {
     matchId: string,
     reason: 'MATCH_PLAYED' | 'MATCH_WON',
     breakdown: MatchPointsBreakdown,
-    opts: { countMatch: boolean },
+    opts: { countMatch: boolean; promoReason: 'PROMO_MULT_PLAYED' | 'PROMO_MULT_WON' },
   ) {
     await this.addPoints(clubId, userId, breakdown.basePoints, reason, matchId, {
       monthKey: breakdown.monthKey,
@@ -124,7 +194,7 @@ export class ClubPointsService {
 
     const promoExtra = breakdown.totalPoints - breakdown.basePoints;
     if (promoExtra > 0) {
-      await this.addPoints(clubId, userId, promoExtra, 'PROMO_BONUS', matchId, {
+      await this.addPoints(clubId, userId, promoExtra, opts.promoReason, matchId, {
         monthKey: breakdown.monthKey,
         baseAmount: breakdown.basePoints,
         multiplier: breakdown.multiplier,
@@ -183,6 +253,19 @@ export class ClubPointsService {
     return result.rows[0] ?? null;
   }
 
+  private async hasReachedDailyMatchCap(userId: string): Promise<boolean> {
+    const result = await this.db.query<{ count: number }>(
+      `SELECT COUNT(*)::int AS count
+       FROM club_points_ledger
+       WHERE user_id = $1
+         AND reason = 'MATCH_PLAYED'
+         AND (created_at AT TIME ZONE $2)::date =
+             (NOW() AT TIME ZONE $2)::date`,
+      [userId, COURT_TIMEZONE],
+    );
+    return Number(result.rows[0]?.count ?? 0) >= MAX_CLUB_POINT_MATCHES_PER_DAY;
+  }
+
   async addPoints(
     clubId: string,
     userId: string,
@@ -199,7 +282,7 @@ export class ClubPointsService {
     },
     client?: PoolClient,
   ) {
-    if (amount <= 0) return;
+    if (amount <= 0) return { inserted: false };
 
     const monthKey = meta?.monthKey;
     const baseAmount = meta?.baseAmount ?? amount;
@@ -209,12 +292,20 @@ export class ClubPointsService {
     const q = <T = unknown>(sql: string, params?: unknown[]) =>
       client ? client.query<T>(sql, params) : this.db.query<T>(sql, params);
 
-    await q(
+    const ledger = await q<{ id: string }>(
       `INSERT INTO club_points_ledger (
          club_id, user_id, amount, reason, reference_id, month_key, base_amount, multiplier
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       ON CONFLICT (club_id, user_id, reason, reference_id)
+         WHERE reference_id IS NOT NULL
+       DO NOTHING
+       RETURNING id`,
       [clubId, userId, amount, reason, referenceId ?? null, monthKey ?? null, baseAmount, multiplier],
     );
+
+    if (!ledger.rows[0]) {
+      return { inserted: false };
+    }
 
     await q(
       `INSERT INTO club_member_points (club_id, user_id, points, matches_at_club, last_played_at, updated_at)
@@ -251,5 +342,7 @@ export class ClubPointsService {
         [clubId, userId, monthKey, amount, countMatch],
       );
     }
+
+    return { inserted: true };
   }
 }
