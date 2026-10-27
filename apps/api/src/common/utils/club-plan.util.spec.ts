@@ -13,20 +13,20 @@ describe('club-plan.util', () => {
     expect(getPromotionMultiplier('PRO')).toBe(DEFAULT_PROMOTION_MULTIPLIER);
   });
 
-  it('acota el multiplicador de promo entre 1 y 3', () => {
-    expect(MAX_PROMOTION_MULTIPLIER).toBe(3);
+  it('acota el multiplicador de promo entre 1 y 2.5', () => {
+    expect(MAX_PROMOTION_MULTIPLIER).toBe(2.5);
     expect(clampPromotionMultiplier(1.5)).toBe(1.5);
     expect(clampPromotionMultiplier(2)).toBe(2);
-    expect(clampPromotionMultiplier(3)).toBe(3);
-    expect(clampPromotionMultiplier(5)).toBe(3);
+    expect(clampPromotionMultiplier(2.5)).toBe(2.5);
+    expect(clampPromotionMultiplier(3)).toBe(2.5);
     expect(clampPromotionMultiplier(0)).toBe(1);
     expect(clampPromotionMultiplier(undefined)).toBe(DEFAULT_PROMOTION_MULTIPLIER);
   });
 
-  it('redondea puntos con multiplicador capado a 3.0', () => {
+  it('redondea puntos con multiplicador capado a 2.5', () => {
     expect(applyPointsMultiplier(10, 1.5)).toBe(15);
     expect(applyPointsMultiplier(10, 2)).toBe(20);
-    expect(applyPointsMultiplier(10, 3)).toBe(30);
-    expect(applyPointsMultiplier(10, 5)).toBe(30);
+    expect(applyPointsMultiplier(10, 2.5)).toBe(25);
+    expect(applyPointsMultiplier(10, 5)).toBe(25);
   });
 });

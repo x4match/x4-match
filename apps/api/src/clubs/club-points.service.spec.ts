@@ -50,8 +50,8 @@ describe('ClubPointsService', () => {
     expect(query).toHaveBeenCalledTimes(1);
   });
 
-  it('respeta tope x3 de la promoción y lee bonus flat', async () => {
-    query.mockResolvedValueOnce({ rows: [{ bonus_points: 20, points_multiplier: 3 }] });
+  it('respeta tope x2.5 de la promoción y lee bonus flat', async () => {
+    query.mockResolvedValueOnce({ rows: [{ bonus_points: 20, points_multiplier: 2.5 }] });
 
     const result = await service.resolveMatchPoints(
       'club-1',
@@ -59,12 +59,12 @@ describe('ClubPointsService', () => {
       POINTS_MATCH_PLAYED,
     );
 
-    expect(result.multiplier).toBe(3);
-    expect(result.totalPoints).toBe(30);
+    expect(result.multiplier).toBe(2.5);
+    expect(result.totalPoints).toBe(25);
     expect(result.promoBonusPoints).toBe(20);
   });
 
-  it('capa multiplicadores de promo mayores a 3', async () => {
+  it('capa multiplicadores de promo mayores a 2.5', async () => {
     query.mockResolvedValueOnce({ rows: [{ bonus_points: 0, points_multiplier: 5 }] });
 
     const result = await service.resolveMatchPoints(
@@ -73,8 +73,8 @@ describe('ClubPointsService', () => {
       POINTS_MATCH_PLAYED,
     );
 
-    expect(result.multiplier).toBe(3);
-    expect(result.totalPoints).toBe(30);
+    expect(result.multiplier).toBe(2.5);
+    expect(result.totalPoints).toBe(25);
   });
 
   it('addPoints con affectMonthly=false no escribe ranking mensual', async () => {

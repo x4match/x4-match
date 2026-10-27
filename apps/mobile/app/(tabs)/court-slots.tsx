@@ -183,7 +183,7 @@ interface Promotion {
   active?: boolean;
 }
 
-const PROMO_MULTIPLIER_OPTIONS = [1.5, 2, 2.5, 3] as const;
+const PROMO_MULTIPLIER_OPTIONS = [1.5, 2, 2.5] as const;
 
 function TabBar({ active, onChange }: { active: Tab; onChange: (t: Tab) => void }) {
   const tabs: { key: Tab; label: string }[] = [
@@ -1077,7 +1077,7 @@ export default function CourtSlotsScreen() {
               <>
                 <SectionHeader
                   title="Horario valle"
-                  subtitle="Multiplica puntos canjeables en esa franja (máx. x3). No suman al ranking competitivo ni al ranking del club."
+                  subtitle="Multiplica puntos canjeables en esa franja (máx. x2.5). No suman al ranking competitivo ni al ranking del club."
                 />
                 <AppCard style={{ marginBottom: 16 }}>
                   <InputField label="Nombre" value={promoLabel} onChangeText={setPromoLabel} placeholder="Horario valle" />

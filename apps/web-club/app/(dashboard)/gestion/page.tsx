@@ -820,7 +820,7 @@ function GestionInner() {
             <CardHeader>
               <CardTitle className="text-base">Nueva promoción valle</CardTitle>
               <p className="text-sm text-muted-foreground">
-                Boost de puntos canjeables en esa franja (máx. x3). No afecta ranking ni depende del plan del club.
+                Boost de puntos canjeables en esa franja (máx. x2.5). No afecta ranking ni depende del plan del club.
               </p>
             </CardHeader>
             <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
@@ -850,7 +850,6 @@ function GestionInner() {
                   <option value="1.5">x1.5</option>
                   <option value="2">x2</option>
                   <option value="2.5">x2.5</option>
-                  <option value="3">x3</option>
                 </select>
               </div>
               <Button className="rounded-xl sm:col-span-2 lg:col-span-5" onClick={() => createPromo.mutate()}>

@@ -4,7 +4,7 @@ export type ClubSubscriptionPlan = 'BASIC' | 'GROWTH' | 'PRO';
 export const DEFAULT_PROMOTION_MULTIPLIER = 2;
 
 /** Tope duro del multiplicador de puntos canjeables en promo. */
-export const MAX_PROMOTION_MULTIPLIER = 3;
+export const MAX_PROMOTION_MULTIPLIER = 2.5;
 
 /**
  * @deprecated Los planes ya no definen el multiplicador de puntos.
@@ -16,7 +16,7 @@ export const PROMOTION_MULTIPLIER_BY_PLAN: Record<ClubSubscriptionPlan, number> 
   PRO: DEFAULT_PROMOTION_MULTIPLIER,
 };
 
-/** Acota el multiplicador de una promoción al rango [1, 3]. */
+/** Acota el multiplicador de una promoción al rango [1, 2.5]. */
 export function clampPromotionMultiplier(value: number | null | undefined): number {
   const n = typeof value === 'number' ? value : Number(value);
   if (!Number.isFinite(n)) return DEFAULT_PROMOTION_MULTIPLIER;

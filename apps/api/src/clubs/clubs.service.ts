@@ -1800,7 +1800,7 @@ export class ClubsService {
       throw new BadRequestException('La hora de fin debe ser posterior a la de inicio');
     }
 
-    const pointsMultiplier = Math.min(Math.max(Number(dto.pointsMultiplier ?? 2), 1), 3);
+    const pointsMultiplier = Math.min(Math.max(Number(dto.pointsMultiplier ?? 2), 1), 2.5);
 
     const result = await this.db.query(
       `INSERT INTO club_promotions
