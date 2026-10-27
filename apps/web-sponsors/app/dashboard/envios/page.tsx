@@ -71,7 +71,7 @@ export default function EnviosPage() {
             onChange={(e) => setName(e.target.value)}
           />
           <select
-            className="min-h-11 rounded-lg border border-input bg-transparent px-3 text-sm"
+            className="min-h-11 cursor-pointer rounded-xl border border-input bg-transparent px-3 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30 dark:hover:bg-input/50"
             value={type}
             onChange={(e) => setType(e.target.value as 'PICKUP' | 'FLAT' | 'FREE_OVER')}
           >

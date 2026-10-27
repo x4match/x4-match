@@ -65,7 +65,7 @@ export default function ProductDetailPage() {
         ) : null}
         <Button
           type="button"
-          className="mt-6 hidden min-h-12 w-full rounded-full font-extrabold text-white md:inline-flex md:w-auto md:px-8"
+          className="sf-button mt-6 hidden min-h-12 w-full font-extrabold text-white md:inline-flex md:w-auto md:px-8"
           style={{ background: color }}
           onClick={() => {
             if (!sponsor?.id) return;
@@ -105,7 +105,7 @@ export default function ProductDetailPage() {
           </div>
           <Button
             type="button"
-            className="min-h-11 shrink-0 rounded-full px-5 font-extrabold text-white"
+            className="sf-button min-h-11 shrink-0 px-5 font-extrabold text-white"
             style={{ background: color }}
             onClick={() => {
               if (!sponsor?.id) return;

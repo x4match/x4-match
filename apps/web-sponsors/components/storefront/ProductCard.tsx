@@ -31,7 +31,7 @@ export function ProductCard({
   return (
     <div className={cn(cardStyleClass(cardStyle), 'group')}>
       <Link href={`/${slug}/productos/${product.id}`} className="block">
-        <div className="relative aspect-square bg-muted">
+        <div className="sf-product-media relative bg-muted">
           {image ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -67,7 +67,7 @@ export function ProductCard({
           <Button
             type="button"
             size="sm"
-            className="min-h-9 w-full font-bold text-white"
+            className="sf-button min-h-9 w-full font-bold text-white"
             style={accent ? { background: accent } : undefined}
             onClick={() => {
               addToCart(sponsorId, {

@@ -21,6 +21,11 @@ export type StoreTheme = {
   cornerRadius?: 'none' | 'sm' | 'md' | 'lg' | 'xl';
   headerStyle?: 'solid' | 'transparent' | 'blur';
   colorMode?: 'light' | 'dark' | 'brand';
+  heroAlign?: 'left' | 'center';
+  buttonStyle?: 'pill' | 'rounded' | 'square';
+  imageRatio?: 'square' | 'portrait' | 'landscape';
+  headingStyle?: 'normal' | 'uppercase';
+  homeProductRows?: 1 | 2 | 3;
   showCategories?: boolean;
   showOffers?: boolean;
   showSearch?: boolean;
@@ -42,6 +47,11 @@ export type ResolvedStoreTheme = Required<
     | 'cornerRadius'
     | 'headerStyle'
     | 'colorMode'
+    | 'heroAlign'
+    | 'buttonStyle'
+    | 'imageRatio'
+    | 'headingStyle'
+    | 'homeProductRows'
     | 'showCategories'
     | 'showOffers'
     | 'showSearch'
@@ -75,6 +85,11 @@ export const DEFAULT_THEME: ResolvedStoreTheme = {
   cornerRadius: 'lg',
   headerStyle: 'blur',
   colorMode: 'light',
+  heroAlign: 'left',
+  buttonStyle: 'pill',
+  imageRatio: 'square',
+  headingStyle: 'normal',
+  homeProductRows: 2,
   showCategories: true,
   showOffers: true,
   showSearch: true,
@@ -303,8 +318,25 @@ export function resolveStoreTheme(sponsor: {
     cornerRadius: t.cornerRadius || DEFAULT_THEME.cornerRadius,
     headerStyle: t.headerStyle || DEFAULT_THEME.headerStyle,
     colorMode: t.colorMode || DEFAULT_THEME.colorMode,
+    heroAlign: t.heroAlign || DEFAULT_THEME.heroAlign,
+    buttonStyle: t.buttonStyle || DEFAULT_THEME.buttonStyle,
+    imageRatio: t.imageRatio || DEFAULT_THEME.imageRatio,
+    headingStyle: t.headingStyle || DEFAULT_THEME.headingStyle,
+    homeProductRows: (t.homeProductRows as 1 | 2 | 3) || DEFAULT_THEME.homeProductRows,
   };
 }
+
+const IMAGE_RATIO_MAP = {
+  square: '1 / 1',
+  portrait: '3 / 4',
+  landscape: '4 / 3',
+} as const;
+
+const BUTTON_RADIUS_MAP = {
+  pill: '9999px',
+  rounded: '0.75rem',
+  square: '0px',
+} as const;
 
 export function themeToCssVars(theme: ResolvedStoreTheme): Record<string, string> {
   const font = FONT_OPTIONS.find((f) => f.id === theme.fontFamily)?.css || FONT_OPTIONS[0].css;
@@ -331,6 +363,8 @@ export function themeToCssVars(theme: ResolvedStoreTheme): Record<string, string
     '--radius': radius,
     '--sf-font': font,
     '--sf-hero-overlay': String(theme.heroOverlay),
+    '--sf-image-ratio': IMAGE_RATIO_MAP[theme.imageRatio] || IMAGE_RATIO_MAP.square,
+    '--sf-button-radius': BUTTON_RADIUS_MAP[theme.buttonStyle] || BUTTON_RADIUS_MAP.pill,
   };
 }
 

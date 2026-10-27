@@ -37,6 +37,18 @@ const FIELD_LABELS: Record<string, string> = {
   photoUrl: 'URL de foto',
 };
 
+const STATUS_FILTER_LABELS = {
+  ALL: 'Todos',
+  ACTIVE: 'Publicados',
+  DRAFT: 'Borradores',
+} as const;
+
+const PRODUCT_STATUS_LABELS: Record<string, string> = {
+  ACTIVE: 'Publicado',
+  DRAFT: 'Borrador',
+  ARCHIVED: 'Archivado',
+};
+
 export default function ProductosPage() {
   const { activeSponsorId } = useSponsor();
   const qc = useQueryClient();
@@ -126,7 +138,9 @@ export default function ProductosPage() {
       key: 'status',
       header: 'Estado',
       cell: (p) => (
-        <StatusPill tone={p.status === 'ACTIVE' ? 'success' : 'neutral'}>{p.status}</StatusPill>
+        <StatusPill tone={p.status === 'ACTIVE' ? 'success' : 'neutral'}>
+          {PRODUCT_STATUS_LABELS[p.status] ?? p.status}
+        </StatusPill>
       ),
     },
   ];
@@ -154,7 +168,7 @@ export default function ProductosPage() {
             className="min-h-9"
             onClick={() => setStatusFilter(s)}
           >
-            {s === 'ALL' ? 'Todos' : s}
+            {STATUS_FILTER_LABELS[s]}
           </Button>
         ))}
       </div>

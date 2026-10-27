@@ -37,6 +37,7 @@ export default function StoreHomePage() {
   const headline = theme.heroHeadline || sponsor?.name || 'Tienda';
   const support =
     sponsor?.tagline || sponsor?.home_intro || sponsor?.description || 'Productos oficiales';
+  const centered = theme.heroAlign === 'center' && theme.heroStyle !== 'split';
 
   return (
     <div>
@@ -54,7 +55,12 @@ export default function StoreHomePage() {
             : `linear-gradient(135deg, ${color} 0%, ${theme.colorMode === 'dark' ? '#000' : '#0b1220'} 100%)`,
         }}
       >
-        <div className="mx-auto max-w-6xl md:col-span-1">
+        <div
+          className={cn(
+            'mx-auto max-w-6xl md:col-span-1',
+            centered && 'flex flex-col items-center text-center',
+          )}
+        >
           <p className="text-xs font-bold uppercase tracking-[0.16em] text-white/80">Tienda oficial</p>
           <h1 className="mt-2 max-w-2xl text-4xl font-extrabold tracking-tight md:text-5xl">
             {headline}
@@ -64,7 +70,7 @@ export default function StoreHomePage() {
           ) : null}
           <Button
             asChild
-            className="mt-8 min-h-11 rounded-full bg-white px-6 font-extrabold text-slate-900 hover:bg-white/90"
+            className="sf-button mt-8 min-h-11 bg-white px-6 font-extrabold text-slate-900 hover:bg-white/90"
           >
             <Link href={`/${slug}/productos`}>{theme.ctaLabel}</Link>
           </Button>
@@ -142,7 +148,7 @@ export default function StoreHomePage() {
           </Link>
         </div>
         <div className={cn('mt-5', productGridClass(theme.productGridCols))}>
-          {(productsQ.data || []).slice(0, theme.productGridCols * 2).map((p) => (
+          {(productsQ.data || []).slice(0, theme.productGridCols * theme.homeProductRows).map((p) => (
             <ProductCard
               key={p.id}
               slug={slug}

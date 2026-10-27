@@ -1,6 +1,7 @@
 'use client';
 
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { Upload } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { useSponsor } from '@/contexts/SponsorContext';
@@ -16,9 +17,110 @@ import {
   FONT_OPTIONS,
   THEME_PRESETS,
   resolveStoreTheme,
+  themeToCssVars,
   type StoreTheme,
 } from '@/lib/store-theme';
+import { useStoreFont } from '@/components/storefront/StoreThemeScope';
 import { cn } from '@/lib/utils';
+
+const COLOR_MODE_LABELS = {
+  light: 'Claro',
+  dark: 'Oscuro',
+  brand: 'Color de marca',
+} as const;
+
+const HERO_STYLE_LABELS = {
+  'full-bleed': 'Pantalla completa',
+  split: 'Dividida',
+  minimal: 'Minimalista',
+  'banner-only': 'Solo banner',
+} as const;
+
+const HEADER_STYLE_LABELS = {
+  blur: 'Desenfocado',
+  solid: 'Sólido',
+  transparent: 'Transparente',
+} as const;
+
+const CARD_STYLE_LABELS = {
+  soft: 'Suave',
+  bordered: 'Con borde',
+  flat: 'Plana',
+  shadow: 'Con sombra',
+} as const;
+
+const HERO_ALIGN_LABELS = {
+  left: 'Izquierda',
+  center: 'Centrado',
+} as const;
+
+const BUTTON_STYLE_LABELS = {
+  pill: 'Píldora',
+  rounded: 'Redondeados',
+  square: 'Rectos',
+} as const;
+
+const IMAGE_RATIO_LABELS = {
+  square: 'Cuadrada',
+  portrait: 'Vertical',
+  landscape: 'Horizontal',
+} as const;
+
+const HEADING_STYLE_LABELS = {
+  normal: 'Normal',
+  uppercase: 'MAYÚSCULAS',
+} as const;
+
+const HOME_ROWS_LABELS = {
+  1: '1 fila',
+  2: '2 filas',
+  3: '3 filas',
+} as const;
+
+function OptionGroup<T extends string | number>({
+  label,
+  hint,
+  options,
+  value,
+  onChange,
+}: {
+  label: string;
+  hint?: string;
+  options: Record<T, string>;
+  value: T | undefined;
+  onChange: (v: T) => void;
+}) {
+  return (
+    <div className="space-y-2">
+      <Label>{label}</Label>
+      {hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
+      <div className="flex flex-wrap gap-2">
+        {(Object.keys(options) as string[]).map((key) => {
+          const typed = (/^\d+$/.test(key) ? Number(key) : key) as T;
+          return (
+            <Button
+              key={key}
+              type="button"
+              size="sm"
+              variant={value === typed ? 'default' : 'outline'}
+              onClick={() => onChange(typed)}
+            >
+              {options[typed]}
+            </Button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+const CORNER_RADIUS_LABELS = {
+  none: 'Rectas',
+  sm: 'Chico',
+  md: 'Mediano',
+  lg: 'Grande',
+  xl: 'Muy grande',
+} as const;
 
 type FormState = {
   name: string;
@@ -45,6 +147,91 @@ const emptyForm = (): FormState => ({
   homeIntro: '',
   storeTheme: { ...DEFAULT_THEME },
 });
+
+function ImageField({
+  id,
+  label,
+  kind,
+  sponsorId,
+  value,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  kind: 'logo' | 'banner' | 'favicon';
+  sponsorId: string | null;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const upload = useMutation({
+    mutationFn: async (file: File) => {
+      const body = new FormData();
+      body.append('image', file);
+      const res = await api.post(`/sponsors/me/${sponsorId}/images/${kind}`, body);
+      return res.data as { url: string };
+    },
+    onSuccess: (data) => {
+      onChange(data.url);
+      toast.success('Imagen subida. Guardá los cambios para publicarla.');
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.message || 'No se pudo subir la imagen');
+    },
+  });
+
+  return (
+    <div className="space-y-2">
+      <Label htmlFor={id}>{label}</Label>
+      <div className="flex items-center gap-2">
+        {value ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={value}
+            alt=""
+            className={cn(
+              'size-11 shrink-0 rounded-lg border border-border bg-surface-2',
+              kind === 'banner' ? 'object-cover' : 'object-contain',
+            )}
+          />
+        ) : null}
+        <Input
+          id={id}
+          className="min-h-11"
+          placeholder="https://… o subí una imagen"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+        />
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            e.target.value = '';
+            if (!file) return;
+            if (file.size > 5 * 1024 * 1024) {
+              toast.error('La imagen supera 5 MB');
+              return;
+            }
+            upload.mutate(file);
+          }}
+        />
+        <Button
+          type="button"
+          variant="outline"
+          className="min-h-11 shrink-0 gap-2"
+          disabled={!sponsorId || upload.isPending}
+          onClick={() => fileRef.current?.click()}
+        >
+          <Upload className="size-4" aria-hidden />
+          {upload.isPending ? 'Subiendo…' : 'Subir imagen'}
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 function ColorField({
   id,
@@ -139,6 +326,11 @@ export default function AparienciaPage() {
         cornerRadius: theme.cornerRadius,
         headerStyle: theme.headerStyle,
         colorMode: theme.colorMode,
+        heroAlign: theme.heroAlign,
+        buttonStyle: theme.buttonStyle,
+        imageRatio: theme.imageRatio,
+        headingStyle: theme.headingStyle,
+        homeProductRows: theme.homeProductRows,
         showCategories: theme.showCategories,
         showOffers: theme.showOffers,
         showSearch: theme.showSearch,
@@ -211,6 +403,10 @@ export default function AparienciaPage() {
     [form],
   );
 
+  useStoreFont(previewTheme.fontFamily);
+  const previewVars = themeToCssVars(previewTheme);
+  const previewCentered = previewTheme.heroAlign === 'center' && previewTheme.heroStyle !== 'split';
+
   const overlay = Math.round((previewTheme.heroOverlay || 0.5) * 100);
 
   return (
@@ -262,7 +458,7 @@ export default function AparienciaPage() {
             <TabsList className="flex h-auto flex-wrap gap-1">
               <TabsTrigger value="brand">Marca</TabsTrigger>
               <TabsTrigger value="colors">Colores</TabsTrigger>
-              <TabsTrigger value="layout">Layout</TabsTrigger>
+              <TabsTrigger value="layout">Diseño</TabsTrigger>
               <TabsTrigger value="content">Contenido</TabsTrigger>
             </TabsList>
 
@@ -279,7 +475,7 @@ export default function AparienciaPage() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="tagline">Tagline</Label>
+                    <Label htmlFor="tagline">Frase de la tienda</Label>
                     <Input
                       id="tagline"
                       className="min-h-11"
@@ -287,35 +483,32 @@ export default function AparienciaPage() {
                       onChange={(e) => setForm((f) => ({ ...f, tagline: e.target.value }))}
                     />
                   </div>
+                  <ImageField
+                    id="logoUrl"
+                    label="Logo"
+                    kind="logo"
+                    sponsorId={activeSponsorId}
+                    value={form.logoUrl}
+                    onChange={(v) => setForm((f) => ({ ...f, logoUrl: v }))}
+                  />
+                  <ImageField
+                    id="bannerUrl"
+                    label="Imagen de portada"
+                    kind="banner"
+                    sponsorId={activeSponsorId}
+                    value={form.bannerUrl}
+                    onChange={(v) => setForm((f) => ({ ...f, bannerUrl: v }))}
+                  />
+                  <ImageField
+                    id="faviconUrl"
+                    label="Ícono de la pestaña (favicon)"
+                    kind="favicon"
+                    sponsorId={activeSponsorId}
+                    value={form.faviconUrl}
+                    onChange={(v) => setForm((f) => ({ ...f, faviconUrl: v }))}
+                  />
                   <div className="space-y-2">
-                    <Label htmlFor="logoUrl">URL del logo</Label>
-                    <Input
-                      id="logoUrl"
-                      className="min-h-11"
-                      value={form.logoUrl}
-                      onChange={(e) => setForm((f) => ({ ...f, logoUrl: e.target.value }))}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="bannerUrl">URL del banner / hero</Label>
-                    <Input
-                      id="bannerUrl"
-                      className="min-h-11"
-                      value={form.bannerUrl}
-                      onChange={(e) => setForm((f) => ({ ...f, bannerUrl: e.target.value }))}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="faviconUrl">Favicon URL</Label>
-                    <Input
-                      id="faviconUrl"
-                      className="min-h-11"
-                      value={form.faviconUrl}
-                      onChange={(e) => setForm((f) => ({ ...f, faviconUrl: e.target.value }))}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="homeIntro">Intro home</Label>
+                    <Label htmlFor="homeIntro">Texto de bienvenida</Label>
                     <textarea
                       id="homeIntro"
                       className="min-h-24 w-full rounded-lg border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
@@ -377,7 +570,7 @@ export default function AparienciaPage() {
                 <div className="mt-4 space-y-2">
                   <Label>Modo de color</Label>
                   <div className="flex flex-wrap gap-2">
-                    {(['light', 'dark', 'brand'] as const).map((m) => (
+                    {(Object.keys(COLOR_MODE_LABELS) as Array<keyof typeof COLOR_MODE_LABELS>).map((m) => (
                       <Button
                         key={m}
                         type="button"
@@ -385,7 +578,7 @@ export default function AparienciaPage() {
                         variant={form.storeTheme.colorMode === m ? 'default' : 'outline'}
                         onClick={() => patchTheme({ colorMode: m })}
                       >
-                        {m}
+                        {COLOR_MODE_LABELS[m]}
                       </Button>
                     ))}
                   </div>
@@ -399,7 +592,7 @@ export default function AparienciaPage() {
                   <div className="space-y-2">
                     <Label>Tipografía</Label>
                     <select
-                      className="min-h-11 w-full rounded-lg border border-input bg-transparent px-3 text-sm"
+                      className="min-h-11 w-full cursor-pointer rounded-xl border border-input bg-transparent px-3 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30 dark:hover:bg-input/50"
                       value={form.storeTheme.fontFamily || 'jakarta'}
                       onChange={(e) =>
                         patchTheme({ fontFamily: e.target.value as StoreTheme['fontFamily'] })
@@ -413,9 +606,9 @@ export default function AparienciaPage() {
                     </select>
                   </div>
                   <div className="space-y-2">
-                    <Label>Estilo del hero</Label>
+                    <Label>Estilo de la portada</Label>
                     <div className="flex flex-wrap gap-2">
-                      {(['full-bleed', 'split', 'minimal', 'banner-only'] as const).map((h) => (
+                      {(Object.keys(HERO_STYLE_LABELS) as Array<keyof typeof HERO_STYLE_LABELS>).map((h) => (
                         <Button
                           key={h}
                           type="button"
@@ -423,15 +616,15 @@ export default function AparienciaPage() {
                           variant={form.storeTheme.heroStyle === h ? 'default' : 'outline'}
                           onClick={() => patchTheme({ heroStyle: h })}
                         >
-                          {h}
+                          {HERO_STYLE_LABELS[h]}
                         </Button>
                       ))}
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <Label>Header</Label>
+                    <Label>Encabezado</Label>
                     <div className="flex flex-wrap gap-2">
-                      {(['blur', 'solid', 'transparent'] as const).map((h) => (
+                      {(Object.keys(HEADER_STYLE_LABELS) as Array<keyof typeof HEADER_STYLE_LABELS>).map((h) => (
                         <Button
                           key={h}
                           type="button"
@@ -439,15 +632,15 @@ export default function AparienciaPage() {
                           variant={form.storeTheme.headerStyle === h ? 'default' : 'outline'}
                           onClick={() => patchTheme({ headerStyle: h })}
                         >
-                          {h}
+                          {HEADER_STYLE_LABELS[h]}
                         </Button>
                       ))}
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <Label>Cards de producto</Label>
+                    <Label>Tarjetas de producto</Label>
                     <div className="flex flex-wrap gap-2">
-                      {(['soft', 'bordered', 'flat', 'shadow'] as const).map((c) => (
+                      {(Object.keys(CARD_STYLE_LABELS) as Array<keyof typeof CARD_STYLE_LABELS>).map((c) => (
                         <Button
                           key={c}
                           type="button"
@@ -455,13 +648,13 @@ export default function AparienciaPage() {
                           variant={form.storeTheme.cardStyle === c ? 'default' : 'outline'}
                           onClick={() => patchTheme({ cardStyle: c })}
                         >
-                          {c}
+                          {CARD_STYLE_LABELS[c]}
                         </Button>
                       ))}
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <Label>Columnas del grid</Label>
+                    <Label>Productos por fila</Label>
                     <div className="flex gap-2">
                       {([2, 3, 4] as const).map((n) => (
                         <Button
@@ -479,7 +672,7 @@ export default function AparienciaPage() {
                   <div className="space-y-2">
                     <Label>Radio de esquinas</Label>
                     <div className="flex flex-wrap gap-2">
-                      {(['none', 'sm', 'md', 'lg', 'xl'] as const).map((r) => (
+                      {(Object.keys(CORNER_RADIUS_LABELS) as Array<keyof typeof CORNER_RADIUS_LABELS>).map((r) => (
                         <Button
                           key={r}
                           type="button"
@@ -487,13 +680,48 @@ export default function AparienciaPage() {
                           variant={form.storeTheme.cornerRadius === r ? 'default' : 'outline'}
                           onClick={() => patchTheme({ cornerRadius: r })}
                         >
-                          {r}
+                          {CORNER_RADIUS_LABELS[r]}
                         </Button>
                       ))}
                     </div>
                   </div>
+                  <OptionGroup
+                    label="Alineación del texto de portada"
+                    hint={
+                      form.storeTheme.heroStyle === 'split'
+                        ? 'En el estilo "Dividida" el texto siempre va a la izquierda.'
+                        : undefined
+                    }
+                    options={HERO_ALIGN_LABELS}
+                    value={form.storeTheme.heroAlign}
+                    onChange={(v) => patchTheme({ heroAlign: v })}
+                  />
+                  <OptionGroup
+                    label="Forma de los botones"
+                    options={BUTTON_STYLE_LABELS}
+                    value={form.storeTheme.buttonStyle}
+                    onChange={(v) => patchTheme({ buttonStyle: v })}
+                  />
+                  <OptionGroup
+                    label="Proporción de las fotos de producto"
+                    options={IMAGE_RATIO_LABELS}
+                    value={form.storeTheme.imageRatio}
+                    onChange={(v) => patchTheme({ imageRatio: v })}
+                  />
+                  <OptionGroup
+                    label="Estilo de los títulos"
+                    options={HEADING_STYLE_LABELS}
+                    value={form.storeTheme.headingStyle}
+                    onChange={(v) => patchTheme({ headingStyle: v })}
+                  />
+                  <OptionGroup
+                    label="Productos en el inicio"
+                    options={HOME_ROWS_LABELS}
+                    value={form.storeTheme.homeProductRows}
+                    onChange={(v) => patchTheme({ homeProductRows: v })}
+                  />
                   <div className="space-y-2">
-                    <Label htmlFor="overlay">Opacidad overlay hero ({overlay}%)</Label>
+                    <Label htmlFor="overlay">Oscurecer la portada ({overlay}%)</Label>
                     <input
                       id="overlay"
                       type="range"
@@ -533,7 +761,7 @@ export default function AparienciaPage() {
                   />
                 </div>
                 <div className="mt-4 space-y-2">
-                  <Label htmlFor="cta">Texto del CTA principal</Label>
+                  <Label htmlFor="cta">Texto del botón principal</Label>
                   <Input
                     id="cta"
                     className="min-h-11"
@@ -542,7 +770,7 @@ export default function AparienciaPage() {
                   />
                 </div>
                 <div className="mt-4 space-y-2">
-                  <Label htmlFor="headline">Headline custom (opcional)</Label>
+                  <Label htmlFor="headline">Título personalizado (opcional)</Label>
                   <Input
                     id="headline"
                     className="min-h-11"
@@ -552,7 +780,7 @@ export default function AparienciaPage() {
                   />
                 </div>
                 <div className="mt-4 space-y-2">
-                  <Label htmlFor="footer">Texto del footer</Label>
+                  <Label htmlFor="footer">Texto del pie de página</Label>
                   <Input
                     id="footer"
                     className="min-h-11"
@@ -567,13 +795,17 @@ export default function AparienciaPage() {
         </div>
 
         <div className="xl:sticky xl:top-20 xl:self-start">
-          <FormSection title="Live preview" description="Así se ve el hero en tu tienda">
+          <FormSection title="Vista previa" description="Así se ve el inicio de tu tienda">
             <div
               className={cn(
                 'overflow-hidden border text-sm',
                 previewTheme.cornerRadius === 'none' ? 'rounded-none' : 'rounded-2xl',
               )}
+              data-sf-headings={previewTheme.headingStyle}
               style={{
+                fontFamily: previewVars['--sf-font'],
+                ['--sf-image-ratio' as string]: previewVars['--sf-image-ratio'],
+                ['--sf-button-radius' as string]: previewVars['--sf-button-radius'],
                 background: previewTheme.backgroundColor,
                 color: previewTheme.textColor,
                 borderColor:
@@ -627,20 +859,20 @@ export default function AparienciaPage() {
                   minHeight: previewTheme.heroStyle === 'banner-only' ? 120 : 180,
                 }}
               >
-                <div>
+                <div className={cn(previewCentered && 'flex flex-col items-center text-center')}>
                   <p className="text-[10px] font-bold uppercase tracking-wider text-white/70">
                     Tienda oficial
                   </p>
-                  <p className="mt-1 text-xl font-extrabold tracking-tight">
+                  <h1 className="mt-1 text-xl font-extrabold tracking-tight">
                     {form.storeTheme.heroHeadline || form.name || 'Tu tienda'}
-                  </p>
+                  </h1>
                   {previewTheme.showTagline ? (
-                    <p className="mt-1 text-xs text-white/90">{form.tagline || 'Tagline'}</p>
+                    <p className="mt-1 text-xs text-white/90">{form.tagline || 'Frase de la tienda'}</p>
                   ) : null}
                   <p className="mt-2 line-clamp-2 text-xs text-white/80">
-                    {form.homeIntro || 'Introducción de la home'}
+                    {form.homeIntro || 'Texto de bienvenida'}
                   </p>
-                  <span className="mt-3 inline-flex rounded-full bg-white px-3 py-1.5 text-[11px] font-extrabold text-slate-900">
+                  <span className="sf-button mt-3 inline-flex bg-white px-3 py-1.5 text-[11px] font-extrabold text-slate-900">
                     {previewTheme.ctaLabel}
                   </span>
                 </div>
@@ -676,7 +908,9 @@ export default function AparienciaPage() {
                     previewTheme.productGridCols === 4 && 'grid-cols-4',
                   )}
                 >
-                  {Array.from({ length: Math.min(previewTheme.productGridCols, 4) }).map((_, i) => (
+                  {Array.from({
+                    length: previewTheme.productGridCols * previewTheme.homeProductRows,
+                  }).map((_, i) => (
                     <div
                       key={i}
                       className="overflow-hidden"
@@ -699,7 +933,7 @@ export default function AparienciaPage() {
                       }}
                     >
                       <div
-                        className="aspect-square"
+                        className="sf-product-media"
                         style={{ background: previewTheme.secondaryColor }}
                       />
                       <div className="p-1.5">

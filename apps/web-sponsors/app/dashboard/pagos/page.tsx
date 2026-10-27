@@ -44,8 +44,8 @@ export default function PagosPage() {
       toast.error(
         (err as { response?: { data?: { message?: string } }; message?: string })?.response?.data
           ?.message ||
-          (err as { message?: string })?.message ||
-          'No se pudo conectar Mercado Pago',
+        (err as { message?: string })?.message ||
+        'No se pudo conectar Mercado Pago',
       );
     },
   });
@@ -62,7 +62,7 @@ export default function PagosPage() {
     onError: (err: unknown) => {
       toast.error(
         (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
-          'No se pudo desconectar',
+        'No se pudo desconectar',
       );
     },
   });
@@ -79,7 +79,7 @@ export default function PagosPage() {
     onError: (err: unknown) => {
       toast.error(
         (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
-          'No se pudo guardar WhatsApp',
+        'No se pudo guardar WhatsApp',
       );
     },
   });
@@ -109,8 +109,8 @@ export default function PagosPage() {
   }
 
   const busy = connectMp.isPending || disconnectMp.isPending || saveWa.isPending;
-  const mpStatus = statusQ.isLoading ? '…' : statusQ.data?.mpStatus || 'DISCONNECTED';
-  const mpConnected = String(mpStatus).toUpperCase() === 'CONNECTED' || !!statusQ.data?.mpEnabled;
+  const mpStatus = statusQ.isLoading ? '…' : statusQ.data?.mpStatus || 'DECONECTADO';
+  const mpConnected = String(mpStatus).toUpperCase() === 'CONECTADO' || !!statusQ.data?.mpEnabled;
   const waReady = !!statusQ.data?.whatsappEnabled && !!phone;
   const checklist = [
     { done: !!statusQ.data?.oauthConfigured, label: 'OAuth MP configurado en servidor' },

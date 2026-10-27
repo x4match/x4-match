@@ -98,6 +98,7 @@
 
 /* Night Match — partner dashboard */
 .dark {
+  color-scheme: dark;
   --background: #000000;
   --foreground: #fafafa;
   --card: #161616;
@@ -114,7 +115,7 @@
   --accent-foreground: #0a0a0a;
   --destructive: #ef4444;
   --border: rgba(255, 255, 255, 0.08);
-  --input: rgba(255, 255, 255, 0.12);
+  --input: rgba(255, 255, 255, 0.18);
   --ring: #d7ff00;
   --success: #22c55e;
   --warning: #f59e0b;
@@ -153,6 +154,11 @@
   a,
   [role='button'] {
     @apply cursor-pointer;
+  }
+  select option,
+  select optgroup {
+    background-color: var(--popover);
+    color: var(--popover-foreground);
   }
 }
 
@@ -211,4 +217,17 @@
 
 .sf-badge-deal {
   @apply absolute left-2 top-2 rounded-md bg-destructive px-2 py-0.5 text-[11px] font-bold text-white;
+}
+
+.sf-product-media {
+  aspect-ratio: var(--sf-image-ratio, 1 / 1);
+}
+
+.sf-button {
+  border-radius: var(--sf-button-radius, 9999px);
+}
+
+[data-sf-headings='uppercase'] :is(h1, h2, h3) {
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
 }

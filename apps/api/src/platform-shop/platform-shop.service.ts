@@ -9,6 +9,7 @@ import { createHash, randomBytes } from 'crypto';
 import * as bcrypt from 'bcryptjs';
 import { JwtService } from '@nestjs/jwt';
 import { DatabaseService } from '../database/database.service';
+import { uploadImageBuffer } from '../common/cloudinary/cloudinary.util';
 import {
   AddSponsorMemberDto,
   CreateCategoryDto,
@@ -729,6 +730,20 @@ export class PlatformShopService {
       [userId],
     );
     return result.rows.map((row) => this.toPartnerSponsor(row));
+  }
+
+  async uploadSponsorImage(sponsorId: string, kind: string, file: Express.Multer.File) {
+    const presets = {
+      logo: { width: 512, crop: 'limit' as const },
+      banner: { width: 1920, crop: 'limit' as const },
+      favicon: { width: 256, height: 256, crop: 'fill' as const },
+    };
+    const preset = presets[kind as keyof typeof presets];
+    if (!preset) {
+      throw new BadRequestException('Tipo de imagen inválido (logo, banner o favicon)');
+    }
+    const upload = await uploadImageBuffer(file, `x4match/sponsors/${sponsorId}/${kind}`, preset);
+    return { url: upload.secure_url };
   }
 
   private toPartnerSponsor(row: Record<string, any>): { slug: string; [key: string]: any } {

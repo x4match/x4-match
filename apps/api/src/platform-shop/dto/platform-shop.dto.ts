@@ -71,6 +71,26 @@ export class StoreThemeDto {
   colorMode?: string;
 
   @IsOptional()
+  @IsIn(['left', 'center'])
+  heroAlign?: string;
+
+  @IsOptional()
+  @IsIn(['pill', 'rounded', 'square'])
+  buttonStyle?: string;
+
+  @IsOptional()
+  @IsIn(['square', 'portrait', 'landscape'])
+  imageRatio?: string;
+
+  @IsOptional()
+  @IsIn(['normal', 'uppercase'])
+  headingStyle?: string;
+
+  @IsOptional()
+  @IsIn([1, 2, 3])
+  homeProductRows?: number;
+
+  @IsOptional()
   @IsBoolean()
   showCategories?: boolean;
 

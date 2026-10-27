@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -9,8 +10,12 @@ import {
   Post,
   Query,
   Res,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import { Response } from 'express';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -176,6 +181,31 @@ export class SponsorsPartnerController {
   @Get(':sponsorId')
   getOne(@CurrentUser() user: { sub: string }, @Param('sponsorId') sponsorId: string) {
     return this.shop.getMySponsor(user.sub, sponsorId);
+  }
+
+  @Post(':sponsorId/images/:kind')
+  @UseInterceptors(
+    FileInterceptor('image', {
+      storage: memoryStorage(),
+      limits: { fileSize: 5 * 1024 * 1024 },
+      fileFilter: (_req, file, cb) => {
+        if (!file.mimetype?.startsWith('image/')) {
+          cb(new BadRequestException('Solo se permiten imágenes'), false);
+          return;
+        }
+        cb(null, true);
+      },
+    }),
+  )
+  uploadImage(
+    @Param('sponsorId') sponsorId: string,
+    @Param('kind') kind: string,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    if (!file?.buffer?.length) {
+      throw new BadRequestException('Archivo requerido');
+    }
+    return this.shop.uploadSponsorImage(sponsorId, kind, file);
   }
 
   @Patch(':sponsorId')
