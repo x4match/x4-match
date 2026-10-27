@@ -64,30 +64,69 @@ export class PlatformShopService {
       .replace(/\/$/, '');
   }
 
-  productUrl(sponsor: { slug: string; custom_domain?: string | null; custom_domain_status?: string }, productId: string) {
+  productUrl(
+    sponsor: {
+      slug: string;
+      custom_domain?: string | null;
+      custom_domain_status?: string;
+      catalog_mode?: string | null;
+      external_store_url?: string | null;
+    },
+    productId: string,
+    externalUrl?: string | null,
+  ) {
+    if (externalUrl) {
+      return this.withAffiliateParams(externalUrl);
+    }
+    if (sponsor.catalog_mode === 'EXTERNAL_LINK' && sponsor.external_store_url) {
+      return this.withAffiliateParams(sponsor.external_store_url);
+    }
     if (sponsor.custom_domain && sponsor.custom_domain_status === 'ACTIVE') {
       return `https://${sponsor.custom_domain}/productos/${productId}`;
     }
     return `${this.sponsorsPublicBase()}/${sponsor.slug}/productos/${productId}`;
   }
 
-  storeUrl(sponsor: { slug: string; custom_domain?: string | null; custom_domain_status?: string }) {
+  storeUrl(sponsor: {
+    slug: string;
+    custom_domain?: string | null;
+    custom_domain_status?: string;
+    catalog_mode?: string | null;
+    external_store_url?: string | null;
+    website_url?: string | null;
+  }) {
+    if (sponsor.catalog_mode === 'EXTERNAL_LINK') {
+      const external = sponsor.external_store_url || sponsor.website_url;
+      if (external) return this.withAffiliateParams(external);
+    }
     if (sponsor.custom_domain && sponsor.custom_domain_status === 'ACTIVE') {
       return `https://${sponsor.custom_domain}`;
     }
     return `${this.sponsorsPublicBase()}/${sponsor.slug}`;
   }
 
+  private withAffiliateParams(rawUrl: string): string {
+    try {
+      const url = new URL(rawUrl);
+      if (!url.searchParams.has('utm_source')) url.searchParams.set('utm_source', 'x4match');
+      if (!url.searchParams.has('utm_medium')) url.searchParams.set('utm_medium', 'app');
+      return url.toString();
+    } catch {
+      return rawUrl;
+    }
+  }
+
   async listActiveProducts() {
     const result = await this.db.query(
       `SELECT p.id, p.name, p.description, p.price, p.compare_at_price, p.currency, p.photo_url,
               p.stock_quantity, p.category, p.sort_order, p.status, p.is_new, p.featured,
-              p.created_at,
+              p.created_at, p.external_url, p.external_source,
               cat.name AS category_name,
               s.id AS sponsor_id, s.name AS sponsor_name, s.logo_url AS sponsor_logo_url,
               s.slug AS sponsor_slug, s.custom_domain, s.custom_domain_status,
               s.tagline AS sponsor_tagline, s.primary_color AS sponsor_primary_color,
-              s.banner_url AS sponsor_banner_url
+              s.banner_url AS sponsor_banner_url, s.catalog_mode, s.external_store_url,
+              s.website_url AS sponsor_website_url
        FROM platform_products p
        LEFT JOIN platform_sponsors s ON s.id = p.sponsor_id
        LEFT JOIN platform_sponsor_categories cat
@@ -99,7 +138,9 @@ export class PlatformShopService {
       const sponsor = row.sponsor_slug ? this.sponsorFromJoinedRow(row) : null;
       return {
         ...row,
-        product_url: sponsor ? this.productUrl(sponsor, row.id) : null,
+        product_url: sponsor
+          ? this.productUrl(sponsor, row.id, row.external_url)
+          : row.external_url || null,
         sponsor_store_url: sponsor ? this.storeUrl(sponsor) : null,
       };
     });
@@ -109,11 +150,18 @@ export class PlatformShopService {
     sponsor_slug: string;
     custom_domain?: string | null;
     custom_domain_status?: string;
+    catalog_mode?: string | null;
+    external_store_url?: string | null;
+    sponsor_website_url?: string | null;
+    website_url?: string | null;
   }) {
     return {
       slug: row.sponsor_slug,
       custom_domain: row.custom_domain,
       custom_domain_status: row.custom_domain_status,
+      catalog_mode: row.catalog_mode,
+      external_store_url: row.external_store_url,
+      website_url: row.sponsor_website_url ?? row.website_url,
     };
   }
 
@@ -121,7 +169,8 @@ export class PlatformShopService {
     const result = await this.db.query(
       `SELECT p.*, s.name AS sponsor_name, s.logo_url AS sponsor_logo_url,
               s.website_url AS sponsor_website_url, s.slug AS sponsor_slug,
-              s.custom_domain, s.custom_domain_status
+              s.custom_domain, s.custom_domain_status, s.catalog_mode,
+              s.external_store_url
        FROM platform_products p
        LEFT JOIN platform_sponsors s ON s.id = p.sponsor_id
        WHERE p.id = $1`,
@@ -132,8 +181,8 @@ export class PlatformShopService {
     return {
       ...row,
       product_url: row.sponsor_slug
-        ? this.productUrl(this.sponsorFromJoinedRow(row), row.id)
-        : null,
+        ? this.productUrl(this.sponsorFromJoinedRow(row), row.id, row.external_url)
+        : row.external_url || null,
     };
   }
 
@@ -142,6 +191,11 @@ export class PlatformShopService {
     const product = await this.getProduct(dto.productId);
     if (product.status !== 'ACTIVE') {
       throw new BadRequestException('El producto no está disponible');
+    }
+    if (product.external_url || product.external_source) {
+      throw new BadRequestException(
+        'Este producto se compra en la tienda del partner. Abrí el enlace del producto.',
+      );
     }
     const quantity = dto.quantity ?? 1;
     if (product.stock_quantity != null && Number(product.stock_quantity) < quantity) {
@@ -695,8 +749,17 @@ export class PlatformShopService {
 
   async listSponsors() {
     const result = await this.db.query(
-      `SELECT s.*,
+      `SELECT s.id, s.name, s.slug, s.logo_url, s.website_url, s.active, s.created_at,
+              s.tagline, s.primary_color, s.banner_url, s.home_intro, s.contact_email,
+              s.contact_whatsapp, s.contact_address, s.free_shipping_threshold,
+              s.custom_domain, s.custom_domain_status, s.updated_at,
+              s.catalog_mode, s.external_store_url, s.tienda_nube_store_id,
+              s.catalog_sync_enabled, s.catalog_synced_at, s.catalog_sync_error,
+              s.catalog_sync_product_count,
+              (s.tienda_nube_access_token_encrypted IS NOT NULL) AS tienda_nube_connected,
               (SELECT COUNT(*)::int FROM platform_products p WHERE p.sponsor_id = s.id) AS products_count,
+              (SELECT COUNT(*)::int FROM platform_products p
+                WHERE p.sponsor_id = s.id AND p.status = 'ACTIVE') AS active_products_count,
               pc.mp_status, pc.mp_enabled, pc.whatsapp_enabled
        FROM platform_sponsors s
        LEFT JOIN platform_sponsor_payment_config pc ON pc.sponsor_id = s.id

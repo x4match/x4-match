@@ -17,6 +17,7 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { PlatformAdminGuard } from '../platform-admin/platform-admin.guard';
 import {
   AddSponsorMemberDto,
+  ConfigureExternalCatalogDto,
   CreateCategoryDto,
   CreateCouponDto,
   CreatePlatformOrderDto,
@@ -37,6 +38,7 @@ import {
 import { PlatformShopService } from './platform-shop.service';
 import { SponsorMemberGuard } from './sponsor-member.guard';
 import { SponsorPaymentsService } from './sponsor-payments.service';
+import { TiendaNubeCatalogService } from './tienda-nube-catalog.service';
 
 @Controller('shop')
 export class PlatformShopController {
@@ -418,7 +420,10 @@ export class SponsorsPartnerController {
 @Controller('platform/shop')
 @UseGuards(JwtAuthGuard, PlatformAdminGuard)
 export class PlatformShopAdminController {
-  constructor(private readonly platformShopService: PlatformShopService) {}
+  constructor(
+    private readonly platformShopService: PlatformShopService,
+    private readonly tiendaNubeCatalog: TiendaNubeCatalogService,
+  ) {}
 
   @Get('products')
   listAllProducts() {
@@ -448,6 +453,19 @@ export class PlatformShopAdminController {
   @Patch('sponsors/:id')
   updateSponsor(@Param('id') id: string, @Body() dto: UpdatePlatformSponsorDto) {
     return this.platformShopService.updateSponsor(id, dto);
+  }
+
+  @Patch('sponsors/:id/external-catalog')
+  configureExternalCatalog(
+    @Param('id') id: string,
+    @Body() dto: ConfigureExternalCatalogDto,
+  ) {
+    return this.tiendaNubeCatalog.configureSponsor(id, dto);
+  }
+
+  @Post('sponsors/:id/external-catalog/sync')
+  syncExternalCatalog(@Param('id') id: string) {
+    return this.tiendaNubeCatalog.syncSponsor(id, { force: true });
   }
 
   @Get('sponsors/:id/members')

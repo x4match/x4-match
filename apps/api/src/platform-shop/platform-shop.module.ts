@@ -9,6 +9,7 @@ import {
 import { PlatformShopService } from './platform-shop.service';
 import { SponsorMemberGuard } from './sponsor-member.guard';
 import { SponsorPaymentsService } from './sponsor-payments.service';
+import { TiendaNubeCatalogService } from './tienda-nube-catalog.service';
 
 @Module({
   controllers: [
@@ -21,9 +22,10 @@ import { SponsorPaymentsService } from './sponsor-payments.service';
   providers: [
     PlatformShopService,
     SponsorPaymentsService,
+    TiendaNubeCatalogService,
     PlatformAdminGuard,
     SponsorMemberGuard,
   ],
-  exports: [PlatformShopService, SponsorPaymentsService],
+  exports: [PlatformShopService, SponsorPaymentsService, TiendaNubeCatalogService],
 })
 export class PlatformShopModule {}

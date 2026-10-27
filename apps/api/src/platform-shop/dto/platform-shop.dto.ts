@@ -341,6 +341,34 @@ export class UpdatePlatformSponsorDto {
   active?: boolean;
 }
 
+/** Configura mirror de catálogo desde Tienda Nube (sin cargar productos a mano). */
+export class ConfigureExternalCatalogDto {
+  @IsOptional()
+  @IsIn(['NATIVE', 'EXTERNAL_LINK'])
+  catalogMode?: 'NATIVE' | 'EXTERNAL_LINK';
+
+  @IsOptional()
+  @IsString()
+  externalStoreUrl?: string | null;
+
+  @IsOptional()
+  @IsString()
+  tiendaNubeStoreId?: string | null;
+
+  /** Access token de app Tienda Nube (solo lectura de productos). Se cifra al guardar. */
+  @IsOptional()
+  @IsString()
+  tiendaNubeAccessToken?: string | null;
+
+  @IsOptional()
+  @IsBoolean()
+  clearTiendaNubeToken?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  catalogSyncEnabled?: boolean;
+}
+
 export class AddSponsorMemberDto {
   @IsUUID()
   userId: string;
