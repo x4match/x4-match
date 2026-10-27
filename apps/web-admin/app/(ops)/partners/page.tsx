@@ -188,7 +188,7 @@ export default function PartnersPage() {
               className="input"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Ej: SAC Pádel"
+              placeholder="Ej: Pádel Norte Store"
               required
             />
           </label>
@@ -198,7 +198,7 @@ export default function PartnersPage() {
               className="input"
               value={slug}
               onChange={(e) => setSlug(e.target.value)}
-              placeholder="sac"
+              placeholder="padel-norte-store"
             />
           </label>
           <hr style={{ border: 0, borderTop: '1px solid var(--border)', margin: '4px 0' }} />

@@ -1229,7 +1229,11 @@ export class PlatformShopService {
        RETURNING p.id`,
       [sponsorId],
     );
-    return { ok: true, deleted: deleted.rowCount ?? 0, archived: archived.rowCount ?? 0 };
+    return {
+      ok: true,
+      deleted: deleted.rowCount ?? 0,
+      archived: archived.rowCount ?? 0,
+    };
   }
 
   async listSponsorProducts(sponsorId: string) {
