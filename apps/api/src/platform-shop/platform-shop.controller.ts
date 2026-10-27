@@ -455,6 +455,11 @@ export class PlatformShopAdminController {
     return this.platformShopService.updateSponsor(id, dto);
   }
 
+  @Delete('sponsors/:id')
+  deleteSponsor(@Param('id') id: string) {
+    return this.platformShopService.deleteSponsor(id);
+  }
+
   @Patch('sponsors/:id/external-catalog')
   configureExternalCatalog(
     @Param('id') id: string,

@@ -8,6 +8,7 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  Matches,
   Max,
   Min,
   MinLength,
@@ -353,6 +354,7 @@ export class ConfigureExternalCatalogDto {
 
   @IsOptional()
   @IsString()
+  @Matches(/^\d+$/, { message: 'El Store ID de Tienda Nube debe ser numérico' })
   tiendaNubeStoreId?: string | null;
 
   /** Access token de app Tienda Nube (solo lectura de productos). Se cifra al guardar. */

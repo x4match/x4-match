@@ -17,8 +17,19 @@ const PAGE_PATH_RE = /\/productos\/page\/(\d+)\/?/i;
 
 export function normalizeStoreBaseUrl(input: string): string {
   const trimmed = input.trim();
+  if (!trimmed) {
+    throw new Error('Falta la URL de la tienda');
+  }
   const withScheme = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
-  const url = new URL(withScheme);
+  let url: URL;
+  try {
+    url = new URL(withScheme);
+  } catch {
+    throw new Error(`URL de tienda inválida: "${trimmed}"`);
+  }
+  if (!url.hostname.includes('.')) {
+    throw new Error(`URL de tienda inválida: "${trimmed}"`);
+  }
   url.hash = '';
   url.search = '';
   // Si pegan /productos o una URL de producto, nos quedamos con el origen de la tienda.

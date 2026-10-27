@@ -52,10 +52,17 @@ export class TiendaNubeCatalogService {
     },
   ) {
     const current = await this.getSponsorOrThrow(sponsorId);
+    const normalizeOrBadRequest = (raw: string) => {
+      try {
+        return normalizeStoreBaseUrl(raw);
+      } catch (err) {
+        throw new BadRequestException(err instanceof Error ? err.message : 'URL de tienda inválida');
+      }
+    };
     let externalStoreUrl = current.external_store_url;
     if (dto.externalStoreUrl !== undefined) {
       externalStoreUrl = dto.externalStoreUrl?.trim()
-        ? normalizeStoreBaseUrl(dto.externalStoreUrl)
+        ? normalizeOrBadRequest(dto.externalStoreUrl)
         : null;
     }
 
@@ -75,7 +82,7 @@ export class TiendaNubeCatalogService {
         );
       }
       if (!externalStoreUrl && current.website_url) {
-        externalStoreUrl = normalizeStoreBaseUrl(current.website_url);
+        externalStoreUrl = normalizeOrBadRequest(current.website_url);
       }
     }
 
@@ -94,6 +101,23 @@ export class TiendaNubeCatalogService {
              ELSE catalog_sync_error
            END,
            website_url = COALESCE(website_url, $3),
+           custom_domain = CASE
+             WHEN COALESCE($2::sponsor_catalog_mode, catalog_mode) = 'EXTERNAL_LINK' THEN NULL
+             ELSE custom_domain
+           END,
+           custom_domain_status = CASE
+             WHEN COALESCE($2::sponsor_catalog_mode, catalog_mode) = 'EXTERNAL_LINK'
+               THEN 'NONE'::sponsor_domain_status
+             ELSE custom_domain_status
+           END,
+           custom_domain_verify_token = CASE
+             WHEN COALESCE($2::sponsor_catalog_mode, catalog_mode) = 'EXTERNAL_LINK' THEN NULL
+             ELSE custom_domain_verify_token
+           END,
+           custom_domain_verified_at = CASE
+             WHEN COALESCE($2::sponsor_catalog_mode, catalog_mode) = 'EXTERNAL_LINK' THEN NULL
+             ELSE custom_domain_verified_at
+           END,
            updated_at = NOW()
        WHERE id = $1
        RETURNING id, name, catalog_mode, external_store_url, tienda_nube_store_id,

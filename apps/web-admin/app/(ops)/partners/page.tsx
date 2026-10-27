@@ -87,6 +87,8 @@ export default function PartnersPage() {
         <h3 style={{ marginTop: 0 }}>Asignar usuario existente</h3>
         <form onSubmit={onAssign} style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <select
+            className="input"
+            style={{ width: 'auto', minWidth: 200 }}
             value={assignSponsorId}
             onChange={(e) => setAssignSponsorId(e.target.value)}
             required
@@ -99,11 +101,12 @@ export default function PartnersPage() {
             ))}
           </select>
           <input
+            className="input"
             placeholder="userId UUID"
             value={memberUserId}
             onChange={(e) => setMemberUserId(e.target.value)}
             required
-            style={{ minWidth: 280 }}
+            style={{ flex: 1, width: 'auto', minWidth: 280 }}
           />
           <button className="btn btn-primary" type="submit" disabled={addMember.isPending}>
             {addMember.isPending ? 'Asignando…' : 'Asignar OWNER'}
@@ -120,6 +123,7 @@ export default function PartnersPage() {
           <thead>
             <tr>
               <th>Nombre</th>
+              <th>Estado</th>
               <th>Slug</th>
               <th>Dominio</th>
               <th>Pagos</th>
@@ -130,7 +134,7 @@ export default function PartnersPage() {
           <tbody>
             {(listQ.data || []).length === 0 ? (
               <tr>
-                <td colSpan={6} className="table-empty">
+                <td colSpan={7} className="table-empty">
                   Todavía no hay partners. Creá el primero.
                 </td>
               </tr>
@@ -138,10 +142,21 @@ export default function PartnersPage() {
               (listQ.data || []).map((s: any) => (
                 <tr key={s.id}>
                   <td>{s.name}</td>
+                  <td>
+                    <span className={`badge ${s.active === false ? 'badge-warning' : 'badge-success'}`}>
+                      {s.active === false ? 'Pausada' : 'Activa'}
+                    </span>
+                  </td>
                   <td>{s.slug}</td>
                   <td>
-                    {s.custom_domain || '—'}
-                    {s.custom_domain_status ? ` (${s.custom_domain_status})` : ''}
+                    {s.catalog_mode === 'EXTERNAL_LINK' ? (
+                      <span style={{ color: 'var(--muted)' }}>Tienda externa</span>
+                    ) : (
+                      <>
+                        {s.custom_domain || '—'}
+                        {s.custom_domain ? ` (${s.custom_domain_status})` : ''}
+                      </>
+                    )}
                   </td>
                   <td>
                     MP {s.mp_status || '—'} / WA {s.whatsapp_enabled ? 'sí' : 'no'}

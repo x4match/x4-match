@@ -1,13 +1,14 @@
 'use client';
 
 import { FormEvent, useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 
 export default function PartnerDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const qc = useQueryClient();
   const sponsorsQ = useQuery({
     queryKey: ['platform-sponsors'],
@@ -30,6 +31,7 @@ export default function PartnerDetailPage() {
   const [tiendaNubeAccessToken, setTiendaNubeAccessToken] = useState('');
   const [catalogSyncEnabled, setCatalogSyncEnabled] = useState(false);
   const [syncResult, setSyncResult] = useState<string | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState('');
 
   useEffect(() => {
     if (!sponsor) return;
@@ -54,15 +56,42 @@ export default function PartnerDetailPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['platform-sponsors'] }),
   });
 
+  const removeDomain = useMutation({
+    mutationFn: async () => api.delete(`/platform/shop/sponsors/${id}/domain`),
+    meta: { successMessage: 'Dominio quitado.' },
+    onSuccess: () => {
+      setDomain('');
+      qc.invalidateQueries({ queryKey: ['platform-sponsors'] });
+    },
+  });
+
+  const toggleActive = useMutation({
+    mutationFn: async (active: boolean) =>
+      api.patch(`/platform/shop/sponsors/${id}`, { active }),
+    meta: { successMessage: 'Estado de la tienda actualizado.' },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['platform-sponsors'] }),
+  });
+
+  const deleteSponsor = useMutation({
+    mutationFn: async () => api.delete(`/platform/shop/sponsors/${id}`),
+    meta: { successMessage: 'Partner eliminado.' },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['platform-sponsors'] });
+      router.push('/partners');
+    },
+  });
+
+  const persistCatalog = () =>
+    api.patch(`/platform/shop/sponsors/${id}/external-catalog`, {
+      catalogMode,
+      externalStoreUrl: externalStoreUrl.trim() || null,
+      tiendaNubeStoreId: tiendaNubeStoreId.trim() || null,
+      tiendaNubeAccessToken: tiendaNubeAccessToken.trim() || undefined,
+      catalogSyncEnabled,
+    });
+
   const saveCatalog = useMutation({
-    mutationFn: async () =>
-      api.patch(`/platform/shop/sponsors/${id}/external-catalog`, {
-        catalogMode,
-        externalStoreUrl: externalStoreUrl || null,
-        tiendaNubeStoreId: tiendaNubeStoreId || null,
-        tiendaNubeAccessToken: tiendaNubeAccessToken || undefined,
-        catalogSyncEnabled,
-      }),
+    mutationFn: persistCatalog,
     meta: { successMessage: 'Catálogo externo guardado.' },
     onSuccess: () => {
       setTiendaNubeAccessToken('');
@@ -71,13 +100,16 @@ export default function PartnerDetailPage() {
   });
 
   const syncCatalog = useMutation({
-    mutationFn: async () =>
-      (await api.post(`/platform/shop/sponsors/${id}/external-catalog/sync`)).data,
+    mutationFn: async () => {
+      await persistCatalog();
+      return (await api.post(`/platform/shop/sponsors/${id}/external-catalog/sync`)).data;
+    },
     meta: { successMessage: 'Sincronización completada.' },
+    onSettled: () => qc.invalidateQueries({ queryKey: ['platform-sponsors'] }),
     onSuccess: (data) => {
+      setTiendaNubeAccessToken('');
       setSyncResult(
-        `OK · ${data.upserted} productos · método ${data.method}${
-          data.store_url ? ` · ${data.store_url}` : ''
+        `OK · ${data.upserted} productos · método ${data.method}${data.store_url ? ` · ${data.store_url}` : ''
         }`,
       );
       qc.invalidateQueries({ queryKey: ['platform-sponsors'] });
@@ -88,16 +120,23 @@ export default function PartnerDetailPage() {
 
   const lastSync = sponsor.catalog_synced_at
     ? new Date(sponsor.catalog_synced_at).toLocaleString('es-AR', {
-        timeZone: 'America/Buenos_Aires',
-      })
+      timeZone: 'America/Buenos_Aires',
+    })
     : null;
+  const isActive = sponsor.active !== false;
+  const isExternalCatalog = sponsor.catalog_mode === 'EXTERNAL_LINK';
 
   return (
     <div>
       <p>
         <Link href="/partners">← Partners</Link>
       </p>
-      <h1>{sponsor.name}</h1>
+      <h1 style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        {sponsor.name}
+        <span className={`badge ${isActive ? 'badge-success' : 'badge-warning'}`}>
+          {isActive ? 'Activa' : 'Pausada'}
+        </span>
+      </h1>
       <p style={{ color: 'var(--muted)' }}>
         slug <code>{sponsor.slug}</code> ·{' '}
         <a href={sponsor.store_url} target="_blank" rel="noreferrer">
@@ -115,6 +154,8 @@ export default function PartnerDetailPage() {
           style={{ display: 'flex', gap: 8 }}
         >
           <input
+            className="input"
+            style={{ flex: 1, width: 'auto' }}
             placeholder={sponsor.name}
             value={name}
             onChange={(e) => setName(e.target.value)}
@@ -126,11 +167,48 @@ export default function PartnerDetailPage() {
       </div>
 
       <div className="card" style={{ marginTop: 16 }}>
+        <h3>Estado de la tienda</h3>
+        <p style={{ color: 'var(--muted)', marginTop: 0 }}>
+          {isActive
+            ? 'La tienda está visible: sus productos aparecen en la app y en web-sponsors.'
+            : 'La tienda está pausada: sus productos no se muestran, no recibe pedidos y no se sincroniza el catálogo. Podés reactivarla cuando quieras.'}
+        </p>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {isActive ? (
+            <button
+              className="btn btn-outline"
+              type="button"
+              disabled={toggleActive.isPending}
+              onClick={() => {
+                if (window.confirm(`¿Pausar la tienda de "${sponsor.name}"?`)) {
+                  toggleActive.mutate(false);
+                }
+              }}
+            >
+              {toggleActive.isPending ? 'Pausando…' : 'Pausar tienda'}
+            </button>
+          ) : (
+            <button
+              className="btn btn-primary"
+              type="button"
+              disabled={toggleActive.isPending}
+              onClick={() => toggleActive.mutate(true)}
+            >
+              {toggleActive.isPending ? 'Reactivando…' : 'Reactivar tienda'}
+            </button>
+          )}
+          {sponsor.store_url ? (
+            <a className="btn btn-ghost" href={sponsor.store_url} target="_blank" rel="noreferrer">
+              Ver tienda
+            </a>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="card" style={{ marginTop: 16 }}>
         <h3>Catálogo Tienda Nube (sin cargar productos a mano)</h3>
         <p style={{ color: 'var(--muted)', marginTop: 0 }}>
           Mostramos el catálogo en la app y al tocar un producto abrimos la tienda del partner.
-          Preferible: URL pública de la tienda. Opcional: store ID + access token de la API para un
-          sync más fiable.
         </p>
         <form
           onSubmit={(e: FormEvent) => {
@@ -142,6 +220,7 @@ export default function PartnerDetailPage() {
           <label style={{ display: 'grid', gap: 4 }}>
             Modo de catálogo
             <select
+              className="input"
               value={catalogMode}
               onChange={(e) => setCatalogMode(e.target.value as 'NATIVE' | 'EXTERNAL_LINK')}
             >
@@ -149,9 +228,16 @@ export default function PartnerDetailPage() {
               <option value="EXTERNAL_LINK">Externo (Tienda Nube / deep link)</option>
             </select>
           </label>
+          {catalogMode === 'EXTERNAL_LINK' && !isExternalCatalog && sponsor.custom_domain ? (
+            <p style={{ margin: 0, fontSize: 13, color: 'var(--warning)' }}>
+              Al guardar en modo externo se quita el dominio {sponsor.custom_domain}: la tienda
+              vive en su propio sitio.
+            </p>
+          ) : null}
           <label style={{ display: 'grid', gap: 4 }}>
             URL de la tienda
             <input
+              className="input"
               placeholder="https://su-marca.mitiendanube.com"
               value={externalStoreUrl}
               onChange={(e) => setExternalStoreUrl(e.target.value)}
@@ -160,6 +246,12 @@ export default function PartnerDetailPage() {
           <label style={{ display: 'grid', gap: 4 }}>
             Store ID Tienda Nube (opcional)
             <input
+              className="input"
+              name="tienda-nube-store-id"
+              inputMode="numeric"
+              autoComplete="off"
+              data-1p-ignore
+              data-lpignore="true"
               placeholder="123456"
               value={tiendaNubeStoreId}
               onChange={(e) => setTiendaNubeStoreId(e.target.value)}
@@ -168,13 +260,17 @@ export default function PartnerDetailPage() {
           <label style={{ display: 'grid', gap: 4 }}>
             Access token API (opcional)
             <input
+              className="input"
               type="password"
               placeholder={
                 sponsor.tienda_nube_connected ? '•••••••• (ya conectado)' : 'Bearer token'
               }
               value={tiendaNubeAccessToken}
               onChange={(e) => setTiendaNubeAccessToken(e.target.value)}
-              autoComplete="off"
+              name="tienda-nube-access-token"
+              autoComplete="new-password"
+              data-1p-ignore
+              data-lpignore="true"
             />
           </label>
           <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -192,7 +288,7 @@ export default function PartnerDetailPage() {
             <button
               className="btn btn-outline"
               type="button"
-              disabled={syncCatalog.isPending}
+              disabled={syncCatalog.isPending || saveCatalog.isPending}
               onClick={() => syncCatalog.mutate()}
             >
               {syncCatalog.isPending ? 'Sincronizando…' : 'Sincronizar ahora'}
@@ -214,29 +310,77 @@ export default function PartnerDetailPage() {
 
       <div className="card" style={{ marginTop: 16 }}>
         <h3>Dominio</h3>
-        <p>
-          {sponsor.custom_domain || 'Sin dominio'} ({sponsor.custom_domain_status})
-        </p>
-        <form
-          onSubmit={(e: FormEvent) => {
-            e.preventDefault();
-            setDomainMut.mutate();
-          }}
-          style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}
-        >
-          <input
-            placeholder="tienda.ejemplo.com"
-            value={domain}
-            onChange={(e) => setDomain(e.target.value)}
-            required
-          />
-          <button className="btn btn-primary" type="submit">
-            Set dominio
-          </button>
-          <button className="btn btn-outline" type="button" onClick={() => verifyDomain.mutate()}>
-            Verificar
-          </button>
-        </form>
+        {isExternalCatalog ? (
+          <>
+            <p style={{ color: 'var(--muted)', marginTop: 0 }}>
+              Este partner usa catálogo externo: la tienda vive en su propio sitio
+              {sponsor.external_store_url ? ` (${sponsor.external_store_url})` : ''}, así que no
+              necesita dominio en x4.
+            </p>
+            {sponsor.custom_domain ? (
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                <span style={{ color: 'var(--warning)', fontSize: 14 }}>
+                  Quedó cargado {sponsor.custom_domain} ({sponsor.custom_domain_status}).
+                </span>
+                <button
+                  className="btn btn-outline"
+                  type="button"
+                  disabled={removeDomain.isPending}
+                  onClick={() => removeDomain.mutate()}
+                >
+                  Quitar dominio
+                </button>
+              </div>
+            ) : null}
+          </>
+        ) : (
+          <>
+            <p>
+              {sponsor.custom_domain || 'Sin dominio'} ({sponsor.custom_domain_status})
+            </p>
+            <form
+              onSubmit={(e: FormEvent) => {
+                e.preventDefault();
+                setDomainMut.mutate();
+              }}
+              style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}
+            >
+              <input
+                className="input"
+                style={{ flex: 1, width: 'auto', minWidth: 240 }}
+                placeholder="tienda.ejemplo.com"
+                value={domain}
+                onChange={(e) => setDomain(e.target.value)}
+                required
+              />
+              <button className="btn btn-primary" type="submit">
+                Set dominio
+              </button>
+              <button
+                className="btn btn-outline"
+                type="button"
+                disabled={!sponsor.custom_domain}
+                onClick={() => verifyDomain.mutate()}
+              >
+                Verificar
+              </button>
+              {sponsor.custom_domain ? (
+                <button
+                  className="btn btn-ghost"
+                  type="button"
+                  disabled={removeDomain.isPending}
+                  onClick={() => {
+                    if (window.confirm(`¿Quitar el dominio ${sponsor.custom_domain}?`)) {
+                      removeDomain.mutate();
+                    }
+                  }}
+                >
+                  Quitar dominio
+                </button>
+              ) : null}
+            </form>
+          </>
+        )}
       </div>
 
       <div className="card" style={{ marginTop: 16 }}>
@@ -259,6 +403,38 @@ export default function PartnerDetailPage() {
             </li>
           ))}
         </ul>
+      </div>
+
+      <div className="card" style={{ marginTop: 16, borderColor: 'rgba(239, 68, 68, 0.35)' }}>
+        <h3 style={{ color: '#fca5a5' }}>Eliminar partner</h3>
+        <p style={{ color: 'var(--muted)', marginTop: 0 }}>
+          Borra el partner, sus miembros, categorías, cupones y configuración de pagos. Los productos
+          sin pedidos se borran; los que tienen pedidos quedan archivados y los pedidos se conservan.
+          No se puede deshacer: si solo querés ocultarla, pausá la tienda.
+        </p>
+        <form
+          onSubmit={(e: FormEvent) => {
+            e.preventDefault();
+            if (deleteConfirm.trim() === sponsor.slug) deleteSponsor.mutate();
+          }}
+          style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}
+        >
+          <input
+            className="input"
+            style={{ flex: 1, width: 'auto', minWidth: 240 }}
+            placeholder={`Escribí "${sponsor.slug}" para confirmar`}
+            value={deleteConfirm}
+            onChange={(e) => setDeleteConfirm(e.target.value)}
+            autoComplete="off"
+          />
+          <button
+            className="btn btn-danger"
+            type="submit"
+            disabled={deleteConfirm.trim() !== sponsor.slug || deleteSponsor.isPending}
+          >
+            {deleteSponsor.isPending ? 'Eliminando…' : 'Eliminar partner'}
+          </button>
+        </form>
       </div>
     </div>
   );

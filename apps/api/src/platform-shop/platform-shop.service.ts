@@ -891,6 +891,41 @@ export class PlatformShopService {
     return { ...result.rows[0], store_url: this.storeUrl(result.rows[0]) };
   }
 
+  /**
+   * Borra el partner. Los productos con pedidos no se pueden borrar (FK RESTRICT en
+   * platform_order_items), así que quedan archivados y sin sponsor; los pedidos se conservan.
+   */
+  async deleteSponsor(sponsorId: string) {
+    return this.db.transaction(async (client) => {
+      const sponsor = await client.query(
+        `SELECT id, name FROM platform_sponsors WHERE id = $1 FOR UPDATE`,
+        [sponsorId],
+      );
+      if (!sponsor.rows[0]) throw new NotFoundException('Partner no encontrado');
+
+      await client.query(
+        `UPDATE platform_products
+         SET status = 'ARCHIVED'::platform_product_status, updated_at = NOW()
+         WHERE sponsor_id = $1`,
+        [sponsorId],
+      );
+      const deletedProducts = await client.query(
+        `DELETE FROM platform_products p
+         WHERE p.sponsor_id = $1
+           AND NOT EXISTS (SELECT 1 FROM platform_order_items oi WHERE oi.product_id = p.id)`,
+        [sponsorId],
+      );
+      await client.query(`DELETE FROM platform_sponsors WHERE id = $1`, [sponsorId]);
+
+      return {
+        ok: true,
+        id: sponsorId,
+        name: sponsor.rows[0].name,
+        deleted_products: deletedProducts.rowCount ?? 0,
+      };
+    });
+  }
+
   async addMember(sponsorId: string, dto: AddSponsorMemberDto) {
     await this.db.query(
       `UPDATE users SET role = 'PARTNER'::user_role, updated_at = NOW()
@@ -937,6 +972,16 @@ export class PlatformShopService {
       .replace(/^www\./, '');
     if (!domain || domain.includes('/') || domain.includes(' ')) {
       throw new BadRequestException('Dominio inválido');
+    }
+    const modeRes = await this.db.query(
+      `SELECT catalog_mode FROM platform_sponsors WHERE id = $1`,
+      [sponsorId],
+    );
+    if (!modeRes.rows[0]) throw new NotFoundException('Partner no encontrado');
+    if (modeRes.rows[0].catalog_mode === 'EXTERNAL_LINK') {
+      throw new BadRequestException(
+        'Este partner usa catálogo externo (Tienda Nube): la tienda vive en su propio dominio y no se configura acá.',
+      );
     }
     const token = `x4-sponsor-verify=${createHash('sha256')
       .update(`${sponsorId}:${domain}:${Date.now()}`)

@@ -235,8 +235,10 @@ select.input {
   cursor: pointer;
 }
 
-select.input option {
+select option,
+select optgroup {
   background: var(--surface2);
+  color: var(--text);
 }
 
 .table {
