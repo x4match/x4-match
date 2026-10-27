@@ -171,6 +171,30 @@ export default function ProductosPage() {
     },
   });
 
+  const [confirmAll, setConfirmAll] = useState(false);
+  const removeAll = useMutation({
+    mutationFn: async () =>
+      (await api.delete(`/sponsors/me/${activeSponsorId}/products`)).data as {
+        deleted: number;
+        archived: number;
+      },
+    onSuccess: (data) => {
+      toast.success(
+        data.archived > 0
+          ? `${data.deleted} eliminados. ${data.archived} tenían pedidos y quedaron archivados.`
+          : `${data.deleted} productos eliminados`,
+      );
+      setConfirmAll(false);
+      qc.invalidateQueries({ queryKey: ['partner-products', activeSponsorId] });
+      qc.invalidateQueries({ queryKey: ['partner-cats', activeSponsorId] });
+    },
+    onError: (err) => {
+      toast.error(apiErrorMessage(err) || 'No se pudieron eliminar los productos');
+    },
+  });
+  const removableCount = ((listQ.data || []) as Product[]).filter((p) => p.status !== 'ARCHIVED').length;
+  const hasSynced = ((listQ.data || []) as Product[]).some((p) => p.external_source);
+
   const products = useMemo(() => {
     const all = (listQ.data || []) as Product[];
     if (statusFilter === 'ALL') return all;
@@ -260,10 +284,23 @@ export default function ProductosPage() {
       description="Publicá y gestioná el inventario de tu tienda."
       variant="table"
       actions={
-        <Button type="button" className="min-h-11 gap-2 font-bold" onClick={openCreate}>
-          <Plus className="size-4" aria-hidden />
-          Nuevo
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          {removableCount > 0 ? (
+            <Button
+              type="button"
+              variant="destructive"
+              className="min-h-11 gap-2 font-bold"
+              onClick={() => setConfirmAll(true)}
+            >
+              <Trash2 className="size-4" aria-hidden />
+              Eliminar todos
+            </Button>
+          ) : null}
+          <Button type="button" className="min-h-11 gap-2 font-bold" onClick={openCreate}>
+            <Plus className="size-4" aria-hidden />
+            Nuevo
+          </Button>
+        </div>
       }
     >
       <div className="mb-4 flex flex-wrap gap-2">
@@ -426,6 +463,24 @@ export default function ProductosPage() {
         }
         pending={remove.isPending}
         onConfirm={() => toDelete && remove.mutate(toDelete.id)}
+      />
+
+      <ConfirmDialog
+        open={confirmAll}
+        onOpenChange={setConfirmAll}
+        title={removableCount === 1 ? '¿Eliminar el producto?' : `¿Eliminar los ${removableCount} productos?`}
+        description={
+          <>
+            Se quitan todos de tu tienda y no se puede deshacer. Los que ya tienen pedidos se archivan
+            para conservar el historial.
+            {hasSynced
+              ? ' Los que vienen de tu tienda externa pueden volver en la próxima sincronización.'
+              : null}
+          </>
+        }
+        confirmLabel="Eliminar todos"
+        pending={removeAll.isPending}
+        onConfirm={() => removeAll.mutate()}
       />
     </PageShell>
   );

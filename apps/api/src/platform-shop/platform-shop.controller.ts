@@ -249,6 +249,13 @@ export class SponsorsPartnerController {
     );
   }
 
+  @Delete(':sponsorId/products')
+  deleteAllProducts(@CurrentUser() user: { sub: string }, @Param('sponsorId') sponsorId: string) {
+    return this.shop.assertMember(user.sub, sponsorId).then(() =>
+      this.shop.deleteAllSponsorProducts(sponsorId),
+    );
+  }
+
   @Delete(':sponsorId/products/:productId')
   deleteProduct(
     @CurrentUser() user: { sub: string },
@@ -287,6 +294,13 @@ export class SponsorsPartnerController {
   ) {
     return this.shop.assertMember(user.sub, sponsorId).then(() =>
       this.shop.updateCategory(sponsorId, categoryId, dto),
+    );
+  }
+
+  @Delete(':sponsorId/categories')
+  deleteAllCategories(@CurrentUser() user: { sub: string }, @Param('sponsorId') sponsorId: string) {
+    return this.shop.assertMember(user.sub, sponsorId).then(() =>
+      this.shop.deleteAllSponsorCategories(sponsorId),
     );
   }
 

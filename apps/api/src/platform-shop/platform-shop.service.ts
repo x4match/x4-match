@@ -1212,6 +1212,26 @@ export class PlatformShopService {
     return { ok: true, archived: false };
   }
 
+  async deleteAllSponsorProducts(sponsorId: string) {
+    const archived = await this.db.query(
+      `UPDATE platform_products p
+       SET status = 'ARCHIVED', updated_at = NOW()
+       WHERE p.sponsor_id = $1
+         AND p.status <> 'ARCHIVED'
+         AND EXISTS (SELECT 1 FROM platform_order_items oi WHERE oi.product_id = p.id)
+       RETURNING p.id`,
+      [sponsorId],
+    );
+    const deleted = await this.db.query(
+      `DELETE FROM platform_products p
+       WHERE p.sponsor_id = $1
+         AND NOT EXISTS (SELECT 1 FROM platform_order_items oi WHERE oi.product_id = p.id)
+       RETURNING p.id`,
+      [sponsorId],
+    );
+    return { ok: true, deleted: deleted.rowCount ?? 0, archived: archived.rowCount ?? 0 };
+  }
+
   async listSponsorProducts(sponsorId: string) {
     const result = await this.db.query(
       `SELECT p.*, c.name AS category_name
@@ -1265,6 +1285,14 @@ export class PlatformShopService {
     );
     if (!result.rows[0]) throw new NotFoundException('Categoría no encontrada');
     return { ok: true };
+  }
+
+  async deleteAllSponsorCategories(sponsorId: string) {
+    const result = await this.db.query(
+      `DELETE FROM platform_sponsor_categories WHERE sponsor_id = $1`,
+      [sponsorId],
+    );
+    return { ok: true, deleted: result.rowCount ?? 0 };
   }
 
   async listCoupons(sponsorId: string) {

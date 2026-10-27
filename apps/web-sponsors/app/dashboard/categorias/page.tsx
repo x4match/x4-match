@@ -44,6 +44,17 @@ export default function CategoriasPage() {
     },
     onError: () => toast.error('No se pudo eliminar la categoría'),
   });
+  const [confirmAll, setConfirmAll] = useState(false);
+  const removeAll = useMutation({
+    mutationFn: async () => api.delete(`/sponsors/me/${activeSponsorId}/categories`),
+    onSuccess: () => {
+      toast.success('Categorías eliminadas');
+      setConfirmAll(false);
+      qc.invalidateQueries({ queryKey: ['partner-cats', activeSponsorId] });
+      qc.invalidateQueries({ queryKey: ['partner-products', activeSponsorId] });
+    },
+    onError: () => toast.error('No se pudieron eliminar las categorías'),
+  });
 
   function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -87,6 +98,19 @@ export default function CategoriasPage() {
       title="Categorías"
       description="Organizá productos para la navegación de la tienda."
       variant="table"
+      actions={
+        items.length > 0 ? (
+          <Button
+            type="button"
+            variant="destructive"
+            className="min-h-11 gap-2 font-bold"
+            onClick={() => setConfirmAll(true)}
+          >
+            <Trash2 className="size-4" aria-hidden />
+            Eliminar todas
+          </Button>
+        ) : null
+      }
     >
       <FormSection title="Nueva categoría">
         <form onSubmit={onSubmit} className="flex flex-col gap-2 sm:flex-row">
@@ -121,6 +145,15 @@ export default function CategoriasPage() {
         }
         pending={remove.isPending}
         onConfirm={() => toDelete && remove.mutate(toDelete.id)}
+      />
+      <ConfirmDialog
+        open={confirmAll}
+        onOpenChange={setConfirmAll}
+        title={items.length === 1 ? '¿Eliminar la categoría?' : `¿Eliminar las ${items.length} categorías?`}
+        description="Los productos no se borran: quedan sin categoría y siguen en tu catálogo."
+        confirmLabel="Eliminar todas"
+        pending={removeAll.isPending}
+        onConfirm={() => removeAll.mutate()}
       />
     </PageShell>
   );
