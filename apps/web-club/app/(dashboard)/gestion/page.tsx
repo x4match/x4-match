@@ -271,6 +271,7 @@ function GestionInner() {
 
   // Promo form
   const [promoLabel, setPromoLabel] = useState('Horario valle');
+  const [promoMultiplier, setPromoMultiplier] = useState('2');
   const [promoDay, setPromoDay] = useState('1');
   const [promoStart, setPromoStart] = useState('10:00');
   const [promoEnd, setPromoEnd] = useState('12:00');
@@ -507,6 +508,7 @@ function GestionInner() {
         startHour: hourToMinutes(promoStart) / 60,
         endHour: hourToMinutes(promoEnd) / 60,
         bonusPoints: 0,
+        pointsMultiplier: Number(promoMultiplier) || 2,
       });
     },
     onSuccess: async () => {
@@ -818,10 +820,10 @@ function GestionInner() {
             <CardHeader>
               <CardTitle className="text-base">Nueva promoción valle</CardTitle>
               <p className="text-sm text-muted-foreground">
-                Boost de puntos canjeables en esa franja. No afecta ranking competitivo ni del club.
+                Boost de puntos canjeables en esa franja (máx. x2.5). No afecta ranking ni depende del plan del club.
               </p>
             </CardHeader>
-            <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
               <div className="space-y-1">
                 <Label>Label</Label>
                 <Input value={promoLabel} onChange={(e) => setPromoLabel(e.target.value)} className="rounded-xl" />
@@ -838,18 +840,31 @@ function GestionInner() {
                 <Label>Hasta</Label>
                 <Input value={promoEnd} onChange={(e) => setPromoEnd(e.target.value)} className="rounded-xl" />
               </div>
-              <Button className="rounded-xl sm:col-span-2 lg:col-span-4" onClick={() => createPromo.mutate()}>
+              <div className="space-y-1">
+                <Label>Multiplicador</Label>
+                <select
+                  className="flex h-10 w-full rounded-xl border border-input bg-background px-3 text-sm"
+                  value={promoMultiplier}
+                  onChange={(e) => setPromoMultiplier(e.target.value)}
+                >
+                  <option value="1.5">x1.5</option>
+                  <option value="2">x2</option>
+                  <option value="2.5">x2.5</option>
+                </select>
+              </div>
+              <Button className="rounded-xl sm:col-span-2 lg:col-span-5" onClick={() => createPromo.mutate()}>
                 Crear promoción
               </Button>
             </CardContent>
           </Card>
-          {(promotionsQuery.data || []).map((p) => (
+          {(promotionsQuery.data || []).map((p: any) => (
             <Card key={p.id}>
               <CardContent className="flex items-center justify-between p-4">
                 <div>
                   <p className="font-semibold">{p.label}</p>
                   <p className="text-sm text-muted-foreground">
-                    Día {p.day_of_week ?? '—'} · {String(p.start_hour)}–{String(p.end_hour)}
+                    Día {p.day_of_week ?? '—'} · {String(p.start_hour)}–{String(p.end_hour)} · x
+                    {Number(p.points_multiplier ?? 2)}
                   </p>
                 </div>
                 <Button variant="destructive" size="sm" className="rounded-xl" onClick={() => deletePromo.mutate(p.id)}>

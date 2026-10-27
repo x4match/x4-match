@@ -179,8 +179,11 @@ interface Promotion {
   start_hour: number;
   end_hour: number;
   bonus_points: number;
+  points_multiplier?: number;
   active?: boolean;
 }
+
+const PROMO_MULTIPLIER_OPTIONS = [1.5, 2, 2.5] as const;
 
 function TabBar({ active, onChange }: { active: Tab; onChange: (t: Tab) => void }) {
   const tabs: { key: Tab; label: string }[] = [
@@ -252,6 +255,7 @@ export default function CourtSlotsScreen() {
   const [promoDay, setPromoDay] = useState<number | null>(null);
   const [promoStart, setPromoStart] = useState(10 * 60);
   const [promoEnd, setPromoEnd] = useState(16 * 60);
+  const [promoMultiplier, setPromoMultiplier] = useState<number>(2);
   const [hoursBefore, setHoursBefore] = useState('8');
   const [autoCreateMatch, setAutoCreateMatch] = useState(false);
   const [notifyEnabled, setNotifyEnabled] = useState(true);
@@ -579,6 +583,7 @@ export default function CourtSlotsScreen() {
         startHour: minutesToApiHour(promoStart),
         endHour: minutesToApiHour(promoEnd),
         bonusPoints: 0,
+        pointsMultiplier: promoMultiplier,
       });
     },
     onSuccess: () => {
@@ -1072,12 +1077,25 @@ export default function CourtSlotsScreen() {
               <>
                 <SectionHeader
                   title="Horario valle"
-                  subtitle="Multiplica puntos canjeables en esa franja. No suman al ranking competitivo ni al ranking del club."
+                  subtitle="Multiplica puntos canjeables en esa franja (máx. x2.5). No suman al ranking competitivo ni al ranking del club."
                 />
                 <AppCard style={{ marginBottom: 16 }}>
                   <InputField label="Nombre" value={promoLabel} onChangeText={setPromoLabel} placeholder="Horario valle" />
                   {promoDayPicker}
                   {promoTimeRange}
+                  <Text style={{ fontSize: 12, color: ui.colors.textSecondary, marginBottom: 8 }}>
+                    Multiplicador de puntos
+                  </Text>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+                    {PROMO_MULTIPLIER_OPTIONS.map((m) => (
+                      <SelectionChip
+                        key={m}
+                        label={`x${m}`}
+                        selected={promoMultiplier === m}
+                        onPress={() => setPromoMultiplier(m)}
+                      />
+                    ))}
+                  </View>
                   <PrimaryButton
                     label="Guardar horario valle"
                     size="sm"
@@ -1097,9 +1115,8 @@ export default function CourtSlotsScreen() {
                             <Text style={{ fontSize: 12, color: ui.colors.textSecondary, marginTop: 4 }}>
                               {p.day_of_week != null ? WEEKDAYS[p.day_of_week] : 'Todos los días'} ·{' '}
                               {formatSlotTime(p.start_hour, true)}–{formatSlotTime(p.end_hour, true)}
-                              {p.bonus_points > 0
-                                ? ` · +${p.bonus_points} pts canjeables`
-                                : ' · boost canjeable'}
+                              {` · x${Number(p.points_multiplier ?? 2)}`}
+                              {p.bonus_points > 0 ? ` · +${p.bonus_points} pts` : ''}
                             </Text>
                           </View>
                           <TouchableOpacity onPress={() => handleDeletePromotion(p)}>

@@ -49,6 +49,14 @@ export class CreateClubPromotionDto {
   @Max(500)
   bonusPoints?: number;
 
+  /** Multiplicador de puntos canjeables en la franja (1–2.5). Independiente del plan del club. */
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(1)
+  @Max(2.5)
+  pointsMultiplier?: number;
+
   @IsOptional()
   @IsBoolean()
   active?: boolean;
