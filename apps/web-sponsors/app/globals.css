@@ -215,8 +215,36 @@
   @apply text-base font-extrabold text-commerce;
 }
 
+.sf-badges {
+  @apply pointer-events-none absolute left-2 top-2 right-2 flex flex-wrap items-start gap-1;
+}
+
+.sf-badge {
+  @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold leading-4 whitespace-nowrap shadow-sm;
+}
+
+.sf-badge-featured {
+  @apply bg-primary text-white;
+}
+
 .sf-badge-deal {
-  @apply absolute left-2 top-2 rounded-md bg-destructive px-2 py-0.5 text-[11px] font-bold text-white;
+  @apply bg-destructive text-white;
+}
+
+.sf-badge-new {
+  @apply bg-white text-zinc-900;
+}
+
+.sf-badge-lowstock {
+  @apply pointer-events-none absolute bottom-2 left-2 bg-amber-500 text-zinc-950;
+}
+
+.sf-badge-soldout {
+  @apply pointer-events-none absolute bottom-2 left-2 bg-zinc-900/85 text-white;
+}
+
+.sf-card-featured {
+  box-shadow: 0 0 0 2px var(--sf-featured, var(--primary));
 }
 
 .sf-product-media {

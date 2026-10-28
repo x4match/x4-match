@@ -30,8 +30,8 @@ export function ShopProductCard({ product, partner, width, onPress, style }: Sho
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${product.name}${partner ? ` de ${partner.name}` : ''}, ${formatCurrency(product.price, product.currency)}${
-        product.inStock ? '' : ', sin stock'
+      accessibilityLabel={`${product.featured ? 'Destacado: ' : ''}${product.name}${partner ? ` de ${partner.name}` : ''}, ${formatCurrency(product.price, product.currency)}${
+        !product.inStock ? ', sin stock' : product.stockLeft != null ? `, quedan ${product.stockLeft}` : ''
       }`}
       onPress={() => {
         void hapticLight();
@@ -39,6 +39,7 @@ export function ShopProductCard({ product, partner, width, onPress, style }: Sho
       }}
       style={({ pressed }) => [
         styles.card,
+        product.featured && { borderColor: partner?.color || SHOP_LIME, borderWidth: 1.5 },
         { width, opacity: pressed ? 0.85 : 1, transform: [{ scale: pressed ? 0.98 : 1 }] },
         style,
       ]}
@@ -56,9 +57,15 @@ export function ShopProductCard({ product, partner, width, onPress, style }: Sho
         )}
 
         <View style={styles.badges}>
+          {product.featured ? (
+            <View style={[styles.badge, styles.badgeRow, { backgroundColor: partner?.color || SHOP_LIME }]}>
+              <Ionicons name="star" size={9} color="#000" />
+              <Text style={[styles.badgeText, { color: '#000' }]}>DESTACADO</Text>
+            </View>
+          ) : null}
           {product.discountPercent > 0 ? (
-            <View style={[styles.badge, { backgroundColor: SHOP_LIME }]}>
-              <Text style={[styles.badgeText, { color: '#000' }]}>-{product.discountPercent}%</Text>
+            <View style={[styles.badge, { backgroundColor: '#EF4444' }]}>
+              <Text style={[styles.badgeText, { color: '#FFF' }]}>-{product.discountPercent}%</Text>
             </View>
           ) : null}
           {product.isNew ? (
@@ -67,6 +74,14 @@ export function ShopProductCard({ product, partner, width, onPress, style }: Sho
             </View>
           ) : null}
         </View>
+
+        {product.inStock && product.stockLeft != null ? (
+          <View style={[styles.badge, styles.lowStockBadge]}>
+            <Text style={[styles.badgeText, { color: '#000' }]}>
+              {product.stockLeft === 1 ? '¡ÚLTIMA UNIDAD!' : `¡QUEDAN ${product.stockLeft}!`}
+            </Text>
+          </View>
+        ) : null}
 
         {!product.inStock ? (
           <View style={styles.soldOut}>
@@ -97,7 +112,6 @@ export function ShopProductCard({ product, partner, width, onPress, style }: Sho
             <Ionicons name="arrow-forward" size={14} color="#000" />
           </View>
         </View>
-        {product.lowStock ? <Text style={styles.lowStock}>¡Últimas unidades!</Text> : null}
       </View>
     </Pressable>
   );
@@ -122,13 +136,27 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 8,
     left: 8,
+    right: 8,
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'flex-start',
     gap: 4,
   },
   badge: {
     borderRadius: 999,
     paddingHorizontal: 7,
     paddingVertical: 3,
+  },
+  badgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  lowStockBadge: {
+    position: 'absolute',
+    left: 8,
+    bottom: 8,
+    backgroundColor: '#F59E0B',
   },
   badgeText: {
     fontSize: 10,
@@ -202,10 +230,5 @@ const styles = StyleSheet.create({
     backgroundColor: SHOP_LIME,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  lowStock: {
-    color: '#F59E0B',
-    fontSize: 10.5,
-    fontFamily: fontFamily.regular,
   },
 });

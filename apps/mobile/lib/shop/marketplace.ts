@@ -37,6 +37,8 @@ export type ShopProduct = {
   photoUrl: string | null;
   inStock: boolean;
   lowStock: boolean;
+  /** Unidades restantes cuando hay poco stock; null si no aplica. */
+  stockLeft: number | null;
   category: string;
   isNew: boolean;
   featured: boolean;
@@ -148,6 +150,7 @@ export function normalizeShopCatalog(rows: PlatformProductRow[]): {
       photoUrl: row.photo_url || null,
       inStock: stock == null || stock > 0,
       lowStock: stock != null && stock > 0 && stock <= LOW_STOCK_THRESHOLD,
+      stockLeft: stock != null && stock > 0 && stock <= LOW_STOCK_THRESHOLD ? stock : null,
       category: categoryLabel(row),
       isNew: Boolean(row.is_new),
       featured: Boolean(row.featured),

@@ -2,7 +2,7 @@
 
 import { FormEvent, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Pencil, Plus, Trash2 } from 'lucide-react';
+import { Pencil, Plus, Sparkles, Star, Trash2 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useSponsor } from '@/contexts/SponsorContext';
 import { toast } from 'sonner';
@@ -21,6 +21,7 @@ import { PageShell, StatusPill } from '@/components/layout/PageShell';
 import { DataTable, type DataTableColumn } from '@/components/layout/DataTable';
 import { ImageField } from '@/components/dashboard/ImageField';
 import { ConfirmDialog } from '@/components/dashboard/ConfirmDialog';
+import { LOW_STOCK_THRESHOLD } from '@/lib/types';
 
 type ProductStatus = 'ACTIVE' | 'DRAFT' | 'ARCHIVED';
 
@@ -34,6 +35,8 @@ type Product = {
   stock_quantity?: number | null;
   photo_url?: string | null;
   external_source?: string | null;
+  featured?: boolean | null;
+  is_new?: boolean | null;
 };
 
 type FormState = {
@@ -44,6 +47,8 @@ type FormState = {
   stockQuantity: string;
   photoUrl: string;
   status: ProductStatus;
+  featured: boolean;
+  isNew: boolean;
 };
 
 const EMPTY_FORM: FormState = {
@@ -54,6 +59,8 @@ const EMPTY_FORM: FormState = {
   stockQuantity: '',
   photoUrl: '',
   status: 'ACTIVE',
+  featured: false,
+  isNew: false,
 };
 
 const STATUS_FILTER_LABELS = {
@@ -82,6 +89,8 @@ function toForm(p: Product): FormState {
     stockQuantity: p.stock_quantity != null ? String(p.stock_quantity) : '',
     photoUrl: p.photo_url ?? '',
     status: p.status ?? 'ACTIVE',
+    featured: Boolean(p.featured),
+    isNew: Boolean(p.is_new),
   };
 }
 
@@ -120,6 +129,8 @@ export default function ProductosPage() {
         stockQuantity: form.stockQuantity ? Number(form.stockQuantity) : undefined,
         photoUrl: form.photoUrl || undefined,
         status: form.status,
+        featured: form.featured,
+        isNew: form.isNew,
       };
       return editing
         ? api.patch(`/sponsors/me/${activeSponsorId}/products/${editing.id}`, body)
@@ -213,7 +224,22 @@ export default function ProductosPage() {
               <img src={p.photo_url} alt="" className="size-full object-cover" />
             ) : null}
           </div>
-          <span className="font-semibold">{p.name}</span>
+          <div className="min-w-0">
+            <span className="font-semibold">{p.name}</span>
+            {p.featured || p.is_new ? (
+              <div className="mt-1 flex gap-1">
+                {p.featured ? (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-bold text-primary">
+                    <Star className="size-3 fill-current" aria-hidden />
+                    Destacado
+                  </span>
+                ) : null}
+                {p.is_new ? (
+                  <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold">Nuevo</span>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
         </div>
       ),
     },
@@ -225,7 +251,14 @@ export default function ProductosPage() {
     {
       key: 'stock',
       header: 'Stock',
-      cell: (p) => (p.stock_quantity != null ? p.stock_quantity : '—'),
+      cell: (p) => {
+        if (p.stock_quantity == null) return '—';
+        if (p.stock_quantity <= 0) return <span className="font-semibold text-destructive">Sin stock</span>;
+        if (p.stock_quantity <= LOW_STOCK_THRESHOLD) {
+          return <span className="font-semibold text-amber-500">{p.stock_quantity} · poco stock</span>;
+        }
+        return p.stock_quantity;
+      },
     },
     {
       key: 'status',
@@ -427,6 +460,36 @@ export default function ProductosPage() {
                   </Button>
                 ))}
               </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Etiquetas en la tienda</Label>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={form.featured ? 'default' : 'outline'}
+                  className="gap-1.5"
+                  aria-pressed={form.featured}
+                  onClick={() => set('featured', !form.featured)}
+                >
+                  <Star className={form.featured ? 'size-3.5 fill-current' : 'size-3.5'} aria-hidden />
+                  Destacado
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={form.isNew ? 'default' : 'outline'}
+                  className="gap-1.5"
+                  aria-pressed={form.isNew}
+                  onClick={() => set('isNew', !form.isNew)}
+                >
+                  <Sparkles className="size-3.5" aria-hidden />
+                  Nuevo
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                El descuento y el aviso de poco stock (5 unidades o menos) se muestran solos.
+              </p>
             </div>
 
             <DialogFooter className="gap-2">

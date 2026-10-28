@@ -86,12 +86,44 @@ export type StorefrontProduct = {
   compare_at_price?: number | null;
   imageUrl?: string | null;
   image_url?: string | null;
+  photo_url?: string | null;
   images?: string[];
   categoryId?: string | null;
   category_id?: string | null;
   stock?: number | null;
+  stock_quantity?: number | null;
+  featured?: boolean | null;
+  is_new?: boolean | null;
   currency?: string;
 };
+
+export const LOW_STOCK_THRESHOLD = 5;
+
+export type ProductFlags = {
+  discountPercent: number;
+  compareAtPrice: number | null;
+  featured: boolean;
+  isNew: boolean;
+  soldOut: boolean;
+  /** Unidades restantes cuando queda poco stock; null si no aplica. */
+  lowStockLeft: number | null;
+};
+
+export function productFlags(product: StorefrontProduct): ProductFlags {
+  const price = Number(product.price);
+  const compare = Number(product.compare_at_price ?? product.compareAtPrice ?? 0);
+  const hasDeal = compare > price && price >= 0;
+  const rawStock = product.stock_quantity ?? product.stock;
+  const stock = rawStock == null ? null : Number(rawStock);
+  return {
+    discountPercent: hasDeal ? Math.round(((compare - price) / compare) * 100) : 0,
+    compareAtPrice: hasDeal ? compare : null,
+    featured: Boolean(product.featured),
+    isNew: Boolean(product.is_new),
+    soldOut: stock != null && stock <= 0,
+    lowStockLeft: stock != null && stock > 0 && stock <= LOW_STOCK_THRESHOLD ? stock : null,
+  };
+}
 
 export type StorefrontCategory = {
   id: string;
@@ -137,9 +169,11 @@ export function sponsorLogoUrl(
 }
 
 export function productImageUrl(
-  product?: Pick<StorefrontProduct, 'imageUrl' | 'image_url' | 'images'> | null,
+  product?: Pick<StorefrontProduct, 'imageUrl' | 'image_url' | 'photo_url' | 'images'> | null,
 ): string | null {
-  return product?.imageUrl ?? product?.image_url ?? product?.images?.[0] ?? null;
+  return (
+    product?.imageUrl ?? product?.image_url ?? product?.photo_url ?? product?.images?.[0] ?? null
+  );
 }
 
 export function formatMoney(amount: number, currency = 'ARS') {

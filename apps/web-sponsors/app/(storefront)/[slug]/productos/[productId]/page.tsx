@@ -4,7 +4,7 @@ import { useParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { fetchSponsorBySlug, fetchSponsorProduct } from '@/lib/storefront-api';
 import { addToCart } from '@/lib/cart';
-import { formatMoney, productImageUrl } from '@/lib/types';
+import { formatMoney, productFlags, productImageUrl, type StorefrontProduct } from '@/lib/types';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 
@@ -37,7 +37,8 @@ export default function ProductDetailPage() {
   }
 
   const img = productImageUrl(p as never) || p.photo_url;
-  const compare = Number(p.compare_at_price || 0);
+  const flags = productFlags(p as unknown as StorefrontProduct);
+  const compare = flags.compareAtPrice ?? 0;
   const wa = sponsor?.contact_whatsapp || (sponsor as { contact_whatsapp?: string } | undefined)?.contact_whatsapp;
 
   return (
@@ -51,6 +52,19 @@ export default function ProductDetailPage() {
         )}
       </div>
       <div>
+        {flags.featured || flags.discountPercent > 0 || flags.isNew ? (
+          <div className="mb-3 flex flex-wrap gap-1.5">
+            {flags.featured ? (
+              <span className="sf-badge sf-badge-featured" style={{ background: color }}>
+                Destacado
+              </span>
+            ) : null}
+            {flags.discountPercent > 0 ? (
+              <span className="sf-badge sf-badge-deal">-{flags.discountPercent}%</span>
+            ) : null}
+            {flags.isNew ? <span className="sf-badge sf-badge-new border border-border">Nuevo</span> : null}
+          </div>
+        ) : null}
         <h1 className="text-3xl font-extrabold tracking-tight">{p.name}</h1>
         <div className="mt-3 flex items-baseline gap-3">
           <span className="sf-price text-2xl" style={{ color }}>
@@ -60,6 +74,15 @@ export default function ProductDetailPage() {
             <span className="text-muted-foreground line-through">{formatMoney(compare)}</span>
           ) : null}
         </div>
+        {flags.soldOut ? (
+          <p className="mt-3 text-sm font-semibold text-destructive">Sin stock</p>
+        ) : flags.lowStockLeft != null ? (
+          <p className="mt-3 text-sm font-semibold text-amber-500">
+            {flags.lowStockLeft === 1
+              ? '¡Queda la última unidad!'
+              : `¡Quedan solo ${flags.lowStockLeft} unidades!`}
+          </p>
+        ) : null}
         {p.description ? (
           <p className="mt-4 whitespace-pre-wrap text-muted-foreground">{p.description}</p>
         ) : null}
@@ -67,6 +90,7 @@ export default function ProductDetailPage() {
           type="button"
           className="sf-button mt-6 hidden min-h-12 w-full font-extrabold text-white md:inline-flex md:w-auto md:px-8"
           style={{ background: color }}
+          disabled={flags.soldOut}
           onClick={() => {
             if (!sponsor?.id) return;
             addToCart(sponsor.id, {
@@ -80,7 +104,7 @@ export default function ProductDetailPage() {
             window.dispatchEvent(new Event('sponsor-cart-change'));
           }}
         >
-          Agregar al carrito
+          {flags.soldOut ? 'Sin stock' : 'Agregar al carrito'}
         </Button>
         {wa ? (
           <a
@@ -107,6 +131,7 @@ export default function ProductDetailPage() {
             type="button"
             className="sf-button min-h-11 shrink-0 px-5 font-extrabold text-white"
             style={{ background: color }}
+            disabled={flags.soldOut}
             onClick={() => {
               if (!sponsor?.id) return;
               addToCart(sponsor.id, {
@@ -119,7 +144,7 @@ export default function ProductDetailPage() {
               toast.success('Agregado al carrito');
             }}
           >
-            Agregar
+            {flags.soldOut ? 'Sin stock' : 'Agregar'}
           </Button>
         </div>
       </div>
