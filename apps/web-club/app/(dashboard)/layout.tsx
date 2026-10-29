@@ -6,7 +6,6 @@ import { ClubProvider, useClub } from '@/contexts/ClubContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { isClub } from '@/lib/roles';
 import { AppSidebar } from '@/components/layout/AppSidebar';
-import { EmptyState } from '@/components/club/DashboardCards';
 import { Skeleton } from '@/components/ui/skeleton';
 
 function RequireClubGate({ children }: { children: React.ReactNode }) {
@@ -65,14 +64,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   if (!token || !user || !isClub(user.role)) {
-    return (
-      <div className="p-8">
-        <EmptyState
-          title="Acceso restringido"
-          description="Solo cuentas de club pueden usar este panel."
-        />
-      </div>
-    );
+    return <div className="min-h-screen bg-black" aria-busy="true" />;
   }
 
   return (
