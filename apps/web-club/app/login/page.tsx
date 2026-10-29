@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Eye, EyeOff, Lock, Mail } from 'lucide-react';
 import { api } from '@/lib/api';
+import { AuthWordmark } from '@/components/auth/AuthWordmark';
 import { isClub } from '@/lib/roles';
 import { useAuth } from '@/contexts/AuthContext';
 import type { AuthUser } from '@/lib/types';
@@ -194,134 +195,8 @@ function LoginForm() {
   return (
     <div className="flex min-h-screen bg-black text-white">
       <section className="relative flex w-full flex-col justify-center overflow-hidden px-6 py-12 sm:px-10 lg:w-1/2 lg:px-14 xl:px-20">
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-y-4 left-[10%] top-[20%] flex w-14 items-stretch justify-center sm:w-20"
-        >
-          <svg width="67" height="575" viewBox="0 0 67 575" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path
-              d="M65.0642 495.242V512.666L41.7184 534.673L65.0642 554.385V573.466L32.7861 542.937L1.52673 572.699L1.52673 554.378L23.086 534.156L1.52673 515.075L1.52673 496.633L32.9153 524.616L65.0642 495.234V495.242Z"
-              stroke="url(#paint0_linear_106061_999)"
-              strokeMiterlimit="10"
-            />
-            <path
-              d="M51.1599 420.004V434.76H65.8317L65.8317 447.607H51.1599L51.1599 493.782H39.4224L1.27563 448.117L1.27563 434.76H39.4224V420.004H51.1599ZM39.4224 447.607H16.1983L39.4224 477.118L39.4224 447.607Z"
-              stroke="url(#paint1_linear_106061_999)"
-              strokeMiterlimit="10"
-            />
-            <path
-              d="M65.1152 327.693V340.441H19.0445L41.692 367.777L19.0445 395.365H65.1152V407.743H1.48975L1.48975 394.994L25.031 367.777L1.48975 340.189L1.48975 327.676H65.1152V327.693Z"
-              stroke="url(#paint2_linear_106061_999)"
-              strokeWidth="0.75"
-              strokeMiterlimit="10"
-            />
-            <path
-              d="M65.1152 227.323L65.1152 240.932L51.2367 248.909L51.2367 288.639L65.1152 296.244V310.342L1.48975 275.89L1.48975 262.281L65.1152 227.34V227.323ZM39.6684 255.283L13.8337 269.01L39.6684 282.618V255.283Z"
-              stroke="url(#paint3_linear_106061_999)"
-              strokeWidth="0.75"
-              strokeMiterlimit="10"
-            />
-            <path
-              d="M13.0758 165.147L13.0758 192.112H65.133V206.463H13.0758L13.0758 233.309H1.74365L1.74365 165.147H13.0758Z"
-              stroke="url(#paint4_linear_106061_999)"
-              strokeWidth="0.75"
-              strokeMiterlimit="10"
-            />
-            <path
-              d="M48.874 86.9351C54.8099 86.9351 58.8065 88.0144 60.8301 90.1898C62.8706 92.3651 63.8824 96.3449 63.8824 102.146L63.8824 138.554C63.8824 144.355 62.8706 148.335 60.8301 150.51C58.7896 152.669 54.8099 153.765 48.874 153.765H15.4002C9.54862 153.765 5.58574 152.685 3.49468 150.51C1.42049 148.352 0.375 144.355 0.375 138.554L0.375 102.146C0.459317 92.3315 3.98372 87.2724 10.9314 86.952H20.2232V101.168H11.6903L11.6903 139.549H51.9094L51.9094 101.168H42.6177V86.952H48.8572L48.874 86.9351Z"
-              stroke="url(#paint5_linear_106061_999)"
-              strokeWidth="0.75"
-              strokeMiterlimit="10"
-            />
-            <path
-              d="M65.1157 0.374945V14.7256H39.0281L39.0281 57.997H65.1157V72.2129L1.60828 72.2129L1.60828 57.997H26.1782L26.1782 14.7256H1.60828L1.60828 0.374945L65.1157 0.374945Z"
-              stroke="url(#paint6_linear_106061_999)"
-              strokeWidth="0.75"
-              strokeMiterlimit="10"
-            />
-            <defs>
-              <linearGradient
-                id="paint0_linear_106061_999"
-                x1="33.2954"
-                y1="495.234"
-                x2="33.2954"
-                y2="573.466"
-                gradientUnits="userSpaceOnUse"
-              >
-                <stop stopColor="white" />
-                <stop offset="1" stopColor="#2C2A2A" />
-              </linearGradient>
-              <linearGradient
-                id="paint1_linear_106061_999"
-                x1="33.5537"
-                y1="420.004"
-                x2="33.5537"
-                y2="493.782"
-                gradientUnits="userSpaceOnUse"
-              >
-                <stop stopColor="white" />
-                <stop offset="1" stopColor="#2C2A2A" />
-              </linearGradient>
-              <linearGradient
-                id="paint2_linear_106061_999"
-                x1="33.3025"
-                y1="407.743"
-                x2="33.3025"
-                y2="327.676"
-                gradientUnits="userSpaceOnUse"
-              >
-                <stop stopColor="#F3FF6D" />
-                <stop offset="1" stopColor="#3C4100" />
-              </linearGradient>
-              <linearGradient
-                id="paint3_linear_106061_999"
-                x1="33.3025"
-                y1="310.342"
-                x2="33.3025"
-                y2="227.323"
-                gradientUnits="userSpaceOnUse"
-              >
-                <stop stopColor="#F3FF6D" />
-                <stop offset="1" stopColor="#3C4100" />
-              </linearGradient>
-              <linearGradient
-                id="paint4_linear_106061_999"
-                x1="33.4383"
-                y1="233.309"
-                x2="33.4383"
-                y2="165.147"
-                gradientUnits="userSpaceOnUse"
-              >
-                <stop stopColor="#F3FF6D" />
-                <stop offset="1" stopColor="#3C4100" />
-              </linearGradient>
-              <linearGradient
-                id="paint5_linear_106061_999"
-                x1="32.1287"
-                y1="153.765"
-                x2="32.1287"
-                y2="86.9351"
-                gradientUnits="userSpaceOnUse"
-              >
-                <stop stopColor="#F3FF6D" />
-                <stop offset="1" stopColor="#3C4100" />
-              </linearGradient>
-              <linearGradient
-                id="paint6_linear_106061_999"
-                x1="33.362"
-                y1="72.2129"
-                x2="33.362"
-                y2="0.374947"
-                gradientUnits="userSpaceOnUse"
-              >
-                <stop stopColor="#F3FF6D" />
-                <stop offset="1" stopColor="#3C4100" />
-              </linearGradient>
-            </defs>
-          </svg>
-        </div>
-
-        <div className="relative z-10 mx-auto w-full max-w-md sm:pl-12">
+        <div className="relative z-10 mx-auto w-full max-w-md">
+          <AuthWordmark className="mb-10" />
           <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/90 sm:text-xs">
             Padel competitivo en Argentina
           </p>

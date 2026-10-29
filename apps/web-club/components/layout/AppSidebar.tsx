@@ -128,7 +128,7 @@ function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
   const router = useRouter();
 
   return (
-    <div className="flex h-full flex-col gap-6 p-4">
+    <div className="flex h-full min-h-0 flex-col gap-6 overflow-y-auto overscroll-contain p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
       <div className="flex items-start gap-3">
         <div
           className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary text-sm font-extrabold text-primary-foreground"
@@ -229,7 +229,7 @@ export function AppSidebar() {
               <Menu className="size-4" aria-hidden />
             </Button>
           </SheetTrigger>
-          <SheetContent side="left" className="w-72 border-sidebar-border bg-sidebar p-0">
+          <SheetContent side="left" className="w-72 border-sidebar-border bg-sidebar p-0 data-[side=left]:h-dvh">
             <SidebarBody onNavigate={() => setOpen(false)} />
           </SheetContent>
         </Sheet>
