@@ -13,6 +13,7 @@ import {
   OutreachStatsCard,
   outreachPublishMessage,
 } from '@/components/club/OutreachStatsCard';
+import { ClubDashboardCard } from '@/components/club/ClubDashboardCard';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -120,15 +121,6 @@ function GestionInner() {
       return res.data as Promotion[];
     },
     enabled: !!activeClubId,
-  });
-
-  const dashboardQuery = useQuery({
-    queryKey: ['club-dashboard', activeClubId],
-    queryFn: async () => {
-      const res = await api.get(`/clubs/${activeClubId}/dashboard`);
-      return res.data as Record<string, unknown>;
-    },
-    enabled: !!activeClubId && tab === 'stats',
   });
 
   const insightsQuery = useQuery({
@@ -877,19 +869,10 @@ function GestionInner() {
 
         <TabsContent value="stats" className="space-y-4 mt-4">
           <OutreachStatsCard clubId={activeClubId} radiusKm={slotOfferRadiusKm} enabled={tab === 'stats'} />
+          <ClubDashboardCard clubId={activeClubId} enabled={tab === 'stats'} />
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Dashboard operativo</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <pre className="overflow-auto rounded-xl bg-surface-0 p-4 text-xs text-muted-foreground">
-                {JSON.stringify(dashboardQuery.data || {}, null, 2)}
-              </pre>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Demand insights</CardTitle>
+              <CardTitle className="text-base">Sugerencias para llenar horarios</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
               {(insightsQuery.data?.valleys || []).map((v, i) => (

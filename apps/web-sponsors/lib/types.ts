@@ -75,6 +75,81 @@ export type StorefrontSponsor = {
     whatsappEnabled: boolean;
     whatsappPhone?: string | null;
   };
+  trust?: SponsorTrust;
+};
+
+export type SponsorTrust = {
+  verified: boolean;
+  suspended: boolean;
+  delivery_days: number;
+  rating_avg: number | null;
+  rating_count: number;
+  delivered_orders: number;
+  open_claims: number;
+};
+
+export type ShopClaimReason =
+  | 'NOT_RECEIVED'
+  | 'LATE_DELIVERY'
+  | 'NOT_AS_DESCRIBED'
+  | 'PAYMENT_NOT_ACKNOWLEDGED'
+  | 'NO_RESPONSE'
+  | 'SUSPECTED_SCAM'
+  | 'OTHER';
+
+export type ShopClaimStatus =
+  | 'OPEN'
+  | 'PARTNER_RESPONDED'
+  | 'RESOLVED_BUYER'
+  | 'RESOLVED_PARTNER'
+  | 'WITHDRAWN';
+
+export type ShopClaim = {
+  id: string;
+  reason: ShopClaimReason;
+  reason_label: string;
+  description: string;
+  status: ShopClaimStatus;
+  auto_created: boolean;
+  partner_response: string | null;
+  partner_responded_at: string | null;
+  resolution_note: string | null;
+  resolved_at: string | null;
+  created_at: string;
+};
+
+export type OrderProtection = {
+  payment_protected: boolean;
+  paid_at: string | null;
+  buyer_reported_paid_at: string | null;
+  delivery_deadline_at: string | null;
+  fulfilled_at: string | null;
+  tracking_note: string | null;
+  received_at: string | null;
+  claims: ShopClaim[];
+  review: { rating: number; comment: string | null; created_at: string } | null;
+  can_report_payment: boolean;
+  can_confirm_received: boolean;
+  can_open_claim: boolean;
+  can_review: boolean;
+};
+
+export type PartnerClaim = ShopClaim & {
+  order_id: string | null;
+  buyer_name: string | null;
+  buyer_email: string | null;
+  total: string | null;
+  order_status: string | null;
+  payment_method: string | null;
+  respond_before: string;
+};
+
+export const CLAIM_STATUS_LABELS: Record<ShopClaimStatus, string> = {
+  OPEN: 'Abierto',
+  PARTNER_RESPONDED: 'Respondido por la tienda',
+  RESOLVED_BUYER: 'Resuelto a favor del comprador',
+  RESOLVED_PARTNER: 'Resuelto a favor de la tienda',
+  WITHDRAWN: 'Cerrado por el comprador',
 };
 
 export type StorefrontProduct = {

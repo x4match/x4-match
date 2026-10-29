@@ -22,7 +22,14 @@ export default function PartnerDetailPage() {
     queryKey: ['platform-sponsor-orders', id],
     queryFn: async () => (await api.get(`/platform/shop/sponsors/${id}/orders`)).data,
   });
+  const claimsQ = useQuery({
+    queryKey: ['platform-shop-claims'],
+    queryFn: async () => (await api.get('/platform/shop/claims')).data,
+  });
   const sponsor = (sponsorsQ.data || []).find((s: any) => s.id === id);
+  const sponsorClaims = (claimsQ.data || []).filter((c: any) => c.sponsor_id === id);
+  const [resolutionNotes, setResolutionNotes] = useState<Record<string, string>>({});
+  const [deliveryDays, setDeliveryDays] = useState('');
   const [domain, setDomain] = useState('');
   const [name, setName] = useState('');
   const [catalogMode, setCatalogMode] = useState<'NATIVE' | 'EXTERNAL_LINK'>('NATIVE');
@@ -78,6 +85,30 @@ export default function PartnerDetailPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['platform-sponsors'] });
       router.push('/partners');
+    },
+  });
+
+  const updateTrust = useMutation({
+    mutationFn: async (body: {
+      verified?: boolean;
+      suspended?: boolean;
+      suspensionReason?: string;
+      deliveryDays?: number;
+    }) => api.patch(`/platform/shop/sponsors/${id}/trust`, body),
+    meta: { successMessage: 'Confianza de la tienda actualizada.' },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['platform-sponsors'] }),
+  });
+
+  const resolveClaim = useMutation({
+    mutationFn: async ({ claimId, status }: { claimId: string; status: string }) =>
+      api.patch(`/platform/shop/claims/${claimId}`, {
+        status,
+        resolutionNote: resolutionNotes[claimId]?.trim() || undefined,
+      }),
+    meta: { successMessage: 'Reclamo resuelto.' },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['platform-shop-claims'] });
+      qc.invalidateQueries({ queryKey: ['platform-sponsors'] });
     },
   });
 
@@ -203,6 +234,149 @@ export default function PartnerDetailPage() {
             </a>
           ) : null}
         </div>
+      </div>
+
+      <div className="card" style={{ marginTop: 16 }}>
+        <h3 style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          Confianza y reclamos
+          {sponsor.verified ? <span className="badge badge-success">Verificada</span> : null}
+          {sponsor.suspended_at ? <span className="badge badge-warning">Suspendida</span> : null}
+        </h3>
+        <p style={{ color: 'var(--muted)', marginTop: 0 }}>
+          Verificá solo partners con identidad y cuenta bancaria comprobadas. Una tienda suspendida
+          desaparece del Shop de la app y no puede recibir pedidos. Se suspende sola si acumula
+          reclamos sin responder en 72 h o reclamos perdidos.
+        </p>
+        {sponsor.suspension_reason ? (
+          <p style={{ color: 'var(--warning)' }}>{sponsor.suspension_reason}</p>
+        ) : null}
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
+          <button
+            className={sponsor.verified ? 'btn btn-outline' : 'btn btn-primary'}
+            type="button"
+            disabled={updateTrust.isPending}
+            onClick={() => updateTrust.mutate({ verified: !sponsor.verified })}
+          >
+            {sponsor.verified ? 'Quitar verificación' : 'Marcar verificada'}
+          </button>
+          {sponsor.suspended_at ? (
+            <button
+              className="btn btn-primary"
+              type="button"
+              disabled={updateTrust.isPending}
+              onClick={() => updateTrust.mutate({ suspended: false })}
+            >
+              Levantar suspensión
+            </button>
+          ) : (
+            <button
+              className="btn btn-danger"
+              type="button"
+              disabled={updateTrust.isPending}
+              onClick={() => {
+                const reason = window.prompt('Motivo de la suspensión (lo ve el partner)');
+                if (reason?.trim()) updateTrust.mutate({ suspended: true, suspensionReason: reason });
+              }}
+            >
+              Suspender
+            </button>
+          )}
+        </div>
+        <form
+          onSubmit={(e: FormEvent) => {
+            e.preventDefault();
+            const days = Number(deliveryDays);
+            if (days >= 1 && days <= 60) updateTrust.mutate({ deliveryDays: days });
+          }}
+          style={{ display: 'flex', gap: 8, marginTop: 12, alignItems: 'center', flexWrap: 'wrap' }}
+        >
+          <label htmlFor="delivery-days">Plazo de entrega (días)</label>
+          <input
+            id="delivery-days"
+            className="input"
+            style={{ width: 100 }}
+            type="number"
+            min={1}
+            max={60}
+            placeholder={String(sponsor.delivery_days ?? 10)}
+            value={deliveryDays}
+            onChange={(e) => setDeliveryDays(e.target.value)}
+          />
+          <button className="btn btn-outline" type="submit" disabled={updateTrust.isPending}>
+            Guardar plazo
+          </button>
+        </form>
+
+        <h4 style={{ marginTop: 20 }}>Reclamos ({sponsorClaims.length})</h4>
+        {sponsorClaims.length === 0 ? (
+          <p style={{ color: 'var(--muted)' }}>Sin reclamos.</p>
+        ) : (
+          <div style={{ display: 'grid', gap: 12 }}>
+            {sponsorClaims.map((c: any) => {
+              const active = c.status === 'OPEN' || c.status === 'PARTNER_RESPONDED';
+              return (
+                <div
+                  key={c.id}
+                  style={{ border: '1px solid var(--border)', borderRadius: 12, padding: 12 }}
+                >
+                  <p style={{ margin: 0 }}>
+                    <strong>{c.reason_label}</strong> · {c.status}
+                    {c.auto_created ? ' · automático' : ''}
+                    {c.order_id ? ` · pedido #${String(c.order_id).slice(0, 8).toUpperCase()}` : ' · reporte app'}
+                    {c.total ? ` · $${Number(c.total).toLocaleString('es-AR')}` : ''}
+                    {c.payment_method ? ` · ${c.payment_method}` : ''}
+                  </p>
+                  <p style={{ margin: '6px 0', color: 'var(--muted)' }}>
+                    {new Date(c.created_at).toLocaleString('es-AR', {
+                      timeZone: 'America/Buenos_Aires',
+                    })}
+                    {c.buyer_email ? ` · ${c.buyer_email}` : ''}
+                  </p>
+                  <p style={{ margin: '6px 0' }}>{c.description}</p>
+                  {c.partner_response ? (
+                    <p style={{ margin: '6px 0' }}>
+                      <em>Partner:</em> {c.partner_response}
+                    </p>
+                  ) : null}
+                  {c.resolution_note ? (
+                    <p style={{ margin: '6px 0', color: 'var(--muted)' }}>{c.resolution_note}</p>
+                  ) : null}
+                  {active ? (
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
+                      <input
+                        className="input"
+                        style={{ flex: 1, width: 'auto', minWidth: 220 }}
+                        placeholder="Nota de resolución (le llega al comprador)"
+                        value={resolutionNotes[c.id] ?? ''}
+                        onChange={(e) =>
+                          setResolutionNotes((n) => ({ ...n, [c.id]: e.target.value }))
+                        }
+                      />
+                      <button
+                        className="btn btn-danger"
+                        type="button"
+                        disabled={resolveClaim.isPending}
+                        onClick={() => resolveClaim.mutate({ claimId: c.id, status: 'RESOLVED_BUYER' })}
+                      >
+                        A favor del comprador
+                      </button>
+                      <button
+                        className="btn btn-outline"
+                        type="button"
+                        disabled={resolveClaim.isPending}
+                        onClick={() =>
+                          resolveClaim.mutate({ claimId: c.id, status: 'RESOLVED_PARTNER' })
+                        }
+                      >
+                        A favor de la tienda
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <div className="card" style={{ marginTop: 16 }}>

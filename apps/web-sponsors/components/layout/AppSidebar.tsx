@@ -12,6 +12,7 @@ import {
   Package,
   Palette,
   Percent,
+  ShieldAlert,
   ShoppingBag,
   Truck,
 } from 'lucide-react';
@@ -34,6 +35,7 @@ export const NAV_GROUPS = [
       { href: '/dashboard/envios', label: 'Envíos', icon: Truck },
       { href: '/dashboard/pagos', label: 'Pagos', icon: CreditCard },
       { href: '/dashboard/pedidos', label: 'Pedidos', icon: ShoppingBag },
+      { href: '/dashboard/reclamos', label: 'Reclamos', icon: ShieldAlert },
     ],
   },
   {

@@ -81,7 +81,12 @@ export function StorefrontHeader({
             )}
             <div>
               <p className="font-extrabold leading-tight tracking-tight">{name}</p>
-              <p className="text-xs text-muted-foreground">Tienda oficial</p>
+              <p className="text-xs text-muted-foreground">
+                {sponsor?.trust?.verified ? 'Verificada por x4 match' : 'Tienda partner'}
+                {sponsor?.trust?.rating_count
+                  ? ` · ★ ${sponsor.trust.rating_avg} (${sponsor.trust.rating_count})`
+                  : ''}
+              </p>
             </div>
           </Link>
 

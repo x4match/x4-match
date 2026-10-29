@@ -7,6 +7,7 @@ import { api } from '@/lib/api';
 import { useSponsor } from '@/contexts/SponsorContext';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -30,7 +31,16 @@ type Order = {
   total: number | string;
   status: string;
   payment_method?: string;
+  buyer_reported_paid_at?: string | null;
+  delivery_deadline_at?: string | null;
+  received_at?: string | null;
+  tracking_note?: string | null;
+  has_open_claim?: boolean;
 };
+
+function shortDate(value?: string | null) {
+  return value ? new Date(value).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' }) : '';
+}
 
 function statusTone(status: string): 'neutral' | 'success' | 'warning' | 'danger' {
   if (status === 'PAID' || status === 'FULFILLED') return 'success';
@@ -43,6 +53,7 @@ export default function PedidosPage() {
   const { activeSponsorId } = useSponsor();
   const qc = useQueryClient();
   const [selected, setSelected] = useState<Order | null>(null);
+  const [trackingNote, setTrackingNote] = useState('');
   const listQ = useQuery({
     queryKey: ['partner-orders', activeSponsorId],
     queryFn: async () => (await api.get(`/sponsors/me/${activeSponsorId}/orders`)).data,
@@ -50,13 +61,30 @@ export default function PedidosPage() {
   });
 
   const update = useMutation({
-    mutationFn: async ({ id, status }: { id: string; status: string }) =>
-      api.patch(`/sponsors/me/${activeSponsorId}/orders/${id}/status`, { status }),
+    mutationFn: async ({
+      id,
+      status,
+      trackingNote,
+    }: {
+      id: string;
+      status: string;
+      trackingNote?: string;
+    }) =>
+      api.patch(`/sponsors/me/${activeSponsorId}/orders/${id}/status`, {
+        status,
+        trackingNote: trackingNote?.trim() || undefined,
+      }),
     onSuccess: () => {
       toast.success('Pedido actualizado');
+      setSelected(null);
+      setTrackingNote('');
       qc.invalidateQueries({ queryKey: ['partner-orders', activeSponsorId] });
     },
-    onError: () => toast.error('No se pudo actualizar el pedido'),
+    onError: (err: unknown) =>
+      toast.error(
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+          'No se pudo actualizar el pedido',
+      ),
   });
 
   const orders = (listQ.data || []) as Order[];
@@ -85,7 +113,33 @@ export default function PedidosPage() {
     {
       key: 'status',
       header: 'Estado',
-      cell: (o) => <StatusPill tone={statusTone(o.status)}>{o.status}</StatusPill>,
+      cell: (o) => (
+        <div className="flex flex-col items-start gap-1">
+          <StatusPill tone={statusTone(o.status)}>{o.status}</StatusPill>
+          {o.has_open_claim ? <StatusPill tone="danger">Reclamo abierto</StatusPill> : null}
+          {o.status === 'AWAITING_MANUAL_PAYMENT' && o.buyer_reported_paid_at ? (
+            <span className="text-xs text-amber-700">Cliente avisó que pagó</span>
+          ) : null}
+        </div>
+      ),
+    },
+    {
+      key: 'deadline',
+      header: 'Entregar antes de',
+      cell: (o) =>
+        o.received_at ? (
+          <span className="text-xs text-emerald-700">Recibido</span>
+        ) : o.delivery_deadline_at ? (
+          <span
+            className={
+              new Date(o.delivery_deadline_at) < new Date() ? 'font-semibold text-destructive' : ''
+            }
+          >
+            {shortDate(o.delivery_deadline_at)}
+          </span>
+        ) : (
+          '—'
+        ),
     },
     {
       key: 'actions',
@@ -131,7 +185,7 @@ export default function PedidosPage() {
     <PageShell
       kicker="Ventas"
       title="Pedidos"
-      description="Confirmá pagos y marcá pedidos como cumplidos."
+      description="Confirmá pagos y marcá pedidos como enviados antes del plazo. Si vence sin envío, se abre un reclamo automático."
       variant="table"
     >
       <DataTable
@@ -162,6 +216,28 @@ export default function PedidosPage() {
                 <span className="text-muted-foreground">Método</span>
                 <span>{selected.payment_method || '—'}</span>
               </div>
+              {selected.delivery_deadline_at && !selected.received_at ? (
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Entregar antes de</span>
+                  <span>{shortDate(selected.delivery_deadline_at)}</span>
+                </div>
+              ) : null}
+              {selected.has_open_claim ? (
+                <p className="rounded-lg bg-destructive/10 p-2 text-sm text-destructive">
+                  Este pedido tiene un reclamo abierto. Respondelo desde Reclamos.
+                </p>
+              ) : null}
+              <div className="space-y-2">
+                <label htmlFor="tracking" className="text-sm text-muted-foreground">
+                  Seguimiento del envío (lo ve el cliente)
+                </label>
+                <Input
+                  id="tracking"
+                  value={trackingNote}
+                  placeholder={selected.tracking_note || 'Ej: Correo Argentino CP123456789AR'}
+                  onChange={(e) => setTrackingNote(e.target.value)}
+                />
+              </div>
               <div className="flex flex-col gap-2 pt-4">
                 {selected.status === 'AWAITING_MANUAL_PAYMENT' ? (
                   <Button
@@ -176,9 +252,11 @@ export default function PedidosPage() {
                   variant="outline"
                   className="min-h-11"
                   disabled={update.isPending}
-                  onClick={() => update.mutate({ id: selected.id, status: 'FULFILLED' })}
+                  onClick={() =>
+                    update.mutate({ id: selected.id, status: 'FULFILLED', trackingNote })
+                  }
                 >
-                  Cumplido
+                  Marcar enviado / entregado
                 </Button>
                 <Button
                   variant="ghost"

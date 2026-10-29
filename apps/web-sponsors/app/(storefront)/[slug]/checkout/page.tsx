@@ -3,7 +3,12 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { checkoutSponsor, fetchSponsorBySlug, quoteShipping } from '@/lib/storefront-api';
+import {
+  checkoutSponsor,
+  fetchSponsorBySlug,
+  quoteShipping,
+  rememberOrderEmail,
+} from '@/lib/storefront-api';
 import { cartSubtotal, clearCart, getCart } from '@/lib/cart';
 import { formatMoney, type CartItem } from '@/lib/types';
 import { toast } from 'sonner';
@@ -24,6 +29,7 @@ export default function CheckoutPage() {
   const [coupon, setCoupon] = useState('');
   const [shippingMethodId, setShippingMethodId] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'MERCADOPAGO' | 'WHATSAPP'>('WHATSAPP');
+  const [manualRiskAccepted, setManualRiskAccepted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -31,6 +37,7 @@ export default function CheckoutPage() {
   const color = sponsor?.primary_color || sponsor?.primaryColor || '#03ac0e';
   const subtotal = cartSubtotal(items);
   const pay = sponsor?.payment_options;
+  const suspended = Boolean(sponsor?.trust?.suspended);
 
   useEffect(() => {
     if (!sponsor?.id) return;
@@ -62,6 +69,10 @@ export default function CheckoutPage() {
       toast.error('Esta tienda todavía no acepta pagos');
       return;
     }
+    if (paymentMethod === 'WHATSAPP' && !manualRiskAccepted) {
+      setError('Confirmá que entendés cómo funciona el pago manual');
+      return;
+    }
     setLoading(true);
     try {
       const order = await checkoutSponsor(slug, {
@@ -76,6 +87,7 @@ export default function CheckoutPage() {
         guestPhone: phone || undefined,
       });
       clearCart(sponsor.id);
+      rememberOrderEmail(order.id, email);
       if (order.checkoutUrl) {
         window.location.href = order.checkoutUrl;
         return;
@@ -93,6 +105,14 @@ export default function CheckoutPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  if (suspended) {
+    return (
+      <div className="mx-auto max-w-2xl px-4 py-12 text-center text-muted-foreground">
+        Esta tienda está suspendida temporalmente en Shop x4 y no puede recibir pedidos.
+      </div>
+    );
   }
 
   if (!items.length) {
@@ -211,7 +231,12 @@ export default function CheckoutPage() {
               checked={paymentMethod === 'MERCADOPAGO'}
               onChange={() => setPaymentMethod('MERCADOPAGO')}
             />
-            Mercado Pago
+            <span>
+              Mercado Pago
+              <span className="block text-xs text-emerald-700">
+                Compra protegida: si no recibís el pedido, abrís un reclamo desde tu pedido.
+              </span>
+            </span>
           </label>
         ) : null}
         {pay?.whatsappEnabled ? (
@@ -223,6 +248,26 @@ export default function CheckoutPage() {
             />
             WhatsApp (pago manual)
           </label>
+        ) : null}
+        {paymentMethod === 'WHATSAPP' && pay?.whatsappEnabled ? (
+          <div className="space-y-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
+            <p className="font-semibold">El pago manual no pasa por x4 match</p>
+            <p>
+              Le transferís directo a la tienda. Pagá solo a la cuenta que te indique el chat de la
+              tienda, guardá el comprobante y, después de pagar, tocá &quot;Ya pagué&quot; en tu
+              pedido. Si la tienda no lo confirma en 48 h o no te envía el pedido en{' '}
+              {sponsor?.trust?.delivery_days ?? 10} días, se abre un reclamo automático.
+            </p>
+            <label className="flex cursor-pointer items-start gap-2">
+              <input
+                type="checkbox"
+                className="mt-1"
+                checked={manualRiskAccepted}
+                onChange={(e) => setManualRiskAccepted(e.target.checked)}
+              />
+              Entiendo que este pago no tiene la protección de Mercado Pago.
+            </label>
+          </div>
         ) : null}
         {!pay?.mpEnabled && !pay?.whatsappEnabled ? (
           <p className="text-sm text-destructive">La tienda no tiene métodos de pago configurados.</p>

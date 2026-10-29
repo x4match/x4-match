@@ -29,7 +29,7 @@ function percent(part: number, total: number) {
   return total > 0 ? `${Math.round((part / total) * 100)}%` : '–';
 }
 
-function Metric({ label, value, hint }: { label: string; value: string | number; hint?: string }) {
+export function Metric({ label, value, hint }: { label: string; value: string | number; hint?: string }) {
   return (
     <div className="rounded-xl bg-surface-0 p-4">
       <p className="text-xs text-muted-foreground">{label}</p>

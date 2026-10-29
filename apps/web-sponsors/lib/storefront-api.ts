@@ -1,6 +1,8 @@
 import { api } from './api';
 import type { CheckoutPayload, ShippingQuote } from './checkout-types';
 import type {
+  OrderProtection,
+  ShopClaimReason,
   StorefrontCategory,
   StorefrontCustomer,
   StorefrontOrder,
@@ -51,6 +53,75 @@ export async function checkoutSponsor(slug: string, body: CheckoutPayload) {
 export async function fetchOrder(slug: string, orderId: string) {
   const res = await api.get(`/sponsors/${slug}/orders/${orderId}`);
   return res.data;
+}
+
+export type BuyerOrderAction = 'payment-reported' | 'received';
+
+export async function postBuyerOrderAction(
+  slug: string,
+  orderId: string,
+  action: BuyerOrderAction,
+  email: string,
+) {
+  const res = await api.post(`/sponsors/${slug}/orders/${orderId}/${action}`, { email });
+  return res.data as OrderProtection;
+}
+
+export async function openOrderClaim(
+  slug: string,
+  orderId: string,
+  body: { email: string; reason: ShopClaimReason; description: string },
+) {
+  const res = await api.post(`/sponsors/${slug}/orders/${orderId}/claims`, body);
+  return res.data as OrderProtection;
+}
+
+export async function withdrawOrderClaim(
+  slug: string,
+  orderId: string,
+  claimId: string,
+  email: string,
+) {
+  const res = await api.post(`/sponsors/${slug}/orders/${orderId}/claims/${claimId}/withdraw`, {
+    email,
+  });
+  return res.data as OrderProtection;
+}
+
+export async function reviewOrder(
+  slug: string,
+  orderId: string,
+  body: { email: string; rating: number; comment?: string },
+) {
+  const res = await api.post(`/sponsors/${slug}/orders/${orderId}/review`, body);
+  return res.data as OrderProtection;
+}
+
+export async function fetchSponsorReviews(slug: string) {
+  const res = await api.get(`/sponsors/${slug}/reviews`);
+  return res.data as {
+    count: number;
+    average: number | null;
+    reviews: Array<{
+      id: string;
+      author_name: string | null;
+      rating: number;
+      comment: string | null;
+      created_at: string;
+    }>;
+  };
+}
+
+const orderEmailKey = (orderId: string) => `sponsor_order_email_${orderId}`;
+
+export function rememberOrderEmail(orderId: string, email: string) {
+  if (typeof window === 'undefined' || !email.trim()) return;
+  localStorage.setItem(orderEmailKey(orderId), email.trim().toLowerCase());
+}
+
+export function getRememberedOrderEmail(orderId: string): string {
+  if (typeof window === 'undefined') return '';
+  return localStorage.getItem(orderEmailKey(orderId)) ?? '';
 }
 
 export async function registerStorefrontCustomer(

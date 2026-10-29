@@ -146,6 +146,12 @@ export default function PartnersPage() {
                     <span className={`badge ${s.active === false ? 'badge-warning' : 'badge-success'}`}>
                       {s.active === false ? 'Pausada' : 'Activa'}
                     </span>
+                    {s.suspended_at ? <span className="badge badge-warning">Suspendida</span> : null}
+                    {s.open_claims > 0 ? (
+                      <span className="badge badge-warning">
+                        {s.open_claims} reclamo{s.open_claims === 1 ? '' : 's'}
+                      </span>
+                    ) : null}
                   </td>
                   <td>{s.slug}</td>
                   <td>
