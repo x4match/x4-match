@@ -1,4 +1,8 @@
-import { categoryForType, resolvePreferences } from './notification-categories';
+import {
+  categoryForType,
+  resolveNearbyMatchCategories,
+  resolvePreferences,
+} from './notification-categories';
 
 describe('categoryForType', () => {
   it.each([
@@ -16,6 +20,7 @@ describe('categoryForType', () => {
     ['COURT_SLOT_AVAILABLE', 'club_offers'],
     ['COURT_GAP_OFFER', 'club_offers'],
     ['OPEN_MATCH_CREATED', 'club_offers'],
+    ['NEARBY_MATCH_CREATED', 'nearby_matches'],
     ['CLUB_SEGMENT_CAMPAIGN', 'club_offers'],
     ['BADGE_EARNED', 'achievements'],
     ['RANKING_OVERTAKEN', 'achievements'],
@@ -34,6 +39,7 @@ describe('resolvePreferences', () => {
   it('activa por defecto las categorías ausentes', () => {
     expect(resolvePreferences({ chat: false, unknown: false })).toEqual({
       matches: true,
+      nearby_matches: true,
       chat: false,
       tournaments: true,
       social: true,
@@ -41,5 +47,14 @@ describe('resolvePreferences', () => {
       achievements: true,
     });
     expect(resolvePreferences(null).club_offers).toBe(true);
+  });
+});
+
+describe('resolveNearbyMatchCategories', () => {
+  it('descarta valores inválidos y respeta el orden de categorías', () => {
+    expect(
+      resolveNearbyMatchCategories({ nearby_match_categories: ['6ta', 'foo', '4ta', 5] }),
+    ).toEqual(['4ta', '6ta']);
+    expect(resolveNearbyMatchCategories({})).toEqual([]);
   });
 });

@@ -4,8 +4,11 @@ import { DatabaseService } from '../database/database.service';
 import {
   NOTIFICATION_CATEGORIES,
   NotificationPreferences,
+  NotificationSettings,
   categoryForType,
+  resolveNearbyMatchCategories,
   resolvePreferences,
+  resolveSettings,
 } from './notification-categories';
 
 type PushPlatform = 'ios' | 'android';
@@ -255,22 +258,27 @@ export class NotificationsService {
     return { ok: true };
   }
 
-  async getPreferences(userId: string): Promise<NotificationPreferences> {
+  async getPreferences(userId: string): Promise<NotificationSettings> {
     const result = await this.db.query<{ preferences: unknown }>(
       `SELECT preferences FROM user_notification_preferences WHERE user_id = $1`,
       [userId],
     );
-    return resolvePreferences(result.rows[0]?.preferences);
+    return resolveSettings(result.rows[0]?.preferences);
   }
 
   async updatePreferences(
     userId: string,
-    changes: Partial<NotificationPreferences>,
-  ): Promise<NotificationPreferences> {
+    changes: Partial<NotificationPreferences> & { nearby_match_categories?: string[] },
+  ): Promise<NotificationSettings> {
     const current = await this.getPreferences(userId);
-    const next = { ...current };
+    const next: NotificationSettings = { ...current };
     for (const category of NOTIFICATION_CATEGORIES) {
       if (typeof changes[category] === 'boolean') next[category] = changes[category] as boolean;
+    }
+    if (Array.isArray(changes.nearby_match_categories)) {
+      next.nearby_match_categories = resolveNearbyMatchCategories({
+        nearby_match_categories: changes.nearby_match_categories,
+      });
     }
     await this.db.query(
       `INSERT INTO user_notification_preferences (user_id, preferences)

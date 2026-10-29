@@ -3,6 +3,7 @@ import {
   ForbiddenException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
   forwardRef,
 } from '@nestjs/common';
@@ -36,6 +37,7 @@ import type { PaymentsService } from '../payments/payments.service';
 import { parseBestOfThreeSets } from '../common/utils/match-result.util';
 import { computeMatchRatingChanges, splitParticipantsByTeam } from '../rating/engine';
 import { ReportsService } from '../reports/reports.service';
+import { MatchNearbyAlertService } from './match-nearby-alert.service';
 // Import circular con MatchLiveScoreService: ver nota en match-live-score.service.ts.
 import * as liveScoreServiceModule from './live-score/match-live-score.service';
 import type { MatchLiveScoreService } from './live-score/match-live-score.service';
@@ -54,6 +56,7 @@ export class MatchesService {
     private readonly badgesService: BadgesService,
     private readonly challengesService: ChallengesService,
     private readonly reportsService: ReportsService,
+    private readonly nearbyAlerts: MatchNearbyAlertService,
     @Inject(PAYMENTS_SERVICE)
     private readonly paymentsService: PaymentsService,
     @Inject(forwardRef(() => liveScoreServiceModule.MatchLiveScoreService))
@@ -185,6 +188,11 @@ export class MatchesService {
     await this.matchesRepository.createMatchChatIfMissing(match.id);
     const detail = await this.matchesRepository.getDetail(match.id);
     this.realtimeGateway.emitMatchUpdated(detail);
+    void this.nearbyAlerts
+      .notifyNearbyPlayers(match.id, userId)
+      .catch((error: Error) =>
+        Logger.warn(`Aviso de partido cercano falló: ${error.message}`, MatchesService.name),
+      );
     return detail;
   }
 

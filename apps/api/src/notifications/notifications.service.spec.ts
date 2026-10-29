@@ -194,18 +194,22 @@ describe('NotificationsService', () => {
 
   it('guarda preferencias combinando con las actuales', async () => {
     query
-      .mockResolvedValueOnce({ rows: [{ preferences: { chat: false } }] })
+      .mockResolvedValueOnce({
+        rows: [{ preferences: { chat: false, nearby_match_categories: ['5ta'] } }],
+      })
       .mockResolvedValueOnce({ rows: [] });
 
     const result = await service.updatePreferences('user-1', { club_offers: false });
 
     expect(result).toEqual({
       matches: true,
+      nearby_matches: true,
       chat: false,
       tournaments: true,
       social: true,
       club_offers: false,
       achievements: true,
+      nearby_match_categories: ['5ta'],
     });
     expect(JSON.parse(query.mock.calls[1][1][1])).toEqual(result);
   });

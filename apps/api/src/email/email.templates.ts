@@ -8,6 +8,14 @@ type TemplateMap = {
   passwordResetCode: { name: string; code: string; expiresInMinutes: number };
   passwordChanged: { name: string };
   accountDeleted: { name: string };
+  shopOrderNotice: {
+    subject: string;
+    title: string;
+    paragraphs: string[];
+    ctaLabel?: string;
+    ctaUrl?: string;
+    note?: string;
+  };
 };
 
 export type EmailTemplate = keyof TemplateMap;
@@ -249,6 +257,20 @@ const renderers: { [K in EmailTemplate]: (data: TemplateMap[K]) => Rendered } = 
       ],
     }),
     text: `Hola ${firstName(name)}, eliminamos tu cuenta de x4 match. Gracias por haber jugado con nosotros.`,
+  }),
+
+  shopOrderNotice: ({ subject, title, paragraphs, ctaLabel, ctaUrl, note }) => ({
+    subject,
+    html: layout({
+      title: escapeHtml(title),
+      preheader: escapeHtml(paragraphs[0] ?? title),
+      paragraphs: paragraphs.map(escapeHtml),
+      cta: ctaLabel && ctaUrl ? { label: escapeHtml(ctaLabel), url: ctaUrl } : undefined,
+      note: note ? escapeHtml(note) : undefined,
+    }),
+    text: [title, ...paragraphs, ctaUrl ? `${ctaLabel ?? 'Ver'}: ${ctaUrl}` : '', note ?? '']
+      .filter(Boolean)
+      .join('\n\n'),
   }),
 };
 

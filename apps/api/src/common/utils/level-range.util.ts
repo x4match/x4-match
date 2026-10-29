@@ -3,6 +3,18 @@ const CATEGORY_ORDER = ['1ra', '2da', '3ra', '4ta', '5ta', '6ta', '7ma', '8va'] 
 
 export type PlayerCategoryCode = (typeof CATEGORY_ORDER)[number];
 
+export const PLAYER_CATEGORY_CODES: readonly PlayerCategoryCode[] = CATEGORY_ORDER;
+
+/** Categorías cuyo rango de skill se superpone con el del partido. */
+export function categoriesForMatchLevel(
+  levelMin?: number | null,
+  levelMax?: number | null,
+): PlayerCategoryCode[] {
+  return CATEGORY_ORDER.filter((category) =>
+    categoryOverlapsMatchLevel(category, levelMin, levelMax),
+  );
+}
+
 /** Pasos de categoría permitidos al buscar / crear partidos (arriba y abajo). */
 export const CATEGORY_SEARCH_STEPS = 1;
 

@@ -605,4 +605,9 @@ export class UpdateWhatsappPaymentDto {
 export class UpdateOrderStatusDto {
   @IsIn(['PAID', 'FULFILLED', 'CANCELLED'])
   status: 'PAID' | 'FULFILLED' | 'CANCELLED';
+
+  /** Número de seguimiento o detalle del envío; lo ve el comprador en su pedido. */
+  @IsOptional()
+  @IsString()
+  trackingNote?: string;
 }

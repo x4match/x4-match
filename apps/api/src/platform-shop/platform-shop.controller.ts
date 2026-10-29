@@ -40,14 +40,37 @@ import {
   UpdateShippingMethodDto,
   UpdateWhatsappPaymentDto,
 } from './dto/platform-shop.dto';
+import {
+  AdminResolveClaimDto,
+  BuyerClaimDto,
+  BuyerIdentityDto,
+  BuyerReviewDto,
+  PartnerClaimResponseDto,
+  SponsorReportDto,
+  UpdateSponsorTrustDto,
+} from './dto/shop-protection.dto';
 import { PlatformShopService } from './platform-shop.service';
+import { ShopProtectionService } from './shop-protection.service';
 import { SponsorMemberGuard } from './sponsor-member.guard';
 import { SponsorPaymentsService } from './sponsor-payments.service';
 import { TiendaNubeCatalogService } from './tienda-nube-catalog.service';
 
 @Controller('shop')
 export class PlatformShopController {
-  constructor(private readonly platformShopService: PlatformShopService) {}
+  constructor(
+    private readonly platformShopService: PlatformShopService,
+    private readonly protection: ShopProtectionService,
+  ) {}
+
+  @Post('sponsors/:sponsorId/reports')
+  @UseGuards(JwtAuthGuard)
+  reportSponsor(
+    @CurrentUser() user: { sub: string },
+    @Param('sponsorId') sponsorId: string,
+    @Body() dto: SponsorReportDto,
+  ) {
+    return this.protection.reportSponsor(user.sub, sponsorId, dto);
+  }
 
   @Get('products')
   listProducts() {
@@ -83,6 +106,7 @@ export class SponsorsPublicController {
   constructor(
     private readonly shop: PlatformShopService,
     private readonly payments: SponsorPaymentsService,
+    private readonly protection: ShopProtectionService,
   ) {}
 
   @Get('resolve')
@@ -149,9 +173,49 @@ export class SponsorsPublicController {
     return this.shop.checkout(slug, dto);
   }
 
+  @Get(':slug/reviews')
+  reviews(@Param('slug') slug: string) {
+    return this.protection.listPublicReviews(slug);
+  }
+
   @Get(':slug/orders/:id')
-  order(@Param('slug') slug: string, @Param('id') id: string) {
-    return this.shop.getStoreOrder(slug, id);
+  async order(@Param('slug') slug: string, @Param('id') id: string) {
+    const order = await this.shop.getStoreOrder(slug, id);
+    return { ...order, protection: await this.protection.getOrderProtection(id) };
+  }
+
+  @Post(':slug/orders/:id/payment-reported')
+  reportPayment(
+    @Param('slug') slug: string,
+    @Param('id') id: string,
+    @Body() dto: BuyerIdentityDto,
+  ) {
+    return this.protection.reportManualPayment(slug, id, dto);
+  }
+
+  @Post(':slug/orders/:id/received')
+  received(@Param('slug') slug: string, @Param('id') id: string, @Body() dto: BuyerIdentityDto) {
+    return this.protection.confirmReceived(slug, id, dto);
+  }
+
+  @Post(':slug/orders/:id/claims')
+  openClaim(@Param('slug') slug: string, @Param('id') id: string, @Body() dto: BuyerClaimDto) {
+    return this.protection.openClaim(slug, id, dto);
+  }
+
+  @Post(':slug/orders/:id/claims/:claimId/withdraw')
+  withdrawClaim(
+    @Param('slug') slug: string,
+    @Param('id') id: string,
+    @Param('claimId') claimId: string,
+    @Body() dto: BuyerIdentityDto,
+  ) {
+    return this.protection.withdrawClaim(slug, id, claimId, dto);
+  }
+
+  @Post(':slug/orders/:id/review')
+  review(@Param('slug') slug: string, @Param('id') id: string, @Body() dto: BuyerReviewDto) {
+    return this.protection.createReview(slug, id, dto);
   }
 
   @Post(':slug/auth/register')
@@ -171,6 +235,7 @@ export class SponsorsPartnerController {
   constructor(
     private readonly shop: PlatformShopService,
     private readonly payments: SponsorPaymentsService,
+    private readonly protection: ShopProtectionService,
   ) {}
 
   @Get()
@@ -404,6 +469,25 @@ export class SponsorsPartnerController {
     );
   }
 
+  @Get(':sponsorId/claims')
+  claims(@CurrentUser() user: { sub: string }, @Param('sponsorId') sponsorId: string) {
+    return this.shop.assertMember(user.sub, sponsorId).then(() =>
+      this.protection.listPartnerClaims(sponsorId),
+    );
+  }
+
+  @Post(':sponsorId/claims/:claimId/respond')
+  respondClaim(
+    @CurrentUser() user: { sub: string },
+    @Param('sponsorId') sponsorId: string,
+    @Param('claimId') claimId: string,
+    @Body() dto: PartnerClaimResponseDto,
+  ) {
+    return this.shop.assertMember(user.sub, sponsorId).then(() =>
+      this.protection.respondClaim(sponsorId, claimId, dto),
+    );
+  }
+
   @Get(':sponsorId/payments/status')
   paymentStatus(@CurrentUser() user: { sub: string }, @Param('sponsorId') sponsorId: string) {
     return this.shop.assertMember(user.sub, sponsorId).then(() =>
@@ -468,7 +552,23 @@ export class PlatformShopAdminController {
   constructor(
     private readonly platformShopService: PlatformShopService,
     private readonly tiendaNubeCatalog: TiendaNubeCatalogService,
+    private readonly protection: ShopProtectionService,
   ) {}
+
+  @Get('claims')
+  listClaims(@Query('status') status?: string) {
+    return this.protection.listAllClaims(status || undefined);
+  }
+
+  @Patch('claims/:id')
+  resolveClaim(@Param('id') id: string, @Body() dto: AdminResolveClaimDto) {
+    return this.protection.resolveClaim(id, dto);
+  }
+
+  @Patch('sponsors/:id/trust')
+  updateTrust(@Param('id') id: string, @Body() dto: UpdateSponsorTrustDto) {
+    return this.protection.updateTrust(id, dto);
+  }
 
   @Get('products')
   listAllProducts() {

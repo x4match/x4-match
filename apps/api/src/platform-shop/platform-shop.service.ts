@@ -127,12 +127,21 @@ export class PlatformShopService {
               s.slug AS sponsor_slug, s.custom_domain, s.custom_domain_status,
               s.tagline AS sponsor_tagline, s.primary_color AS sponsor_primary_color,
               s.banner_url AS sponsor_banner_url, s.catalog_mode, s.external_store_url,
-              s.website_url AS sponsor_website_url
+              s.website_url AS sponsor_website_url,
+              COALESCE(s.verified, FALSE) AS sponsor_verified,
+              rv.rating_avg AS sponsor_rating_avg,
+              COALESCE(rv.rating_count, 0) AS sponsor_rating_count
        FROM platform_products p
        LEFT JOIN platform_sponsors s ON s.id = p.sponsor_id
        LEFT JOIN platform_sponsor_categories cat
          ON cat.id = p.category_id AND cat.active = TRUE
-       WHERE p.status = 'ACTIVE' AND (s.active IS NULL OR s.active = TRUE)
+       LEFT JOIN LATERAL (
+         SELECT ROUND(AVG(r.rating)::numeric, 1)::float8 AS rating_avg, COUNT(*)::int AS rating_count
+         FROM platform_sponsor_reviews r WHERE r.sponsor_id = s.id
+       ) rv ON TRUE
+       WHERE p.status = 'ACTIVE'
+         AND (s.active IS NULL OR s.active = TRUE)
+         AND s.suspended_at IS NULL
        ORDER BY p.sort_order ASC, p.name ASC`,
     );
     return result.rows.map((row) => {
@@ -325,10 +334,26 @@ export class PlatformShopService {
       ...sponsor
     } = result.rows[0];
     const pay = await this.payments.getPublicPaymentOptions(sponsor.id);
+    const trust = await this.db.query(
+      `SELECT
+         (SELECT ROUND(AVG(rating)::numeric, 1)::float8 FROM platform_sponsor_reviews WHERE sponsor_id = $1) AS rating_avg,
+         (SELECT COUNT(*)::int FROM platform_sponsor_reviews WHERE sponsor_id = $1) AS rating_count,
+         (SELECT COUNT(*)::int FROM platform_orders
+           WHERE sponsor_id = $1 AND received_at IS NOT NULL) AS delivered_orders,
+         (SELECT COUNT(*)::int FROM platform_shop_claims
+           WHERE sponsor_id = $1 AND status IN ('OPEN', 'PARTNER_RESPONDED')) AS open_claims`,
+      [sponsor.id],
+    );
     return {
       ...sponsor,
       store_url: this.storeUrl(sponsor),
       payment_options: pay,
+      trust: {
+        verified: Boolean(sponsor.verified),
+        suspended: sponsor.suspended_at != null,
+        delivery_days: sponsor.delivery_days,
+        ...trust.rows[0],
+      },
     };
   }
 
@@ -464,6 +489,11 @@ export class PlatformShopService {
 
   async checkout(slug: string, dto: SponsorCheckoutDto, customerId?: string) {
     const sponsor = await this.getSponsorBySlug(slug);
+    if (sponsor.suspended_at) {
+      throw new BadRequestException(
+        'Esta tienda está suspendida temporalmente en Shop x4 y no puede recibir pedidos.',
+      );
+    }
     if (sponsor.catalog_mode === 'EXTERNAL_LINK') {
       throw new BadRequestException(
         'Esta tienda vende en su propio sitio. Comprá desde el enlace de la tienda del partner.',
@@ -615,7 +645,7 @@ export class PlatformShopService {
     }
 
     const whatsappUrl = this.payments.buildWhatsappOrderUrl(sponsor, created, pay.whatsappPhone!);
-    return { ...created, checkoutUrl: null, whatsappUrl };
+    return { ...created, checkoutUrl: null, whatsappUrl, paymentProtected: false };
   }
 
   async getStoreOrder(slug: string, orderId: string) {
@@ -808,6 +838,9 @@ export class PlatformShopService {
               s.catalog_mode, s.external_store_url, s.tienda_nube_store_id,
               s.catalog_sync_enabled, s.catalog_synced_at, s.catalog_sync_error,
               s.catalog_sync_product_count,
+              s.verified, s.verified_at, s.suspended_at, s.suspension_reason, s.delivery_days,
+              (SELECT COUNT(*)::int FROM platform_shop_claims cl
+                WHERE cl.sponsor_id = s.id AND cl.status IN ('OPEN', 'PARTNER_RESPONDED')) AS open_claims,
               (s.tienda_nube_access_token_encrypted IS NOT NULL) AS tienda_nube_connected,
               (SELECT COUNT(*)::int FROM platform_products p WHERE p.sponsor_id = s.id) AS products_count,
               (SELECT COUNT(*)::int FROM platform_products p
@@ -1409,7 +1442,11 @@ export class PlatformShopService {
     const result = await this.db.query(
       `SELECT o.*,
               COALESCE(o.guest_name, c.name, u.name) AS buyer_name,
-              COALESCE(o.guest_email, c.email, u.email) AS buyer_email
+              COALESCE(o.guest_email, c.email, u.email) AS buyer_email,
+              EXISTS (
+                SELECT 1 FROM platform_shop_claims cl
+                WHERE cl.order_id = o.id AND cl.status IN ('OPEN', 'PARTNER_RESPONDED')
+              ) AS has_open_claim
        FROM platform_orders o
        LEFT JOIN platform_sponsor_customers c ON c.id = o.customer_id
        LEFT JOIN users u ON u.id = o.user_id
@@ -1422,18 +1459,34 @@ export class PlatformShopService {
   }
 
   async updateOrderStatus(sponsorId: string, orderId: string, dto: UpdateOrderStatusDto) {
+    const current = await this.db.query(
+      `SELECT received_at FROM platform_orders WHERE id = $1 AND sponsor_id = $2`,
+      [orderId, sponsorId],
+    );
+    if (current.rows[0]?.received_at && dto.status !== 'FULFILLED') {
+      throw new BadRequestException('El comprador ya confirmó que recibió este pedido');
+    }
     const result = await this.db.query(
-      `UPDATE platform_orders
+      `UPDATE platform_orders o
        SET status = $3::platform_order_status,
            payment_status = CASE
              WHEN $3 = 'PAID' THEN 'APPROVED'::payment_status
              WHEN $3 = 'CANCELLED' THEN 'REJECTED'::payment_status
-             ELSE payment_status
+             ELSE o.payment_status
            END,
+           paid_at = CASE WHEN $3 IN ('PAID', 'FULFILLED') THEN COALESCE(o.paid_at, NOW()) ELSE o.paid_at END,
+           delivery_deadline_at = CASE
+             WHEN $3 = 'PAID' AND o.paid_at IS NULL
+               THEN NOW() + make_interval(days => s.delivery_days::int)
+             ELSE o.delivery_deadline_at
+           END,
+           fulfilled_at = CASE WHEN $3 = 'FULFILLED' THEN COALESCE(o.fulfilled_at, NOW()) ELSE o.fulfilled_at END,
+           tracking_note = COALESCE($4, o.tracking_note),
            updated_at = NOW()
-       WHERE id = $1 AND sponsor_id = $2
-       RETURNING *`,
-      [orderId, sponsorId, dto.status],
+       FROM platform_sponsors s
+       WHERE o.id = $1 AND o.sponsor_id = $2 AND s.id = o.sponsor_id
+       RETURNING o.*`,
+      [orderId, sponsorId, dto.status, dto.trackingNote?.trim() || null],
     );
     if (!result.rows[0]) throw new NotFoundException('Pedido no encontrado');
     return result.rows[0];
@@ -1457,13 +1510,20 @@ export class PlatformShopService {
 
   async markOrderPaidFromWebhook(orderId: string) {
     const result = await this.db.query(
-      `UPDATE platform_orders
+      `UPDATE platform_orders o
        SET status = 'PAID',
            payment_status = 'APPROVED',
            payment_provider = 'MERCADOPAGO',
+           paid_at = COALESCE(o.paid_at, NOW()),
+           delivery_deadline_at = COALESCE(
+             o.delivery_deadline_at,
+             NOW() + make_interval(days => s.delivery_days::int)
+           ),
            updated_at = NOW()
-       WHERE id = $1 AND status IN ('PENDING', 'AWAITING_MANUAL_PAYMENT')
-       RETURNING *`,
+       FROM platform_sponsors s
+       WHERE o.id = $1 AND s.id = o.sponsor_id
+         AND o.status IN ('PENDING', 'AWAITING_MANUAL_PAYMENT')
+       RETURNING o.*`,
       [orderId],
     );
     return result.rows[0] ?? null;

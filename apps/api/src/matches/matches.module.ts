@@ -13,6 +13,7 @@ import { PaymentsModule } from '../payments/payments.module';
 import { ReportsModule } from '../reports/reports.module';
 import { MatchResultExpiryService } from './match-result-expiry.service';
 import { MatchReminderService } from './match-reminder.service';
+import { MatchNearbyAlertService } from './match-nearby-alert.service';
 import { MatchLiveScoreController } from './live-score/match-live-score.controller';
 import { MatchLiveScoreService } from './live-score/match-live-score.service';
 import { MatchLiveScoreRepository } from './live-score/match-live-score.repository';
@@ -35,6 +36,7 @@ import { MatchLiveScoreRepository } from './live-score/match-live-score.reposito
     MatchesRepository,
     MatchResultExpiryService,
     MatchReminderService,
+    MatchNearbyAlertService,
     MatchLiveScoreService,
     MatchLiveScoreRepository,
   ],
