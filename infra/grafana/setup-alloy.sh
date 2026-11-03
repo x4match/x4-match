@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Instala Grafana Alloy en la EC2 y lo conecta a Grafana Cloud. Correr una vez:
 #   bash infra/grafana/setup-alloy.sh
-# Datos de Grafana Cloud: grafana.com → tu stack → Prometheus / Loki → "Details"
-# (URL de remote write, usuario numérico) y un Access Policy token con metrics:write + logs:write.
+# Datos de Grafana Cloud: grafana.com → tu stack → Prometheus / Loki → "Details":
+# URL, usuario numérico y token ("Generate now"). Si usás un solo token con
+# metrics:write + logs:write, pegalo en las dos preguntas.
 set -euo pipefail
 
 APP_DIR="${APP_DIR:-/opt/x4match}"
@@ -16,11 +17,17 @@ ask() {
   [[ -n "${!var}" ]] || { echo "Falta $var"; exit 1; }
 }
 
-ask GRAFANA_PROM_URL "Prometheus remote write URL (https://prometheus-...grafana.net/api/prom/push)"
-ask GRAFANA_PROM_USER "Prometheus usuario (número)"
-ask GRAFANA_LOKI_URL "Loki URL (https://logs-...grafana.net/loki/api/v1/push)"
-ask GRAFANA_LOKI_USER "Loki usuario (número)"
-ask GRAFANA_CLOUD_TOKEN "Access Policy token" secret
+ask GRAFANA_PROM_URL "Prometheus URL (https://prometheus-...grafana.net/api/prom/push)"
+ask GRAFANA_PROM_USER "Prometheus User (número)"
+ask GRAFANA_PROM_TOKEN "Prometheus token (glc_...)" secret
+ask GRAFANA_LOKI_URL "Loki URL (https://logs-...grafana.net)"
+ask GRAFANA_LOKI_USER "Loki User (número)"
+ask GRAFANA_LOKI_TOKEN "Loki token (glc_...)" secret
+
+GRAFANA_PROM_URL="${GRAFANA_PROM_URL%/}"
+[[ "$GRAFANA_PROM_URL" == */api/prom/push ]] || GRAFANA_PROM_URL="$GRAFANA_PROM_URL/api/prom/push"
+GRAFANA_LOKI_URL="${GRAFANA_LOKI_URL%/}"
+[[ "$GRAFANA_LOKI_URL" == */loki/api/v1/push ]] || GRAFANA_LOKI_URL="$GRAFANA_LOKI_URL/loki/api/v1/push"
 
 if ! grep -q '^METRICS_TOKEN=.\+' "$API_ENV"; then
   echo "==> Generando METRICS_TOKEN en $API_ENV"
@@ -50,7 +57,8 @@ GRAFANA_PROM_URL="$GRAFANA_PROM_URL"
 GRAFANA_PROM_USER="$GRAFANA_PROM_USER"
 GRAFANA_LOKI_URL="$GRAFANA_LOKI_URL"
 GRAFANA_LOKI_USER="$GRAFANA_LOKI_USER"
-GRAFANA_CLOUD_TOKEN="$GRAFANA_CLOUD_TOKEN"
+GRAFANA_PROM_TOKEN="$GRAFANA_PROM_TOKEN"
+GRAFANA_LOKI_TOKEN="$GRAFANA_LOKI_TOKEN"
 METRICS_TOKEN="$METRICS_TOKEN"
 EOF
 sudo chmod 600 /etc/default/alloy
