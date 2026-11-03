@@ -24,6 +24,13 @@ ask GRAFANA_LOKI_URL "Loki URL (https://logs-...grafana.net)"
 ask GRAFANA_LOKI_USER "Loki User (número)"
 ask GRAFANA_LOKI_TOKEN "Loki token (glc_...)" secret
 
+for var in GRAFANA_PROM_TOKEN GRAFANA_LOKI_TOKEN; do
+  if [[ "$(grep -o 'glc_' <<<"${!var}" | wc -l)" -ne 1 ]]; then
+    echo "$var no es un token válido (¿se pegó dos veces?). Volvé a correr el script."
+    exit 1
+  fi
+done
+
 GRAFANA_PROM_URL="${GRAFANA_PROM_URL%/}"
 [[ "$GRAFANA_PROM_URL" == */api/prom/push ]] || GRAFANA_PROM_URL="$GRAFANA_PROM_URL/api/prom/push"
 GRAFANA_LOKI_URL="${GRAFANA_LOKI_URL%/}"
@@ -53,6 +60,7 @@ sudo tee /etc/default/alloy >/dev/null <<EOF
 CONFIG_FILE="/etc/alloy/config.alloy"
 CUSTOM_ARGS=""
 RESTART_ON_UPGRADE=true
+GOMEMLIMIT=180MiB
 GRAFANA_PROM_URL="$GRAFANA_PROM_URL"
 GRAFANA_PROM_USER="$GRAFANA_PROM_USER"
 GRAFANA_LOKI_URL="$GRAFANA_LOKI_URL"
