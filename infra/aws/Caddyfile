@@ -2,5 +2,7 @@
 # Ej: export API_DOMAIN=api.tudominio.com
 {$API_DOMAIN} {
 	encode gzip
+	# Solo Alloy (local) scrapea las métricas.
+	respond /metrics* 404
 	reverse_proxy 127.0.0.1:5000
 }

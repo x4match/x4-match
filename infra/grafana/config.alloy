@@ -1,0 +1,81 @@
+// Grafana Alloy en la EC2: envía métricas de la API, del servidor y los logs de systemd a Grafana Cloud.
+// Las credenciales salen de /etc/default/alloy (ver setup-alloy.sh).
+
+prometheus.remote_write "grafana_cloud" {
+  endpoint {
+    url = sys.env("GRAFANA_PROM_URL")
+
+    basic_auth {
+      username = sys.env("GRAFANA_PROM_USER")
+      password = sys.env("GRAFANA_CLOUD_TOKEN")
+    }
+  }
+}
+
+prometheus.scrape "x4_api" {
+  targets = [{
+    "__address__" = "127.0.0.1:5000",
+    "instance"    = "x4match-ec2",
+  }]
+  job_name        = "x4match-api"
+  metrics_path    = "/metrics"
+  scrape_interval = "30s"
+
+  authorization {
+    type        = "Bearer"
+    credentials = sys.env("METRICS_TOKEN")
+  }
+
+  forward_to = [prometheus.remote_write.grafana_cloud.receiver]
+}
+
+prometheus.exporter.unix "host" {
+  set_collectors = ["cpu", "diskstats", "filesystem", "loadavg", "meminfo", "netdev", "pressure", "uname"]
+
+  filesystem {
+    mount_points_exclude = "^/(dev|proc|run|sys|snap|var/lib/docker/.+)($|/)"
+  }
+}
+
+discovery.relabel "host" {
+  targets = prometheus.exporter.unix.host.targets
+
+  rule {
+    target_label = "instance"
+    replacement  = "x4match-ec2"
+  }
+}
+
+prometheus.scrape "host" {
+  targets         = discovery.relabel.host.output
+  job_name        = "node"
+  scrape_interval = "60s"
+  forward_to      = [prometheus.remote_write.grafana_cloud.receiver]
+}
+
+loki.write "grafana_cloud" {
+  endpoint {
+    url = sys.env("GRAFANA_LOKI_URL")
+
+    basic_auth {
+      username = sys.env("GRAFANA_LOKI_USER")
+      password = sys.env("GRAFANA_CLOUD_TOKEN")
+    }
+  }
+}
+
+loki.relabel "journal" {
+  forward_to = []
+
+  rule {
+    source_labels = ["__journal_priority_keyword"]
+    target_label  = "level"
+  }
+}
+
+loki.source.journal "api" {
+  matches       = "_SYSTEMD_UNIT=x4match-api.service"
+  relabel_rules = loki.relabel.journal.rules
+  labels        = { job = "x4match-api", instance = "x4match-ec2" }
+  forward_to    = [loki.write.grafana_cloud.receiver]
+}

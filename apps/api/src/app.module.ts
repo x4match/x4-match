@@ -31,6 +31,7 @@ import { PlatformShopModule } from './platform-shop/platform-shop.module';
 import { PlayerMarketplaceModule } from './player-marketplace/player-marketplace.module';
 import { NewsModule } from './news/news.module';
 import { AppVersionModule } from './app-version/app-version.module';
+import { ObservabilityModule } from './observability/observability.module';
 import { HealthController } from './health/health.controller';
 import { ShareController } from './share/share.controller';
 
@@ -46,6 +47,7 @@ import { ShareController } from './share/share.controller';
       signOptions: { expiresIn: process.env.JWT_EXPIRES_IN || '7d' },
     }),
     DatabaseModule,
+    ObservabilityModule,
     EmailModule,
     RealtimeModule,
     AuthModule,

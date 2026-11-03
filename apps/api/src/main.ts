@@ -3,6 +3,7 @@ import { NestFactory } from '@nestjs/core';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { ExpressAdapter } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
+import { ObservabilityMiddleware } from './observability/observability.middleware';
 import express, { Express } from 'express';
 
 const server = express();
@@ -16,6 +17,9 @@ export const createNestServer = async (): Promise<Express> => {
     nestReady = (async () => {
       const app = await NestFactory.create(AppModule, new ExpressAdapter(server));
       nestApp = app;
+
+      const observability = app.get(ObservabilityMiddleware);
+      app.use(observability.use.bind(observability));
 
       app.useGlobalPipes(
         new ValidationPipe({
@@ -48,6 +52,8 @@ if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
   createNestServer()
     .then(async () => {
       const port = process.env.PORT || 3000;
+      // systemd manda SIGTERM al reiniciar: así se guarda la actividad pendiente antes de salir.
+      nestApp!.enableShutdownHooks();
       // Escuchar con el http server de Nest: ahí está montado Socket.IO (express.listen crea otro).
       await nestApp!.listen(Number(port), '0.0.0.0');
       console.log(`🚀 API running on http://0.0.0.0:${port}`);

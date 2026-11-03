@@ -1,20 +1,33 @@
 import {
   ConnectedSocket,
   MessageBody,
+  OnGatewayConnection,
+  OnGatewayDisconnect,
   SubscribeMessage,
   WebSocketGateway,
   WebSocketServer,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
+import { MetricsService } from '../observability/metrics.service';
 
 @WebSocketGateway({
   cors: {
     origin: '*',
   },
 })
-export class RealtimeGateway {
+export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   server: Server;
+
+  constructor(private readonly metrics: MetricsService) {}
+
+  handleConnection() {
+    this.metrics.socketConnections.inc();
+  }
+
+  handleDisconnect() {
+    this.metrics.socketConnections.dec();
+  }
 
   @SubscribeMessage('match:watch')
   watchMatch(@ConnectedSocket() client: Socket, @MessageBody() data: { matchId?: string }) {

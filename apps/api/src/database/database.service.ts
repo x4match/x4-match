@@ -1,9 +1,9 @@
-import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { Injectable, OnApplicationShutdown, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Pool, PoolClient, QueryResult } from 'pg';
 
 @Injectable()
-export class DatabaseService implements OnModuleInit, OnModuleDestroy {
+export class DatabaseService implements OnModuleInit, OnApplicationShutdown {
   private pool: Pool;
 
   constructor(private readonly configService: ConfigService) {
@@ -38,7 +38,8 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  async onModuleDestroy(): Promise<void> {
+  /** Después de todos los onModuleDestroy: otros servicios todavía escriben al apagar. */
+  async onApplicationShutdown(): Promise<void> {
     await this.pool.end();
   }
 

@@ -62,6 +62,14 @@ sudo systemctl daemon-reload
 sudo systemctl enable x4match-api
 sudo systemctl restart x4match-api
 
+if systemctl list-unit-files alloy.service >/dev/null 2>&1 && [[ -f /etc/alloy/config.alloy ]]; then
+  if ! sudo cmp -s "$APP_DIR/infra/grafana/config.alloy" /etc/alloy/config.alloy; then
+    echo "==> actualizando config de Grafana Alloy..."
+    sudo cp "$APP_DIR/infra/grafana/config.alloy" /etc/alloy/config.alloy
+    sudo systemctl restart alloy
+  fi
+fi
+
 PORT_LOCAL="${PORT:-5000}"
 PUBLIC_URL="${API_PUBLIC_URL:-http://127.0.0.1:${PORT_LOCAL}}"
 echo "==> health check (hasta 60s) en :${PORT_LOCAL}..."
