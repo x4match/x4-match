@@ -13,7 +13,6 @@ import {
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { ClubTrialService } from '../clubs/club-trial.service';
-import { TrialChecklistKey } from '../clubs/club-trial.constants';
 import {
   CreateOpsUserDto,
   ExtendTrialDto,
@@ -21,7 +20,6 @@ import {
   ReviewClubRegistrationDto,
   StartClubTrialDto,
   SuspendClubDto,
-  UpdateChecklistItemDto,
   UpdatePlatformFeeDto,
   UpdateUserRoleDto,
 } from './dto/platform-admin.dto';
@@ -88,21 +86,6 @@ export class PlatformAdminController {
       force: dto.force,
       userId: user.sub,
     });
-  }
-
-  @Patch('clubs/:id/trial/checklist')
-  updateChecklist(
-    @Param('id') id: string,
-    @CurrentUser() user: { sub: string },
-    @Body() dto: UpdateChecklistItemDto,
-  ) {
-    return this.clubTrialService.updateChecklistItem(
-      id,
-      dto.key as TrialChecklistKey,
-      dto.done,
-      user.sub,
-      dto.note,
-    );
   }
 
   @Post('clubs/:id/trial/extend')

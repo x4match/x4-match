@@ -19,21 +19,6 @@ export type ClubTrialStatus = {
   isTrialActive: boolean;
   isAccessAllowed: boolean;
   canStartTrial: boolean;
-  checklist: {
-    requiredDone: number;
-    requiredTotal: number;
-    allDone: number;
-    allTotal: number;
-    ready: boolean;
-    items: Array<{
-      key: string;
-      label: string;
-      description: string;
-      auto: boolean;
-      required: boolean;
-      state: { done: boolean };
-    }>;
-  };
 };
 
 export function trialStatusLabel(status: ClubBillingStatus): string {

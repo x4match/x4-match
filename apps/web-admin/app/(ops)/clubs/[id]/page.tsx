@@ -56,13 +56,6 @@ export default function ClubDetailPage() {
     onSuccess: refresh,
   });
 
-  const toggleChecklist = useMutation({
-    mutationFn: ({ key, done }: { key: string; done: boolean }) =>
-      api.patch(`/platform/clubs/${clubId}/trial/checklist`, { key, done }),
-    meta: { successMessage: 'Checklist actualizado.' },
-    onSuccess: refresh,
-  });
-
   const savedFee = data?.club?.platform_fee_percent;
   const [feeInput, setFeeInput] = useState('');
   useEffect(() => {
@@ -95,8 +88,6 @@ export default function ClubDetailPage() {
     suspend.isPending;
 
   const mpStatus = club.mp_status || 'DISCONNECTED';
-  const { requiredDone, requiredTotal } = trial.checklist;
-  const checklistPct = requiredTotal ? Math.round((requiredDone / requiredTotal) * 100) : 0;
   const location = [club.zone, club.city].filter(Boolean).join(', ');
 
   return (
@@ -144,20 +135,6 @@ export default function ClubDetailPage() {
           </p>
           <p className="ops-kpi-hint">
             {trial.daysRemaining != null ? `${trial.daysRemaining} días restantes` : 'Sin vencimiento'}
-          </p>
-        </div>
-        <div className="ops-kpi meter">
-          <div className="meter-head">
-            <p className="ops-kpi-label">Checklist requerido</p>
-            <span className="meter-value num">
-              {requiredDone}/{requiredTotal}
-            </span>
-          </div>
-          <div className="meter-track">
-            <span className="meter-fill" style={{ width: `${checklistPct}%` }} />
-          </div>
-          <p className="meter-hint">
-            {requiredDone >= requiredTotal ? 'Listo para activar' : `Faltan ${requiredTotal - requiredDone} ítems`}
           </p>
         </div>
         <div className="ops-kpi">
@@ -263,7 +240,9 @@ export default function ClubDetailPage() {
           </div>
 
           <p className="detail-note">
-            Suspender bloquea el acceso sin borrar datos. Desactivar plan vuelve el club a &quot;Sin iniciar&quot;.
+            Para que el club aparezca en la app de jugadores hay que iniciar el trial o activar el plan
+            de pago. Suspender bloquea el acceso sin borrar datos. Desactivar plan vuelve el club a
+            &quot;Sin iniciar&quot;.
           </p>
         </div>
 
@@ -336,54 +315,6 @@ export default function ClubDetailPage() {
         <p className="detail-note">
           Solo se aplica si el club conectó su cuenta de Mercado Pago. Entre 0% y 30%.
         </p>
-      </div>
-
-      <div className="card card-table">
-        <div className="tile-header" style={{ padding: '16px 16px 4px' }}>
-          <div>
-            <h3 className="tile-title">Checklist de activación</h3>
-            <p className="tile-subtitle">
-              {requiredDone}/{requiredTotal} ítems requeridos completos
-            </p>
-          </div>
-        </div>
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Ítem</th>
-              <th>Tipo</th>
-              <th>Estado</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {trial.checklist.items.map((item: any) => (
-              <tr key={item.key}>
-                <td>
-                  <strong>{item.label}</strong>
-                  <div style={{ fontSize: 12, color: 'var(--muted)' }}>{item.description}</div>
-                </td>
-                <td>{item.auto ? 'Auto' : 'Manual'}</td>
-                <td>
-                  <span className={`badge ${item.state.done ? 'badge-success' : 'badge-warning'}`}>
-                    {item.state.done ? 'Hecho' : 'Pendiente'}
-                  </span>
-                </td>
-                <td>
-                  {!item.auto ? (
-                    <button
-                      className="btn btn-outline"
-                      disabled={toggleChecklist.isPending}
-                      onClick={() => toggleChecklist.mutate({ key: item.key, done: !item.state.done })}
-                    >
-                      {toggleChecklist.isPending ? '…' : item.state.done ? 'Desmarcar' : 'Marcar'}
-                    </button>
-                  ) : null}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
       </div>
     </div>
   );

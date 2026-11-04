@@ -44,18 +44,6 @@ export class StartClubTrialDto {
   force?: boolean;
 }
 
-export class UpdateChecklistItemDto {
-  @IsString()
-  key!: string;
-
-  @IsBoolean()
-  done!: boolean;
-
-  @IsOptional()
-  @IsString()
-  note?: string;
-}
-
 export class ExtendTrialDto {
   @IsInt()
   @Min(1)
