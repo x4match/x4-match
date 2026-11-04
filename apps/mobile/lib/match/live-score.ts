@@ -88,7 +88,9 @@ export async function discardMatchLiveScore(matchId: string): Promise<MatchLiveS
 
 export function teamLabel(members: LiveTeamMember[] | undefined, fallback: string) {
   if (!members?.length) return fallback;
-  return members.map((m) => m.name.split(' ')[0]).join(' / ');
+  return members
+    .map((m) => String(m.name || '').trim().split(/\s+/)[0] || 'Jugador')
+    .join(' / ');
 }
 
 /**

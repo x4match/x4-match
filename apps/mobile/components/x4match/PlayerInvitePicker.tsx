@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '@/lib/api';
+import { dashedBorderStyle } from '@/lib/platform-styles';
 import { formatSkillScore, resolveSkillScore } from '@/lib/skill';
 import { ui } from '@/theme/tokens';
 import { KeyboardAvoid } from '@/components/ui/KeyboardAvoid';
@@ -179,20 +180,21 @@ export function PlayerInvitePicker({
     return (
       <Pressable
         onPress={handleSelectGuest}
-        style={({ pressed }) => ({
-          flexDirection: 'row',
-          alignItems: 'center',
-          marginHorizontal: ui.spacing.lg,
-          marginTop: compact ? 4 : 8,
-          marginBottom: compact ? 12 : 6,
-          paddingHorizontal: 14,
-          paddingVertical: 12,
-          borderRadius: ui.radius.md,
-          borderWidth: 1,
-          borderColor: ui.colors.border,
-          borderStyle: 'dashed',
-          backgroundColor: pressed ? ui.colors.cardMuted : ui.colors.card,
-        })}
+        style={({ pressed }) =>
+          dashedBorderStyle({
+            flexDirection: 'row',
+            alignItems: 'center',
+            marginHorizontal: ui.spacing.lg,
+            marginTop: compact ? 4 : 8,
+            marginBottom: compact ? 12 : 6,
+            paddingHorizontal: 14,
+            paddingVertical: 12,
+            borderRadius: ui.radius.md,
+            borderWidth: 1,
+            borderColor: ui.colors.border,
+            backgroundColor: pressed ? ui.colors.cardMuted : ui.colors.card,
+          })
+        }
       >
         <View
           style={{

@@ -3,9 +3,13 @@ import { formatCurrency as formatCurrencyAscii } from './currency';
 
 const LOCALE = 'es-AR';
 
-export function getInitials(name: string): string {
-  return name
-    .split(' ')
+export function getInitials(name?: string | null): string {
+  const parts = String(name || '')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (parts.length === 0) return '?';
+  return parts
     .map((n) => n[0])
     .join('')
     .toUpperCase()

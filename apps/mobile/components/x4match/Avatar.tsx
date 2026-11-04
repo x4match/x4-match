@@ -10,7 +10,7 @@ const SIZES = {
 };
 
 type AvatarProps = {
-  name: string;
+  name?: string | null;
   photo?: string | null;
   size?: keyof typeof SIZES;
   style?: StyleProp<ImageStyle>;
