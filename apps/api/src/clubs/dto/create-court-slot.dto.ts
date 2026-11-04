@@ -1,4 +1,14 @@
-import { IsBoolean, IsInt, IsNumber, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
+import {
+  IsBoolean,
+  IsInt,
+  IsNumber,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Max,
+  MaxLength,
+  Min,
+} from 'class-validator';
 
 export class CreateCourtSlotDto {
   @IsOptional()
@@ -41,4 +51,15 @@ export class CreateCourtSlotDto {
   @IsNumber()
   @Min(0)
   pricePerHour?: number;
+
+  /** Si viene, el turno se crea ya reservado (reserva tomada por fuera de la app). */
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  bookedByName?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  bookedByPhone?: string;
 }

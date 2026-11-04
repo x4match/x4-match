@@ -39,6 +39,7 @@ import { CreateCourtSlotDto } from './dto/create-court-slot.dto';
 import { CreateShopCouponDto } from './dto/create-shop-coupon.dto';
 import { CreateShopProductDto } from './dto/create-shop-product.dto';
 import { GenerateCourtSlotsDto } from './dto/generate-court-slots.dto';
+import { ManualBookingCourtSlotDto } from './dto/manual-booking-court-slot.dto';
 import { UpdateShopProductDto } from './dto/update-shop-product.dto';
 import { UpdateAutoFillGapsDto } from './dto/update-auto-fill-gaps.dto';
 import { UpdateSlotOfferSettingsDto } from './dto/update-slot-offer-settings.dto';
@@ -778,6 +779,12 @@ export class ClubsController {
     return this.clubsService.deleteCourt(id, user.sub, courtId);
   }
 
+  @Get(':id/court-schedules')
+  @UseGuards(JwtAuthGuard)
+  listClubCourtSchedules(@Param('id') id: string, @CurrentUser() user: { sub: string }) {
+    return this.clubsService.listClubCourtSchedules(id, user.sub);
+  }
+
   @Get(':id/courts/:courtId/schedules')
   @UseGuards(JwtAuthGuard)
   listCourtSchedules(
@@ -875,6 +882,27 @@ export class ClubsController {
       dto.kind ?? 'MAINTENANCE',
       dto.reason,
     );
+  }
+
+  @Post(':id/court-slots/:slotId/manual-booking')
+  @UseGuards(JwtAuthGuard)
+  bookCourtSlotManually(
+    @Param('id') id: string,
+    @Param('slotId') slotId: string,
+    @CurrentUser() user: { sub: string },
+    @Body() dto: ManualBookingCourtSlotDto,
+  ) {
+    return this.clubsService.bookCourtSlotManually(user.sub, id, slotId, dto);
+  }
+
+  @Delete(':id/court-slots/:slotId/manual-booking')
+  @UseGuards(JwtAuthGuard)
+  cancelManualBooking(
+    @Param('id') id: string,
+    @Param('slotId') slotId: string,
+    @CurrentUser() user: { sub: string },
+  ) {
+    return this.clubsService.cancelManualBooking(user.sub, id, slotId);
   }
 
   @Post(':id/court-slots/:slotId/unblock')

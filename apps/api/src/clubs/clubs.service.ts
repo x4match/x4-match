@@ -27,6 +27,7 @@ import { CreateCourtDto } from './dto/create-court.dto';
 import { CreateCourtScheduleDto } from './dto/create-court-schedule.dto';
 import { CreateCourtSlotDto } from './dto/create-court-slot.dto';
 import { GenerateCourtSlotsDto } from './dto/generate-court-slots.dto';
+import { ManualBookingCourtSlotDto } from './dto/manual-booking-court-slot.dto';
 import { UpdateCourtDto } from './dto/update-court.dto';
 import { UpdateCourtScheduleDto } from './dto/update-court-schedule.dto';
 import { UpdateCourtSlotDto } from './dto/update-court-slot.dto';
@@ -215,7 +216,7 @@ export class ClubsService {
       `SELECT id, name, city, address, phone, email, description, logo_url, cover_url, latitude, longitude,
               subscription_plan, auto_fill_gaps_enabled, court_price_per_hour, deposit_percent,
               gap_fill_hours_before, gap_fill_auto_create_match, gap_fill_notify_enabled,
-              slot_offer_radius_km, created_at, updated_at
+              slot_offer_radius_km, court_duration_hours, created_at, updated_at
        FROM clubs
        WHERE id = $1`,
       [id],
@@ -242,6 +243,7 @@ export class ClubsService {
       gapFillAutoCreateMatch: Boolean(club.gap_fill_auto_create_match),
       gapFillNotifyEnabled: club.gap_fill_notify_enabled !== false,
       slotOfferRadiusKm: Number(club.slot_offer_radius_km ?? DEFAULT_SLOT_OFFER_RADIUS_KM),
+      courtDurationHours: Number(club.court_duration_hours ?? 1.5),
     };
   }
 
@@ -568,13 +570,99 @@ export class ClubsService {
       [clubId],
     );
     const result = await this.db.query(
-      `SELECT id, club_id, court_id, court_label, slot_date, start_hour, end_hour, status, bonus_points, price_per_hour, block_reason, created_at
-       FROM court_availability_slots
-       WHERE club_id = $1 AND status <> 'CANCELLED'
-       ORDER BY slot_date ASC, start_hour ASC`,
+      `SELECT s.id, s.club_id, s.court_id, s.court_label, s.slot_date, s.start_hour, s.end_hour, s.status,
+              s.bonus_points, s.price_per_hour, s.block_reason, s.created_at,
+              s.booking_source, s.booked_by_name, s.booked_by_phone,
+              bm.id AS match_id, bm.title AS match_title, bu.name AS match_organizer_name
+       FROM court_availability_slots s
+       LEFT JOIN LATERAL (
+         SELECT m.id, m.title, m.created_by_user_id
+         FROM matches m
+         WHERE m.court_slot_id = s.id AND m.status <> 'CANCELLED'
+         ORDER BY m.created_at DESC
+         LIMIT 1
+       ) bm ON s.status = 'BOOKED'
+       LEFT JOIN users bu ON bu.id = bm.created_by_user_id
+       WHERE s.club_id = $1 AND s.status <> 'CANCELLED'
+       ORDER BY s.slot_date ASC, s.start_hour ASC`,
       [clubId],
     );
     return result.rows;
+  }
+
+  async listClubCourtSchedules(clubId: string, userId: string) {
+    await this.assertClubRole(userId, clubId);
+    const result = await this.db.query(
+      `SELECT cs.id, cs.court_id, cs.day_of_week, cs.start_hour, cs.end_hour, cs.active
+       FROM court_schedules cs
+       JOIN courts c ON c.id = cs.court_id
+       WHERE c.club_id = $1 AND cs.active = TRUE
+       ORDER BY cs.court_id, cs.day_of_week ASC, cs.start_hour ASC`,
+      [clubId],
+    );
+    return result.rows;
+  }
+
+  async bookCourtSlotManually(
+    userId: string,
+    clubId: string,
+    slotId: string,
+    dto: ManualBookingCourtSlotDto,
+  ) {
+    await this.assertClubRole(userId, clubId);
+    const name = dto.name.trim();
+    if (!name) {
+      throw new BadRequestException('Indicá a nombre de quién es la reserva');
+    }
+
+    const pendingMatch = await this.db.query(
+      `SELECT id FROM matches
+       WHERE court_slot_id = $1 AND status NOT IN ('CANCELLED', 'FINISHED')
+       LIMIT 1`,
+      [slotId],
+    );
+    if (pendingMatch.rows[0]) {
+      throw new BadRequestException(
+        'Hay un partido de la app armándose en este turno. Esperá a que se confirme o se libere.',
+      );
+    }
+
+    const result = await this.db.query(
+      `UPDATE court_availability_slots
+       SET status = 'BOOKED',
+           booking_source = 'MANUAL',
+           booked_by_name = $3,
+           booked_by_phone = $4,
+           block_reason = NULL
+       WHERE id = $1 AND club_id = $2
+         AND (status = 'OPEN' OR (status = 'BOOKED' AND booking_source = 'MANUAL'))
+       RETURNING id, club_id, court_id, court_label, slot_date, start_hour, end_hour, status, bonus_points,
+                 price_per_hour, block_reason, booking_source, booked_by_name, booked_by_phone, created_at`,
+      [slotId, clubId, name, dto.phone?.trim() || null],
+    );
+    if (!result.rows[0]) {
+      throw new BadRequestException('Ese turno ya no está libre');
+    }
+    return result.rows[0];
+  }
+
+  async cancelManualBooking(userId: string, clubId: string, slotId: string) {
+    await this.assertClubRole(userId, clubId);
+    const result = await this.db.query(
+      `UPDATE court_availability_slots
+       SET status = 'OPEN',
+           booking_source = NULL,
+           booked_by_name = NULL,
+           booked_by_phone = NULL
+       WHERE id = $1 AND club_id = $2 AND status = 'BOOKED' AND booking_source = 'MANUAL'
+       RETURNING id, club_id, court_id, court_label, slot_date, start_hour, end_hour, status, bonus_points,
+                 price_per_hour, block_reason, booking_source, booked_by_name, booked_by_phone, created_at`,
+      [slotId, clubId],
+    );
+    if (!result.rows[0]) {
+      throw new BadRequestException('Solo se pueden liberar reservas anotadas por el club');
+    }
+    return result.rows[0];
   }
 
   async listClubMatches(clubId: string, userId: string) {
@@ -615,21 +703,54 @@ export class ClubsService {
       throw new BadRequestException('La cancha está deshabilitada');
     }
 
+    const overlap = await this.db.query(
+      `SELECT id FROM court_availability_slots
+       WHERE club_id = $1
+         AND status <> 'CANCELLED'
+         AND slot_date = $2::date
+         AND court_id IS NOT DISTINCT FROM $3::uuid
+         AND start_hour < $5
+         AND end_hour > $4
+       LIMIT 1`,
+      [clubId, dto.slotDate, court.id, dto.startHour, dto.endHour],
+    );
+    if (overlap.rows[0]) {
+      throw new BadRequestException('Ese horario se solapa con otro turno de la misma cancha');
+    }
+
     const bonusPoints = await this.resolveSlotBonus(clubId, dto);
     const pricePerHour = this.resolveSlotPricePerHour(club, dto.pricePerHour);
+    const bookedByName = dto.bookedByName?.trim() || null;
+    const isManualBooking = !!bookedByName;
 
     const result = await this.db.query(
       `INSERT INTO court_availability_slots
-         (club_id, court_id, court_label, slot_date, start_hour, end_hour, created_by_user_id, bonus_points, price_per_hour)
-       VALUES ($1, $2, $3, $4::date, $5, $6, $7, $8, $9)
-       RETURNING id, club_id, court_id, court_label, slot_date, start_hour, end_hour, status, bonus_points, price_per_hour, created_at`,
-      [clubId, court.id, court.name, dto.slotDate, dto.startHour, dto.endHour, userId, bonusPoints, pricePerHour],
+         (club_id, court_id, court_label, slot_date, start_hour, end_hour, created_by_user_id, bonus_points, price_per_hour,
+          status, booking_source, booked_by_name, booked_by_phone)
+       VALUES ($1, $2, $3, $4::date, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+       RETURNING id, club_id, court_id, court_label, slot_date, start_hour, end_hour, status, bonus_points, price_per_hour,
+                 booking_source, booked_by_name, booked_by_phone, created_at`,
+      [
+        clubId,
+        court.id,
+        court.name,
+        dto.slotDate,
+        dto.startHour,
+        dto.endHour,
+        userId,
+        bonusPoints,
+        pricePerHour,
+        isManualBooking ? 'BOOKED' : 'OPEN',
+        isManualBooking ? 'MANUAL' : null,
+        bookedByName,
+        isManualBooking ? dto.bookedByPhone?.trim() || null : null,
+      ],
     );
     const slot = result.rows[0];
 
     let notifiedCount = 0;
     let notifyScheduledFor: string | null = null;
-    if (dto.notifyPlayers !== false) {
+    if (!isManualBooking && dto.notifyPlayers !== false) {
       const outreach = await this.notifyPlayersAboutSlot(club, slot);
       notifiedCount = outreach.notified;
       notifyScheduledFor = outreach.pushAt?.toISOString() ?? null;

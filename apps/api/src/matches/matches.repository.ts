@@ -109,7 +109,7 @@ export class MatchesRepository {
   async bookCourtSlot(slotId: string, clubId: string) {
     const result = await this.db.query(
       `UPDATE court_availability_slots
-       SET status = 'BOOKED'
+       SET status = 'BOOKED', booking_source = 'APP'
        WHERE id = $1 AND club_id = $2 AND status = 'OPEN'
        RETURNING id`,
       [slotId, clubId],
@@ -120,9 +120,10 @@ export class MatchesRepository {
   async releaseCourtSlot(slotId: string) {
     const result = await this.db.query(
       `UPDATE court_availability_slots
-       SET status = 'OPEN'
+       SET status = 'OPEN', booking_source = NULL
        WHERE id = $1
          AND status = 'BOOKED'
+         AND booking_source IS DISTINCT FROM 'MANUAL'
          AND ${COURT_SLOT_END_AT_SQL} > NOW()
        RETURNING id`,
       [slotId],
