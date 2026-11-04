@@ -48,7 +48,6 @@ export default function PagosPage() {
 
   const invalidate = async () => {
     await queryClient.invalidateQueries({ queryKey: ['club-mp-status', activeClubId] });
-    await queryClient.invalidateQueries({ queryKey: ['club-trial-status', activeClubId] });
     await queryClient.invalidateQueries({ queryKey: ['club-manager-report', activeClubId] });
   };
 

@@ -132,12 +132,11 @@ export async function seedAppReview(
      ON CONFLICT DO NOTHING`,
     [CLUB_ID, clubAdmin.userId],
   );
-  const opsApproved = { done: true, at: new Date().toISOString(), note: 'seed-app-review' };
   await db.query(
-    `INSERT INTO club_billing (club_id, status, trial_mode, trial_started_at, checklist)
-     VALUES ($1, 'TRIAL', 'MANUAL', NOW(), $2::jsonb)
+    `INSERT INTO club_billing (club_id, status, trial_mode, trial_started_at)
+     VALUES ($1, 'TRIAL', 'MANUAL', NOW())
      ON CONFLICT (club_id) DO NOTHING`,
-    [CLUB_ID, JSON.stringify({ contract_signed: opsApproved, ops_approved: opsApproved })],
+    [CLUB_ID],
   );
 
   return {

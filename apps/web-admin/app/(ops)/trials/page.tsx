@@ -32,7 +32,7 @@ export default function TrialsPage() {
     <div>
       <h1 style={{ marginTop: 0 }}>Trials</h1>
       <p style={{ color: 'var(--muted)' }}>
-        Checklist de activación · modos TIME (90 días) o MANUAL (sin vencimiento automático).
+        Modos TIME (90 días) o MANUAL (sin fecha de vencimiento).
       </p>
 
       <TableFilters
@@ -60,7 +60,6 @@ export default function TrialsPage() {
                 <th>Club</th>
                 <th>Estado</th>
                 <th>Modo</th>
-                <th>Checklist</th>
                 <th>Días</th>
                 <th></th>
               </tr>
@@ -68,7 +67,7 @@ export default function TrialsPage() {
             <tbody>
               {items.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="table-empty">
+                  <td colSpan={5} className="table-empty">
                     No hay trials con esos filtros.
                   </td>
                 </tr>
@@ -80,9 +79,6 @@ export default function TrialsPage() {
                       <StatusBadge value={row.status} category="billingStatus" />
                     </td>
                     <td><StatusText value={row.trialMode} category="trialMode" fallback="—" /></td>
-                    <td>
-                      {row.checklist?.requiredDone}/{row.checklist?.requiredTotal}
-                    </td>
                     <td>{row.daysRemaining ?? '—'}</td>
                     <td>
                       <Link href={`/clubs/${row.clubId}`} style={{ color: 'var(--primary)', fontWeight: 700 }}>

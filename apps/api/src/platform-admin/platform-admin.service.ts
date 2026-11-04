@@ -599,7 +599,7 @@ export class PlatformAdminService {
 
     const result = await this.db.query(
       `SELECT c.id, c.name, c.city, cb.status, cb.trial_mode, cb.trial_started_at,
-              cb.trial_ends_at, cb.trial_days, cb.checklist
+              cb.trial_ends_at, cb.trial_days
        FROM club_billing cb
        JOIN clubs c ON c.id = cb.club_id
        ${where}

@@ -60,9 +60,9 @@ Desde el backoffice: **Usuarios → Crear operador SUPER_ADMIN**, o promover un 
 | Ruta | Descripción |
 |------|-------------|
 | `/monitor` | KPIs globales, clubes y usuarios recientes |
-| `/trials` | Trials + checklist de activación |
+| `/trials` | Trials por estado, modo y vencimiento |
 | `/clubs` | Listado de clubes |
-| `/clubs/[id]` | Detalle, checklist, iniciar trial TIME/MANUAL |
+| `/clubs/[id]` | Detalle, iniciar trial TIME/MANUAL, plan y suspensión |
 | `/users` | Usuarios de la plataforma |
 | `/matches` | Partidos recientes |
 | `/tournaments` | Torneos |

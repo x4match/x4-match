@@ -13,7 +13,6 @@ import {
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { ClubTrialService } from '../clubs/club-trial.service';
-import { TrialChecklistKey } from '../clubs/club-trial.constants';
 import {
   CreateOpsUserDto,
   ExtendTrialDto,
@@ -21,7 +20,6 @@ import {
   ReviewClubRegistrationDto,
   StartClubTrialDto,
   SuspendClubDto,
-  UpdateChecklistItemDto,
   UpdatePlatformFeeDto,
   UpdateUserRoleDto,
 } from './dto/platform-admin.dto';
@@ -76,33 +74,12 @@ export class PlatformAdminController {
   }
 
   @Post('clubs/:id/trial/start')
-  startTrial(
-    @Param('id') id: string,
-    @CurrentUser() user: { sub: string },
-    @Body() dto: StartClubTrialDto,
-  ) {
+  startTrial(@Param('id') id: string, @Body() dto: StartClubTrialDto) {
     return this.clubTrialService.startTrial({
       clubId: id,
       mode: dto.mode,
       trialDays: dto.trialDays,
-      force: dto.force,
-      userId: user.sub,
     });
-  }
-
-  @Patch('clubs/:id/trial/checklist')
-  updateChecklist(
-    @Param('id') id: string,
-    @CurrentUser() user: { sub: string },
-    @Body() dto: UpdateChecklistItemDto,
-  ) {
-    return this.clubTrialService.updateChecklistItem(
-      id,
-      dto.key as TrialChecklistKey,
-      dto.done,
-      user.sub,
-      dto.note,
-    );
   }
 
   @Post('clubs/:id/trial/extend')
@@ -111,13 +88,13 @@ export class PlatformAdminController {
   }
 
   @Post('clubs/:id/billing/activate')
-  activatePaid(@Param('id') id: string, @CurrentUser() user: { sub: string }) {
-    return this.clubTrialService.activatePaid(id, user.sub);
+  activatePaid(@Param('id') id: string) {
+    return this.clubTrialService.activatePaid(id);
   }
 
   @Post('clubs/:id/billing/deactivate')
-  deactivatePaid(@Param('id') id: string, @CurrentUser() user: { sub: string }) {
-    return this.clubTrialService.deactivatePaid(id, user.sub);
+  deactivatePaid(@Param('id') id: string) {
+    return this.clubTrialService.deactivatePaid(id);
   }
 
   @Post('clubs/:id/billing/reactivate')

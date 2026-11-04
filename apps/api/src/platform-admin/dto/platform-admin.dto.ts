@@ -1,5 +1,4 @@
 import {
-  IsBoolean,
   IsEmail,
   IsIn,
   IsInt,
@@ -38,22 +37,6 @@ export class StartClubTrialDto {
   @Min(1)
   @Max(365)
   trialDays?: number;
-
-  @IsOptional()
-  @IsBoolean()
-  force?: boolean;
-}
-
-export class UpdateChecklistItemDto {
-  @IsString()
-  key!: string;
-
-  @IsBoolean()
-  done!: boolean;
-
-  @IsOptional()
-  @IsString()
-  note?: string;
 }
 
 export class ExtendTrialDto {
