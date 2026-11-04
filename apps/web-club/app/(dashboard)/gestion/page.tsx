@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -8,11 +8,7 @@ import { api } from '@/lib/api';
 import { useClub } from '@/contexts/ClubContext';
 import { PageHeader } from '@/components/layout/AppSidebar';
 import { DashboardSkeleton, EmptyState } from '@/components/club/DashboardCards';
-import {
-  DEFAULT_SLOT_OFFER_RADIUS_KM,
-  OutreachStatsCard,
-  outreachPublishMessage,
-} from '@/components/club/OutreachStatsCard';
+import { DEFAULT_SLOT_OFFER_RADIUS_KM, OutreachStatsCard } from '@/components/club/OutreachStatsCard';
 import { ClubDashboardCard } from '@/components/club/ClubDashboardCard';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -20,7 +16,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
-import { Badge } from '@/components/ui/badge';
 import {
   Dialog,
   DialogContent,
@@ -35,9 +30,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { formatCurrency } from '@/lib/currency';
-import { formatShortDate } from '@/lib/format';
-import { AgendaDayBoard } from '@/components/gestion/AgendaDayBoard';
+import { PlanillaTab } from '@/components/gestion/PlanillaTab';
 import { formatHourLabel, hourToMinutes } from '@/lib/slot-time';
 
 type Court = {
@@ -46,18 +39,6 @@ type Court = {
   surface?: string;
   isIndoor?: boolean;
   is_indoor?: boolean;
-};
-
-type CourtSlot = {
-  id: string;
-  court_id?: string;
-  court_label: string;
-  slot_date: string;
-  start_hour: string | number;
-  end_hour: string | number;
-  price_per_hour?: number;
-  pricePerHour?: number;
-  status?: string;
 };
 
 type Promotion = {
@@ -79,18 +60,12 @@ type Schedule = {
   end_hour?: string;
 };
 
-function todayISO() {
-  const d = new Date();
-  return d.toISOString().slice(0, 10);
-}
-
 function GestionInner() {
   const params = useSearchParams();
   const { activeClubId, activeClub } = useClub();
   const queryClient = useQueryClient();
   const initialTab = params.get('tab') || 'slots';
   const [tab, setTab] = useState(initialTab);
-  const [agendaDate, setAgendaDate] = useState(todayISO());
 
   useEffect(() => {
     if (params.get('tab')) setTab(params.get('tab')!);
@@ -101,15 +76,6 @@ function GestionInner() {
     queryFn: async () => {
       const res = await api.get(`/clubs/${activeClubId}/courts`);
       return res.data as Court[];
-    },
-    enabled: !!activeClubId,
-  });
-
-  const slotsQuery = useQuery({
-    queryKey: ['court-slots', activeClubId],
-    queryFn: async () => {
-      const res = await api.get(`/clubs/${activeClubId}/court-slots`);
-      return res.data as CourtSlot[];
     },
     enabled: !!activeClubId,
   });
@@ -148,6 +114,7 @@ function GestionInner() {
         gapFillNotifyEnabled?: boolean;
         gap_fill_notify_enabled?: boolean;
         slotOfferRadiusKm?: number;
+        courtDurationHours?: number;
       };
     },
     enabled: !!activeClubId,
@@ -218,17 +185,6 @@ function GestionInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params, autoFillEnabled]);
 
-  // Slot form
-  const [slotOpen, setSlotOpen] = useState(false);
-  const [editingSlotId, setEditingSlotId] = useState<string | null>(null);
-  const [courtId, setCourtId] = useState('');
-  const [courtLabel, setCourtLabel] = useState('Cancha 1');
-  const [slotDate, setSlotDate] = useState(todayISO());
-  const [startHour, setStartHour] = useState('18:00');
-  const [endHour, setEndHour] = useState('19:30');
-  const [slotPrice, setSlotPrice] = useState('');
-  const [notifyPlayers, setNotifyPlayers] = useState(false);
-
   // Court form
   const [courtOpen, setCourtOpen] = useState(false);
   const [newCourtName, setNewCourtName] = useState('');
@@ -268,146 +224,15 @@ function GestionInner() {
   const [promoStart, setPromoStart] = useState('10:00');
   const [promoEnd, setPromoEnd] = useState('12:00');
 
-  const defaultPrice = useMemo(() => {
-    const hourly = Number(
-      clubQuery.data?.courtPricePerHour ?? clubQuery.data?.court_price_per_hour ?? 0,
-    );
-    return String(Math.round(hourly) || '');
-  }, [clubQuery.data?.courtPricePerHour, clubQuery.data?.court_price_per_hour]);
+  const defaultPricePerHour = Number(
+    clubQuery.data?.courtPricePerHour ?? clubQuery.data?.court_price_per_hour ?? 0,
+  );
 
-  const openNewSlot = () => {
-    setEditingSlotId(null);
-    setCourtId(courtsQuery.data?.[0]?.id || '');
-    setCourtLabel(courtsQuery.data?.[0]?.name || 'Cancha 1');
-    setSlotDate(todayISO());
-    setStartHour('18:00');
-    setEndHour('19:30');
-    setSlotPrice(defaultPrice);
-    setNotifyPlayers(false);
-    setSlotOpen(true);
-  };
-
-  const openEditSlot = (slot: CourtSlot) => {
-    setEditingSlotId(slot.id);
-    setCourtId(slot.court_id || '');
-    setCourtLabel(slot.court_label);
-    setSlotDate(String(slot.slot_date).slice(0, 10));
-    setStartHour(formatHourLabel(hourToMinutes(slot.start_hour) / 60));
-    setEndHour(formatHourLabel(hourToMinutes(slot.end_hour) / 60));
-    setSlotPrice(
-      String(Math.round(Number(slot.price_per_hour ?? slot.pricePerHour ?? defaultPrice))),
-    );
-    setSlotOpen(true);
-  };
-
-  const saveSlot = useMutation({
-    mutationFn: async () => {
-      const parsedPrice = Number(String(slotPrice).replace(',', '.'));
-      const payload = {
-        courtId: courtId || undefined,
-        courtLabel: courtLabel.trim() || 'Cancha 1',
-        slotDate,
-        startHour: hourToMinutes(startHour) / 60,
-        endHour: hourToMinutes(endHour) / 60,
-        pricePerHour: Number.isFinite(parsedPrice) ? parsedPrice : undefined,
-      };
-      if (editingSlotId) {
-        await api.patch(`/clubs/${activeClubId}/court-slots/${editingSlotId}`, payload);
-        return null;
-      }
-      const res = await api.post(`/clubs/${activeClubId}/court-slots`, { ...payload, notifyPlayers });
-      return res.data as { notifiedCount?: number; notifyScheduledFor?: string | null };
-    },
-    onSuccess: async (created) => {
-      setSlotOpen(false);
-      await queryClient.invalidateQueries({ queryKey: ['court-slots', activeClubId] });
-      if (!created) {
-        toast.success('Horario actualizado');
-      } else if (notifyPlayers) {
-        await queryClient.invalidateQueries({ queryKey: ['club-outreach-stats', activeClubId] });
-        toast.success(outreachPublishMessage(created.notifiedCount ?? 0, created.notifyScheduledFor));
-      } else {
-        toast.success('Horario publicado');
-      }
-    },
-    onError: (err: { response?: { data?: { message?: string } }; message?: string }) => {
-      toast.error(err.response?.data?.message || err.message || 'Error al guardar');
-    },
-  });
-
-  const deleteSlot = useMutation({
-    mutationFn: async (id: string) => {
-      await api.delete(`/clubs/${activeClubId}/court-slots/${id}`);
-    },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['court-slots', activeClubId] });
-      toast.success('Horario eliminado');
-    },
-    onError: (err: { response?: { data?: { message?: string } } }) => {
-      toast.error(err.response?.data?.message || 'No se pudo eliminar');
-    },
-  });
-
-  const blockSlot = useMutation({
-    mutationFn: async ({
-      id,
-      kind,
-    }: {
-      id: string;
-      kind: 'BLOCKED' | 'MAINTENANCE';
-    }) => {
-      await api.post(`/clubs/${activeClubId}/court-slots/${id}/block`, {
-        kind,
-        reason: kind === 'MAINTENANCE' ? 'Mantenimiento' : 'Bloqueo operativo',
-      });
-    },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['court-slots', activeClubId] });
-      toast.success('Turno bloqueado');
-    },
-    onError: (err: { response?: { data?: { message?: string } } }) => {
-      toast.error(err.response?.data?.message || 'No se pudo bloquear');
-    },
-  });
-
-  const unblockSlot = useMutation({
-    mutationFn: async (id: string) => {
-      await api.post(`/clubs/${activeClubId}/court-slots/${id}/unblock`);
-    },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['court-slots', activeClubId] });
-      toast.success('Turno desbloqueado');
-    },
-    onError: (err: { response?: { data?: { message?: string } } }) => {
-      toast.error(err.response?.data?.message || 'No se pudo desbloquear');
-    },
-  });
-
-  const moveSlot = useMutation({
-    mutationFn: async (payload: {
-      slotId: string;
-      courtId: string;
-      courtLabel: string;
-      slotDate: string;
-      startHour: number;
-      endHour: number;
-    }) => {
-      await api.patch(`/clubs/${activeClubId}/court-slots/${payload.slotId}`, {
-        courtId: payload.courtId,
-        courtLabel: payload.courtLabel,
-        slotDate: payload.slotDate,
-        startHour: payload.startHour,
-        endHour: payload.endHour,
-      });
-    },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['court-slots', activeClubId] });
-      toast.success('Turno movido');
-    },
-    onError: (err: { response?: { data?: { message?: string } } }) => {
-      toast.error(err.response?.data?.message || 'No se pudo mover el turno');
-    },
-  });
+  const invalidateSchedules = () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['court-schedules', activeClubId, expandedCourtId] }),
+      queryClient.invalidateQueries({ queryKey: ['club-court-schedules', activeClubId] }),
+    ]);
 
   const saveCourt = useMutation({
     mutationFn: async () => {
@@ -466,9 +291,7 @@ function GestionInner() {
       });
     },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: ['court-schedules', activeClubId, expandedCourtId],
-      });
+      await invalidateSchedules();
       toast.success('Horario fijo agregado');
     },
     onError: (err: { response?: { data?: { message?: string | string[] } }; message?: string }) => {
@@ -486,9 +309,7 @@ function GestionInner() {
       );
     },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: ['court-schedules', activeClubId, expandedCourtId],
-      });
+      await invalidateSchedules();
     },
   });
 
@@ -527,7 +348,7 @@ function GestionInner() {
     return <EmptyState title="Seleccioná un club" />;
   }
 
-  if (courtsQuery.isLoading && slotsQuery.isLoading) {
+  if (courtsQuery.isLoading) {
     return <DashboardSkeleton />;
   }
 
@@ -588,7 +409,7 @@ function GestionInner() {
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList className="flex h-auto flex-wrap gap-1 rounded-xl bg-surface-0 p-1">
           <TabsTrigger value="slots" className="rounded-lg">
-            Turnos
+            Planilla
           </TabsTrigger>
           <TabsTrigger value="courts" className="rounded-lg">
             Canchas
@@ -601,93 +422,14 @@ function GestionInner() {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="slots" className="space-y-4 mt-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-            <div className="space-y-1">
-              <Label>Agenda del día</Label>
-              <Input
-                type="date"
-                value={agendaDate}
-                onChange={(e) => setAgendaDate(e.target.value)}
-                className="w-full rounded-xl sm:w-48"
-              />
-              <p className="text-xs text-muted-foreground">
-                Arrastrá turnos libres o bloqueados a otra cancha/hora. Los reservados no se mueven.
-              </p>
-            </div>
-            <Button className="rounded-xl" onClick={openNewSlot}>
-              Nuevo turno
-            </Button>
-          </div>
-
-          <AgendaDayBoard
-            date={agendaDate}
+        <TabsContent value="slots" className="mt-4">
+          <PlanillaTab
+            clubId={activeClubId}
             courts={(courtsQuery.data || []).map((c) => ({ id: c.id, name: c.name }))}
-            slots={slotsQuery.data || []}
-            moving={moveSlot.isPending}
-            onMove={(payload) => moveSlot.mutate(payload)}
+            defaultPricePerHour={defaultPricePerHour}
+            defaultDurationHours={clubQuery.data?.courtDurationHours ?? 1.5}
+            slotOfferRadiusKm={slotOfferRadiusKm}
           />
-
-          <div className="space-y-2">
-            <p className="text-sm font-medium text-muted-foreground">Lista del día</p>
-            {(slotsQuery.data || [])
-              .filter((s) => String(s.slot_date).slice(0, 10) === agendaDate)
-              .map((slot) => (
-              <Card key={slot.id} className="bg-card">
-                <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <p className="font-semibold">
-                      {slot.court_label} · {formatShortDate(slot.slot_date)}
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      {formatHourLabel(hourToMinutes(slot.start_hour) / 60)} –{' '}
-                      {formatHourLabel(hourToMinutes(slot.end_hour) / 60)} ·{' '}
-                      {formatCurrency(slot.price_per_hour ?? slot.pricePerHour ?? 0)}/h
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Badge variant="secondary">{slot.status || 'OPEN'}</Badge>
-                    {slot.status === 'OPEN' ? (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="rounded-xl"
-                        onClick={() =>
-                          blockSlot.mutate({ id: slot.id, kind: 'MAINTENANCE' })
-                        }
-                      >
-                        Bloquear
-                      </Button>
-                    ) : null}
-                    {slot.status === 'BLOCKED' || slot.status === 'MAINTENANCE' ? (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="rounded-xl"
-                        onClick={() => unblockSlot.mutate(slot.id)}
-                      >
-                        Desbloquear
-                      </Button>
-                    ) : null}
-                    <Button variant="outline" size="sm" className="rounded-xl" onClick={() => openEditSlot(slot)}>
-                      Editar
-                    </Button>
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      className="rounded-xl"
-                      onClick={() => deleteSlot.mutate(slot.id)}
-                    >
-                      Eliminar
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-            {!(slotsQuery.data || []).some((s) => String(s.slot_date).slice(0, 10) === agendaDate) ? (
-              <EmptyState title="Sin turnos este día" description="Publicá un horario o cambiá la fecha." />
-            ) : null}
-          </div>
         </TabsContent>
 
         <TabsContent value="courts" className="space-y-4 mt-4">
@@ -888,80 +630,6 @@ function GestionInner() {
           </Card>
         </TabsContent>
       </Tabs>
-
-      <Dialog open={slotOpen} onOpenChange={setSlotOpen}>
-        <DialogContent className="rounded-2xl">
-          <DialogHeader>
-            <DialogTitle>{editingSlotId ? 'Editar turno' : 'Nuevo turno'}</DialogTitle>
-          </DialogHeader>
-          <div className="grid gap-3">
-            <div className="space-y-1">
-              <Label>Cancha</Label>
-              <Select
-                value={courtId || undefined}
-                onValueChange={(v) => {
-                  setCourtId(v);
-                  const c = courtsQuery.data?.find((x) => x.id === v);
-                  if (c) setCourtLabel(c.name);
-                }}
-              >
-                <SelectTrigger className="rounded-xl">
-                  <SelectValue placeholder="Elegir cancha" />
-                </SelectTrigger>
-                <SelectContent>
-                  {(courtsQuery.data || []).map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <Label>Label</Label>
-              <Input value={courtLabel} onChange={(e) => setCourtLabel(e.target.value)} className="rounded-xl" />
-            </div>
-            <div className="space-y-1">
-              <Label>Fecha</Label>
-              <Input type="date" value={slotDate} onChange={(e) => setSlotDate(e.target.value)} className="rounded-xl" />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label>Desde</Label>
-                <Input value={startHour} onChange={(e) => setStartHour(e.target.value)} className="rounded-xl" />
-              </div>
-              <div className="space-y-1">
-                <Label>Hasta</Label>
-                <Input value={endHour} onChange={(e) => setEndHour(e.target.value)} className="rounded-xl" />
-              </div>
-            </div>
-            <div className="space-y-1">
-              <Label>Precio/hora</Label>
-              <Input value={slotPrice} onChange={(e) => setSlotPrice(e.target.value)} className="rounded-xl" />
-            </div>
-            {!editingSlotId ? (
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <Switch checked={notifyPlayers} onCheckedChange={setNotifyPlayers} />
-                  <Label>Notificar jugadores</Label>
-                </div>
-                {notifyPlayers ? (
-                  <p className="text-xs text-muted-foreground">
-                    Avisamos a jugadores a menos de {slotOfferRadiusKm} km (máx. 3 avisos por día de tu club). Si
-                    publicás varios horarios seguidos les llega un solo aviso, y nunca entre las 23 y las 8 hs. El
-                    radio se cambia en Estadísticas → Avisos a jugadores.
-                  </p>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
-          <DialogFooter>
-            <Button className="rounded-xl" onClick={() => saveSlot.mutate()} disabled={saveSlot.isPending}>
-              Guardar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       <Dialog open={courtOpen} onOpenChange={setCourtOpen}>
         <DialogContent className="rounded-2xl">
