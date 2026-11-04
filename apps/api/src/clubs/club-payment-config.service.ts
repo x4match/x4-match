@@ -35,6 +35,8 @@ type PaymentConfigRow = {
 };
 
 const MOCK_APP_ID = 'mock';
+/** Comisión por defecto de x4 match sobre cobros online (%). */
+export const DEFAULT_PLATFORM_FEE_PERCENT = 0.8;
 
 @Injectable()
 export class ClubPaymentConfigService implements OnModuleInit {
@@ -171,7 +173,7 @@ export class ClubPaymentConfigService implements OnModuleInit {
       oauthConfigured,
       mockConnectAvailable: process.env.PAYMENTS_MOCK === 'true',
       usesPlatformFallback,
-      platformFeePercent: 0,
+      platformFeePercent: DEFAULT_PLATFORM_FEE_PERCENT,
     };
   }
 
@@ -187,7 +189,11 @@ export class ClubPaymentConfigService implements OnModuleInit {
       `SELECT platform_fee_percent FROM clubs WHERE id = $1`,
       [clubId],
     );
-    mapped.platformFeePercent = Number(feeRes.rows[0]?.platform_fee_percent ?? 0) || 0;
+    const raw = feeRes.rows[0]?.platform_fee_percent;
+    const parsed = raw == null ? NaN : Number(raw);
+    mapped.platformFeePercent = Number.isFinite(parsed)
+      ? parsed
+      : DEFAULT_PLATFORM_FEE_PERCENT;
     return mapped;
   }
 
