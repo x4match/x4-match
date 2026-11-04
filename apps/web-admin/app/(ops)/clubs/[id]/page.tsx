@@ -334,7 +334,7 @@ export default function ClubDetailPage() {
           </button>
         </form>
         <p className="detail-note">
-          Solo se aplica si el club conectó su cuenta de Mercado Pago. Entre 0% y 30%.
+          Solo se aplica si el club conectó su cuenta de Mercado Pago. Default 0.8%. Entre 0% y 30%.
         </p>
       </div>
 
