@@ -1,13 +1,11 @@
 'use client';
 
-import Link from 'next/link';
 import { AlertTriangle, CheckCircle2, Clock } from 'lucide-react';
 import {
   trialModeLabel,
   trialStatusLabel,
   type ClubTrialStatus,
 } from '@/lib/club-trial';
-import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 
@@ -39,18 +37,10 @@ export function TrialStatusBanner({ trial, className }: TrialStatusBannerProps) 
                 Estado: {trialStatusLabel(trial.status)}.
                 {isSuspended
                   ? ' Contactá a soporte de x4 match para reactivar el acceso.'
-                  : ' Completá el checklist con x4 match para activar los 90 días de prueba.'}
-              </p>
-              <p className="mt-2 text-xs text-muted-foreground">
-                Checklist: {trial.checklist.requiredDone}/{trial.checklist.requiredTotal} requeridos
+                  : ' El equipo de x4 match tiene que iniciar el período de prueba para activar el club.'}
               </p>
             </div>
           </div>
-          {!isSuspended ? (
-            <Button asChild variant="outline" className="rounded-xl shrink-0">
-              <Link href="/perfil">Ver checklist</Link>
-            </Button>
-          ) : null}
         </CardContent>
       </Card>
     );
@@ -96,44 +86,24 @@ export function TrialStatusBanner({ trial, className }: TrialStatusBannerProps) 
   return null;
 }
 
-export function TrialChecklistCard({ trial }: { trial: ClubTrialStatus | undefined }) {
+export function TrialSubscriptionCard({ trial }: { trial: ClubTrialStatus | undefined }) {
   if (!trial) return null;
 
   return (
     <Card>
-      <CardContent className="space-y-4 p-4">
-        <div>
-          <p className="font-semibold">Suscripción x4 match</p>
+      <CardContent className="space-y-2 p-4">
+        <p className="font-semibold">Suscripción x4 match</p>
+        <p className="text-sm text-muted-foreground">
+          {trialStatusLabel(trial.status)} · {trialModeLabel(trial.trialMode)}
+        </p>
+        {trial.isTrialActive && trial.daysRemaining != null ? (
           <p className="text-sm text-muted-foreground">
-            {trialStatusLabel(trial.status)} · {trialModeLabel(trial.trialMode)}
+            {trial.daysRemaining} días restantes
+            {trial.trialEndsAt
+              ? ` · vence ${new Date(trial.trialEndsAt).toLocaleDateString('es-AR')}`
+              : ''}
           </p>
-        </div>
-        <div className="space-y-2">
-          {trial.checklist.items.map((item) => (
-            <div
-              key={item.key}
-              className="flex items-start justify-between gap-3 rounded-xl border border-border/60 px-3 py-2"
-            >
-              <div>
-                <p className="text-sm font-medium">{item.label}</p>
-                <p className="text-xs text-muted-foreground">{item.description}</p>
-              </div>
-              <span
-                className={cn(
-                  'shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold',
-                  item.state.done
-                    ? 'bg-success/15 text-success'
-                    : 'bg-muted text-muted-foreground',
-                )}
-              >
-                {item.state.done ? 'Listo' : 'Pendiente'}
-              </span>
-            </div>
-          ))}
-        </div>
-        <Button asChild variant="outline" className="w-full rounded-xl">
-          <Link href="/pagos">Configurar Mercado Pago</Link>
-        </Button>
+        ) : null}
       </CardContent>
     </Card>
   );

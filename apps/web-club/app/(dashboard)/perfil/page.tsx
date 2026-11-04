@@ -23,7 +23,7 @@ import {
 import { useClub } from '@/contexts/ClubContext';
 import { type ClubTrialStatus } from '@/lib/club-trial';
 import { PageHeader } from '@/components/layout/AppSidebar';
-import { TrialChecklistCard } from '@/components/club/TrialStatusBanner';
+import { TrialSubscriptionCard } from '@/components/club/TrialStatusBanner';
 import { DashboardSkeleton } from '@/components/club/DashboardCards';
 import { LocationPicker } from '@/components/club/LocationPicker';
 import { Button } from '@/components/ui/button';
@@ -396,7 +396,7 @@ export default function PerfilPage() {
         </Card>
 
         <div className="space-y-4">
-          <TrialChecklistCard trial={trialQuery.data} />
+          <TrialSubscriptionCard trial={trialQuery.data} />
 
           <Card>
             <CardHeader>

@@ -312,8 +312,9 @@ export default function GerenteScreen() {
                             lineHeight: 17,
                           }}
                         >
-                          Estado: {trialStatusLabel(trialStatus.status)}. Completá el checklist una
-                          vez que el trial de {trialStatus.trialDays || 90} días se active.
+                          Estado: {trialStatusLabel(trialStatus.status)}. El equipo de x4 match tiene
+                          que iniciar el trial de {trialStatus.trialDays || 90} días para activar el
+                          club.
                         </Text>
                       </View>
                       <Ionicons name="chevron-forward" size={18} color={ui.colors.textMuted} />
