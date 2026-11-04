@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -598,19 +598,17 @@ export default function MatchDetailScreen() {
     (match.result?.sets && match.result.sets.length > 0)
   );
   // Si ya hay resultado cargado, el live no puede seguir en "EN VIVO".
-  const displayLiveScore = useMemo(() => {
-    if (!liveScore) return null;
-    if (hasResultScore && liveScore.status === 'LIVE') {
-      return {
-        ...liveScore,
-        status: 'FINISHED' as const,
-        viewer: liveScore.viewer
-          ? { ...liveScore.viewer, canScore: false, canStart: false }
-          : liveScore.viewer,
-      };
-    }
-    return liveScore;
-  }, [liveScore, hasResultScore]);
+  const displayLiveScore = !liveScore
+    ? null
+    : hasResultScore && liveScore.status === 'LIVE'
+      ? {
+          ...liveScore,
+          status: 'FINISHED' as const,
+          viewer: liveScore.viewer
+            ? { ...liveScore.viewer, canScore: false, canStart: false }
+            : liveScore.viewer,
+        }
+      : liveScore;
   const showLiveCard = Boolean(
     displayLiveScore &&
       (displayLiveScore.status === 'LIVE' ||
