@@ -48,6 +48,7 @@ import {
   useUnreadMatchChats,
   type UnreadMatchChats,
 } from '@/lib/hooks/use-unread-messages';
+import { dashedBorderStyle } from '@/lib/platform-styles';
 
 const FREE_CANCEL_WINDOW_MS = 30 * 60 * 1000;
 
@@ -502,7 +503,7 @@ export default function MatchDetailScreen() {
   const joinRequiresApproval = !!match.joinRequiresApproval;
   const viewerCategoryFits = match.viewerCategoryFits !== false;
   const isJoinableStatus =
-    match.status === 'OPEN' &&
+    ['OPEN', 'FULL'].includes(match.status) &&
     match.joinedCount < match.neededPlayers &&
     !isParticipant &&
     !hasPendingJoinRequest;
@@ -857,9 +858,19 @@ export default function MatchDetailScreen() {
                   </View>
                 ),
               )}
-              {Array.from({ length: match.neededPlayers - match.joinedCount }).map((_, i) => (
+              {Array.from({ length: openSlots }).map((_, i) => (
                 <View key={`empty-${i}`} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, opacity: 0.5, marginBottom: 8 }}>
-                  <View style={{ width: 40, height: 40, borderRadius: 20, borderWidth: 2, borderStyle: 'dashed', borderColor: ui.colors.textMuted, alignItems: 'center', justifyContent: 'center' }}>
+                  <View
+                    style={dashedBorderStyle({
+                      width: 40,
+                      height: 40,
+                      borderRadius: 20,
+                      borderWidth: 2,
+                      borderColor: ui.colors.textMuted,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    })}
+                  >
                     <Text style={{ color: ui.colors.textMuted }}>?</Text>
                   </View>
                   <Text style={{ color: ui.colors.textMuted }}>Esperando jugador...</Text>

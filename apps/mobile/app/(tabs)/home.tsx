@@ -24,6 +24,7 @@ import { formatDistanceKm, requestPlayerCoordinates, syncPlayerCoordinates } fro
 import { invalidateRedeemablePoints, useRedeemablePoints } from '@/lib/shop/redeemable-points';
 import { ui, fontFamily } from '@/theme/tokens';
 import { tabScreenPadding } from '@/lib/layout';
+import { dashedBorderStyle } from '@/lib/platform-styles';
 import { ClubProfilePanel } from '@/components/club/ClubProfilePanel';
 import {
   Screen,
@@ -684,7 +685,9 @@ export default function HomeScreen() {
 
   const homeOpenMatches = useMemo(() => {
     const available = openMatches.filter(
-      (match) => match.status === 'OPEN' && match.joinedCount < match.neededPlayers,
+      (match) =>
+        ['OPEN', 'FULL'].includes(match.status) &&
+        match.joinedCount < match.neededPlayers,
     );
     if (!isPlayerAccount) return available;
 
@@ -1301,17 +1304,16 @@ export default function HomeScreen() {
                   accessibilityRole="button"
                   accessibilityLabel="Ver novedades de la comunidad"
                   onPress={() => router.push('/news' as any)}
-                  style={{
+                  style={dashedBorderStyle({
                     flexDirection: 'row',
                     alignItems: 'center',
                     gap: 12,
                     padding: 14,
                     borderRadius: ui.radius.lg,
                     borderWidth: 1,
-                    borderStyle: 'dashed',
                     borderColor: ui.colors.border,
                     backgroundColor: ui.colors.surface1,
-                  }}
+                  })}
                 >
                   <Ionicons name="megaphone-outline" size={22} color={ui.colors.primary} />
                   <View style={{ flex: 1 }}>
@@ -1432,7 +1434,7 @@ export default function HomeScreen() {
                           style={{ fontWeight: '700', fontSize: 13, color: ui.colors.textPrimary, textAlign: 'center' }}
                           numberOfLines={1}
                         >
-                          {player.nickname || player.name.split(' ')[0]}
+                          {player.nickname || String(player.name || '').split(/\s+/)[0] || 'Jugador'}
                         </Text>
 
                       </AppCard>

@@ -428,7 +428,7 @@ export class MatchesRepository {
       court_info: courtInfo,
       pricing,
       joined_count: joinedCount,
-      needed_players: match.needed_players,
+      needed_players: neededPlayers,
       players: players.rows.map((p) => {
         const extras =
           p.extras && typeof p.extras === 'object' && !Array.isArray(p.extras) ? p.extras : {};
@@ -438,7 +438,7 @@ export class MatchesRepository {
         return {
           id: p.user_id,
           playerId: p.id,
-          name: p.name,
+          name: p.name || 'Jugador',
           rating,
           skillScore: ratingToSkillScore(rating),
           levelCategory: resolveVisibleLevelCategory({
@@ -793,7 +793,7 @@ export class MatchesRepository {
     return result.rows.map((row) => ({
       userId: row.user_id,
       playerId: row.player_id,
-      name: row.name,
+      name: row.name || 'Jugador',
       rating: row.rating != null ? Number(row.rating) : null,
       skillScore: ratingToSkillScore(resolvePlayerRating(row)),
       photo: row.photo_url,

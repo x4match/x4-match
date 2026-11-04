@@ -3,6 +3,7 @@ import { Ionicons } from '@expo/vector-icons';
 import type { Match } from '@/lib/types';
 import { formatCurrency, formatMatchCourtWhen } from '@/lib/format';
 import { formatDistanceKm } from '@/lib/geolocation';
+import { dashedBorderStyle } from '@/lib/platform-styles';
 import { formatMatchCategoryRange } from '@/lib/skill';
 import { ui } from '@/theme/tokens';
 import { Avatar } from './Avatar';
@@ -120,16 +121,15 @@ export function MatchOrganizedSummary({ match }: MatchOrganizedSummaryProps) {
             ))}
             {spotsLeft > 0 ? (
               <View
-                style={{
+                style={dashedBorderStyle({
                   width: 32,
                   height: 32,
                   borderRadius: 16,
                   borderWidth: 1,
-                  borderStyle: 'dashed',
                   borderColor: ui.colors.textMuted,
                   alignItems: 'center',
                   justifyContent: 'center',
-                }}
+                })}
               >
                 <Text style={{ color: ui.colors.textMuted, fontSize: 12 }}>?</Text>
               </View>

@@ -590,6 +590,11 @@ export class MatchesService {
     }
 
     const joinerName = await this.matchesRepository.getUserName(userId);
+    const joinedCountBefore = await this.matchesRepository.countJoinedPlayers(matchId);
+    const neededPlayers = Number(match.needed_players) || 4;
+    if (joinedCountBefore >= neededPlayers) {
+      throw new BadRequestException('El partido ya no tiene cupos disponibles');
+    }
 
     if (match.join_approval_required && match.created_by_user_id !== userId) {
       await this.requestJoin(matchId, playerId);

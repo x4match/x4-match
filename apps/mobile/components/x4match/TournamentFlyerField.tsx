@@ -1,5 +1,6 @@
 import { Image, Text, View, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { dashedBorderStyle } from '@/lib/platform-styles';
 import { ui } from '@/theme/tokens';
 import { PrimaryButton } from '@/components/ui';
 import { FLYER_ASPECT_RATIO, FLYER_HINT } from '@/lib/tournament/flyer';
@@ -92,19 +93,18 @@ export function TournamentFlyerField({
           onPress={onPress}
           disabled={loading}
           activeOpacity={0.85}
-          style={{
+          style={dashedBorderStyle({
             width: '100%',
             aspectRatio: FLYER_ASPECT_RATIO,
             borderWidth: 1,
             borderColor: ui.colors.border,
-            borderStyle: 'dashed',
             borderRadius: ui.radius.md,
             backgroundColor: ui.colors.cardMuted,
             alignItems: 'center',
             justifyContent: 'center',
             gap: 8,
             paddingHorizontal: 20,
-          }}
+          })}
         >
           {loading ? (
             <ActivityIndicator color={ui.colors.primary} />

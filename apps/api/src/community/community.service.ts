@@ -41,13 +41,26 @@ export class CommunityService {
               c.id AS club_id,
               c.name AS club_name,
               (
-                SELECT COUNT(*)::int
-                FROM match_players mp
-                WHERE mp.match_id = m.id AND mp.status IN ('JOINED', 'CONFIRMED')
+                (SELECT COUNT(*)::int
+                 FROM match_players mp
+                 WHERE mp.match_id = m.id AND mp.status IN ('JOINED', 'CONFIRMED'))
+                +
+                (SELECT COUNT(*)::int
+                 FROM match_guests mg
+                 WHERE mg.match_id = m.id)
               ) AS joined_count
        FROM matches m
        LEFT JOIN clubs c ON c.id = m.club_id
        WHERE m.status IN ('OPEN', 'FULL')
+         AND (
+           (SELECT COUNT(*)::int
+            FROM match_players mp
+            WHERE mp.match_id = m.id AND mp.status IN ('JOINED', 'CONFIRMED'))
+           +
+           (SELECT COUNT(*)::int
+            FROM match_guests mg
+            WHERE mg.match_id = m.id)
+         ) < m.needed_players
        ORDER BY m.date ASC
        LIMIT 20`,
     );
