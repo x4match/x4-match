@@ -21,6 +21,12 @@ export const VERIFICATION_STATUSES = Object.entries(VERIFICATION_STATUS_LABELS).
 );
 export const TRIAL_MODES = optionsFromLabels(TRIAL_MODE_LABELS, 'Todos los modos');
 
+export const USER_CLUB_FILTERS = [
+  { value: '', label: 'Con y sin club' },
+  { value: 'none', label: 'Admins sin club' },
+  { value: 'some', label: 'Administra clubes' },
+];
+
 export const NEWS_STATUSES = [
   { value: '', label: 'Todas' },
   { value: 'PENDING', label: 'Pendientes' },

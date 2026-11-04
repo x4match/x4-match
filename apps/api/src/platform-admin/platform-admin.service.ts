@@ -30,6 +30,7 @@ export class PlatformAdminService {
       recentUsers,
       billingBreakdown,
       pendingClubRegistrations,
+      clubAdminsWithoutClub,
     ] = await Promise.all([
       this.db.query<{ count: string }>(`SELECT COUNT(*)::text AS count FROM users`),
       this.db.query<{ count: string }>(`SELECT COUNT(*)::text AS count FROM clubs`),
@@ -62,6 +63,11 @@ export class PlatformAdminService {
         `SELECT COUNT(*)::text AS count FROM users
          WHERE role = 'CLUB_ADMIN' AND verification_status = 'PENDING'`,
       ),
+      this.db.query<{ count: string }>(
+        `SELECT COUNT(*)::text AS count FROM users u
+         WHERE u.role = 'CLUB_ADMIN'
+           AND NOT EXISTS (SELECT 1 FROM club_admins ca WHERE ca.user_id = u.id)`,
+      ),
     ]);
 
     return {
@@ -75,6 +81,7 @@ export class PlatformAdminService {
         trialsExpiring7d: Number(trialsExpiring.rows[0]?.count ?? 0),
         mpConnectedClubs: Number(mpConnected.rows[0]?.count ?? 0),
         pendingClubRegistrations: Number(pendingClubRegistrations.rows[0]?.count ?? 0),
+        clubAdminsWithoutClub: Number(clubAdminsWithoutClub.rows[0]?.count ?? 0),
       },
       billingBreakdown: billingBreakdown.rows,
       recentClubs: recentClubs.rows.map((row: any) => ({
@@ -250,7 +257,7 @@ export class PlatformAdminService {
     values.push(limit, offset);
 
     const result = await this.db.query(
-      `SELECT u.id, u.name, u.email, u.created_at,
+      `SELECT u.id, u.name, u.email, u.created_at, u.email_verified_at,
               u.verification_status,
               u.verification_reviewed_at,
               u.verification_notes,
@@ -329,7 +336,13 @@ export class PlatformAdminService {
     return row;
   }
 
-  async listUsers(params: { q?: string; role?: string; limit?: number; offset?: number }) {
+  async listUsers(params: {
+    q?: string;
+    role?: string;
+    club?: string;
+    limit?: number;
+    offset?: number;
+  }) {
     const limit = Math.min(params.limit ?? 50, 100);
     const offset = params.offset ?? 0;
     const values: unknown[] = [];
@@ -343,12 +356,20 @@ export class PlatformAdminService {
       values.push(params.role.trim());
       filters.push(`u.role = $${values.length}::user_role`);
     }
+    if (params.club === 'none') {
+      filters.push(
+        `u.role = 'CLUB_ADMIN' AND NOT EXISTS (SELECT 1 FROM club_admins ca WHERE ca.user_id = u.id)`,
+      );
+    } else if (params.club === 'some') {
+      filters.push(`EXISTS (SELECT 1 FROM club_admins ca WHERE ca.user_id = u.id)`);
+    }
 
     const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
     values.push(limit, offset);
 
     const result = await this.db.query(
-      `SELECT u.id, u.name, u.email, u.role, u.created_at
+      `SELECT u.id, u.name, u.email, u.role, u.created_at, u.verification_status,
+              (SELECT COUNT(*)::int FROM club_admins ca WHERE ca.user_id = u.id) AS clubs_count
        FROM users u ${where}
        ORDER BY u.created_at DESC
        LIMIT $${values.length - 1} OFFSET $${values.length}`,
@@ -673,10 +694,18 @@ export class PlatformAdminService {
   async getUserDetail(userId: string) {
     const userRes = await this.db.query(
       `SELECT u.id, u.name, u.email, u.role, u.created_at, u.updated_at,
+              u.email_verified_at, u.verification_status, u.verification_reviewed_at,
+              u.verification_notes, reviewer.name AS verification_reviewed_by_name,
+              CASE
+                WHEN u.google_id IS NOT NULL THEN 'GOOGLE'
+                WHEN u.apple_id IS NOT NULL THEN 'APPLE'
+                ELSE 'EMAIL'
+              END AS auth_provider,
               p.id AS player_id, p.photo_url, p.city, p.rating, p.position, p.bio, p.nickname,
               p.category_status, p.placement_matches_played
        FROM users u
        LEFT JOIN players p ON p.user_id = u.id
+       LEFT JOIN users reviewer ON reviewer.id = u.verification_reviewed_by
        WHERE u.id = $1`,
       [userId],
     );
@@ -685,9 +714,10 @@ export class PlatformAdminService {
 
     const [clubsAdmin, sponsors, recentMatches, matchCount] = await Promise.all([
       this.db.query(
-        `SELECT c.id, c.name, c.city
+        `SELECT c.id, c.name, c.city, c.created_at, cb.status AS billing_status
          FROM club_admins ca
          JOIN clubs c ON c.id = ca.club_id
+         LEFT JOIN club_billing cb ON cb.club_id = c.id
          WHERE ca.user_id = $1
          ORDER BY c.name ASC`,
         [userId],
@@ -727,6 +757,12 @@ export class PlatformAdminService {
         role: user.role,
         created_at: user.created_at,
         updated_at: user.updated_at,
+        auth_provider: user.auth_provider,
+        email_verified_at: user.email_verified_at,
+        verification_status: user.verification_status,
+        verification_reviewed_at: user.verification_reviewed_at,
+        verification_reviewed_by_name: user.verification_reviewed_by_name,
+        verification_notes: user.verification_notes,
       },
       player: user.player_id
         ? {

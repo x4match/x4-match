@@ -177,6 +177,14 @@ export class AuthService {
       await this.authRepository.updatePlayerPhotoIfEmpty(user.id, photo);
     }
 
+    // El admin no puede loguearse hasta ser aprobado, así que el club tiene que existir desde el alta.
+    if (role === 'CLUB_ADMIN') {
+      await this.authRepository.createClubForAdmin(user.id, {
+        name: dto.clubName?.trim() || displayName,
+        city: dto.clubCity?.trim() || null,
+      });
+    }
+
     if (requiresEmailVerification) {
       const devCode = await this.issueEmailVerificationCode(user);
       return {

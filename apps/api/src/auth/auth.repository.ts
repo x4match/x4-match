@@ -136,6 +136,23 @@ export class AuthRepository {
     );
   }
 
+  async createClubForAdmin(userId: string, input: { name: string; city?: string | null }) {
+    const result = await this.db.query(
+      `INSERT INTO clubs (name, city)
+       VALUES ($1, $2)
+       RETURNING id, name, city`,
+      [input.name, input.city ?? null],
+    );
+    const club = result.rows[0];
+    await this.db.query(
+      `INSERT INTO club_admins (club_id, user_id)
+       VALUES ($1, $2)
+       ON CONFLICT DO NOTHING`,
+      [club.id, userId],
+    );
+    return club;
+  }
+
   async updatePlayerPhotoIfEmpty(userId: string, photoUrl: string) {
     await this.db.query(
       `UPDATE players

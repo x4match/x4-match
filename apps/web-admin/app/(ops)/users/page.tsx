@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { Modal } from '@/components/Modal';
@@ -8,10 +8,10 @@ import { StatusBadge } from '@/components/StatusBadge';
 import { TableFilters } from '@/components/TableFilters';
 import { TablePagination } from '@/components/TablePagination';
 import { api } from '@/lib/api';
-import { USER_ROLES } from '@/lib/filter-options';
+import { USER_CLUB_FILTERS, USER_ROLES } from '@/lib/filter-options';
 import { usePaginatedPlatformList } from '@/lib/use-paginated-platform-list';
 
-const DEFAULT_FILTERS = { q: '', role: '' };
+const DEFAULT_FILTERS = { q: '', role: '', club: '' };
 
 type AssignableRole = 'PLAYER' | 'PARTNER' | 'SUPER_ADMIN';
 
@@ -52,6 +52,15 @@ export default function UsersPage() {
     queryKey: 'platform-users',
     defaultFilters: DEFAULT_FILTERS,
   });
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    for (const key of Object.keys(DEFAULT_FILTERS)) {
+      const value = params.get(key);
+      if (value) setFilter(key, value);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const [modalOpen, setModalOpen] = useState(false);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -132,6 +141,7 @@ export default function UsersPage() {
         fields={[
           { type: 'search', key: 'q', placeholder: 'Buscar por nombre o email…' },
           { type: 'select', key: 'role', label: 'Rol', options: USER_ROLES },
+          { type: 'select', key: 'club', label: 'Club', options: USER_CLUB_FILTERS },
         ]}
         values={filters}
         onChange={setFilter}
@@ -260,7 +270,14 @@ export default function UsersPage() {
                         </Link>
                       </td>
                       <td>{u.email}</td>
-                      <td><StatusBadge value={u.role} category="userRole" /></td>
+                      <td>
+                        <StatusBadge value={u.role} category="userRole" />
+                        {u.role === 'CLUB_ADMIN' && u.clubs_count === 0 ? (
+                          <span className="badge badge-warning" style={{ marginLeft: 6 }}>
+                            Sin club
+                          </span>
+                        ) : null}
+                      </td>
                       <td>{new Date(u.created_at).toLocaleDateString('es-AR')}</td>
                       <td>
                         {u.role === 'SUPER_ADMIN' ? (

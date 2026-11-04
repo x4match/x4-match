@@ -24,6 +24,7 @@ type ClubRegistration = {
   name: string;
   email: string;
   created_at: string;
+  email_verified_at?: string | null;
   verification_status: 'PENDING' | 'APPROVED' | 'REJECTED';
   verification_reviewed_at?: string | null;
   verification_notes?: string | null;
@@ -188,19 +189,28 @@ export default function ClubRegistrationsPage() {
                           {r.name}
                         </Link>
                       </td>
-                      <td>{r.email}</td>
+                      <td>
+                        {r.email}
+                        {!r.email_verified_at ? (
+                          <div style={{ color: 'var(--muted)', fontSize: 12, marginTop: 4 }}>
+                            Email sin verificar
+                          </div>
+                        ) : null}
+                      </td>
                       <td>{PROVIDER_LABELS[r.auth_provider] ?? r.auth_provider}</td>
                       <td>
-                        {r.clubs.length === 0
-                          ? '—'
-                          : r.clubs.map((c) => (
+                        {r.clubs.length === 0 ? (
+                          <span className="badge badge-warning">Sin club</span>
+                        ) : (
+                          r.clubs.map((c) => (
                               <div key={c.id}>
                                 <Link href={`/clubs/${c.id}`} style={{ color: 'var(--primary)' }}>
                                   {c.name}
                                 </Link>
                                 {c.city ? ` · ${c.city}` : ''}
                               </div>
-                            ))}
+                            ))
+                        )}
                       </td>
                       <td>{formatDateTime(r.created_at)}</td>
                       <td>

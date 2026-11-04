@@ -1,5 +1,13 @@
 import Link from 'next/link';
-import { ArrowRight, BadgeCheck, CheckCircle2, PlugZap, Timer, type LucideIcon } from 'lucide-react';
+import {
+  ArrowRight,
+  BadgeCheck,
+  Building2,
+  CheckCircle2,
+  PlugZap,
+  Timer,
+  type LucideIcon,
+} from 'lucide-react';
 import type { MonitorTotals } from './types';
 
 type ActionItem = {
@@ -13,6 +21,7 @@ type ActionItem = {
 
 export function ActionCenter({ totals }: { totals: MonitorTotals }) {
   const clubsWithoutMp = Math.max(totals.clubs - totals.mpConnectedClubs, 0);
+  const adminsWithoutClub = totals.clubAdminsWithoutClub ?? 0;
   const items: ActionItem[] = [
     {
       href: '/club-registrations',
@@ -21,6 +30,14 @@ export function ActionCenter({ totals }: { totals: MonitorTotals }) {
       count: totals.pendingClubRegistrations,
       title: totals.pendingClubRegistrations === 1 ? 'Alta de club por revisar' : 'Altas de clubes por revisar',
       detail: 'Aprobá o rechazá para que puedan operar',
+    },
+    {
+      href: '/users?role=CLUB_ADMIN&club=none',
+      icon: Building2,
+      tone: 'warning' as const,
+      count: adminsWithoutClub,
+      title: adminsWithoutClub === 1 ? 'Admin de club sin club' : 'Admins de club sin club',
+      detail: 'Se registraron pero todavía no crearon su club',
     },
     {
       href: '/trials',
@@ -44,7 +61,7 @@ export function ActionCenter({ totals }: { totals: MonitorTotals }) {
     return (
       <section className="action-center action-center--clear" aria-label="Pendientes">
         <CheckCircle2 size={18} aria-hidden />
-        <p>Todo en orden: no hay altas, vencimientos ni clubes sin cobros pendientes.</p>
+        <p>Todo en orden: no hay altas, admins sin club, vencimientos ni clubes sin cobros pendientes.</p>
       </section>
     );
   }

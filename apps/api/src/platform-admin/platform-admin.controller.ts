@@ -194,12 +194,14 @@ export class PlatformAdminController {
   listUsers(
     @Query('q') q?: string,
     @Query('role') role?: string,
+    @Query('club') club?: string,
     @Query('limit') limit?: string,
     @Query('offset') offset?: string,
   ) {
     return this.platformAdminService.listUsers({
       q,
       role,
+      club,
       limit: limit ? parseInt(limit, 10) : undefined,
       offset: offset ? parseInt(offset, 10) : undefined,
     });

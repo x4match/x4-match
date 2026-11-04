@@ -4,7 +4,7 @@ import { FormEvent, Suspense, useEffect, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Eye, EyeOff, Lock, Mail, User } from 'lucide-react';
+import { Building2, Eye, EyeOff, Lock, Mail, MapPin, User } from 'lucide-react';
 import { api } from '@/lib/api';
 import { AuthWordmark } from '@/components/auth/AuthWordmark';
 import { isClub } from '@/lib/roles';
@@ -65,6 +65,8 @@ function RegisterForm() {
   const router = useRouter();
   const params = useSearchParams();
   const { login } = useAuth();
+  const [clubName, setClubName] = useState('');
+  const [clubCity, setClubCity] = useState('');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -111,6 +113,10 @@ function RegisterForm() {
     e.preventDefault();
     setError(null);
 
+    if (clubName.trim().length < 2) {
+      setError('El nombre del club es requerido.');
+      return;
+    }
     if (!name.trim()) {
       setError('El nombre del responsable es requerido.');
       return;
@@ -148,6 +154,8 @@ function RegisterForm() {
             : { password }),
         name: name.trim() || pendingApple?.fullName || pendingGoogle?.fullName,
         role: 'CLUB_ADMIN',
+        clubName: clubName.trim(),
+        clubCity: clubCity.trim() || undefined,
       });
       if (response.data?.emailVerificationRequired) {
         setPendingAppleSignup(null);
@@ -281,6 +289,34 @@ function RegisterForm() {
           </p>
 
           <form onSubmit={onSubmit} className="mt-9 space-y-3.5" style={{ ['--login-accent' as string]: ACCENT }}>
+            <label className="relative block">
+              <span className="sr-only">Nombre del club</span>
+              <Building2 className="pointer-events-none absolute left-4 top-1/2 size-4.5 -translate-y-1/2 text-white/40" />
+              <input
+                type="text"
+                autoComplete="organization"
+                required
+                minLength={2}
+                value={clubName}
+                onChange={(e) => setClubName(e.target.value)}
+                placeholder="Nombre del club"
+                className={inputClass}
+              />
+            </label>
+
+            <label className="relative block">
+              <span className="sr-only">Ciudad</span>
+              <MapPin className="pointer-events-none absolute left-4 top-1/2 size-4.5 -translate-y-1/2 text-white/40" />
+              <input
+                type="text"
+                autoComplete="address-level2"
+                value={clubCity}
+                onChange={(e) => setClubCity(e.target.value)}
+                placeholder="Ciudad (opcional)"
+                className={inputClass}
+              />
+            </label>
+
             <label className="relative block">
               <span className="sr-only">Nombre del responsable</span>
               <User className="pointer-events-none absolute left-4 top-1/2 size-4.5 -translate-y-1/2 text-white/40" />

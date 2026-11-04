@@ -7,6 +7,7 @@ export type MonitorTotals = {
   trialsExpiring7d: number;
   mpConnectedClubs: number;
   pendingClubRegistrations: number;
+  clubAdminsWithoutClub?: number;
 };
 
 export type MonitorData = {

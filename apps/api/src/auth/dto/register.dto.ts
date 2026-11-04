@@ -57,6 +57,18 @@ export class RegisterDto {
   @IsIn(['PLAYER', 'CLUB_ADMIN', 'ORGANIZER'])
   role?: 'PLAYER' | 'CLUB_ADMIN' | 'ORGANIZER';
 
+  /** Solo CLUB_ADMIN: el club se crea con el alta para que el backoffice pueda revisarlo. */
+  @IsOptional()
+  @IsString()
+  @MinLength(2)
+  @MaxLength(120)
+  clubName?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  clubCity?: string;
+
   @IsOptional()
   @IsIn(['8va', '7ma', '6ta', '5ta', '4ta', '3ra', '2da', '1ra'])
   declaredCategory?: '8va' | '7ma' | '6ta' | '5ta' | '4ta' | '3ra' | '2da' | '1ra';
